@@ -106,14 +106,13 @@ const SERIES: SeriesSpec[] = [
 ];
 
 async function main() {
-  // 재실행 안전: 전체 삭제 후 재시드
-  await prisma.orderEvent.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.page.deleteMany();
-  await prisma.episode.deleteMany();
-  await prisma.season.deleteMany();
-  await prisma.series.deleteMany();
-  await prisma.author.deleteMany();
+  // 컨테이너 재시작 시 사용자가 만든 주문과 콘텐츠를 보존한다.
+  // 데모 데이터는 빈 DB에만 최초 1회 생성한다.
+  const existingSeries = await prisma.series.count();
+  if (existingSeries > 0) {
+    console.log(`Seed 건너뜀: 작품 ${existingSeries}개가 이미 있습니다.`);
+    return;
+  }
 
   const authors = new Map<string, string>();
 

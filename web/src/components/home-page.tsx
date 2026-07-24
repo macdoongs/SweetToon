@@ -40,18 +40,20 @@ function formatLatestDate(value: string) {
 function SeriesCover({
   series,
   priority = false,
+  sizes = "(max-width: 700px) calc(100vw - 28px), (max-width: 960px) calc((100vw - 70px) / 2), 360px",
 }: {
   series: SeriesSummary;
   priority?: boolean;
+  sizes?: string;
 }) {
   return series.coverUrl ? (
     <Image
       alt={`${series.title} 표지`}
       className="series-cover"
       height={840}
-      priority={priority}
+      preload={priority}
+      sizes={sizes}
       src={series.coverUrl}
-      unoptimized
       width={600}
     />
   ) : (
@@ -135,7 +137,11 @@ export function HomePage({
           >
             <div className="featured-book__halo" />
             <div className="featured-book__cover">
-              <SeriesCover priority series={featured} />
+              <SeriesCover
+                priority
+                series={featured}
+                sizes="(max-width: 700px) 240px, 300px"
+              />
             </div>
             <div className="featured-book__caption">
               <span>오늘의 이야기</span>

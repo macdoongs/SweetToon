@@ -1,12 +1,14 @@
 import AdmZip from "adm-zip";
+import sharp from "sharp";
 import {
   analyzeArchive,
   ArchiveValidationError,
 } from "./archive-analyzer";
 
-const png = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-]);
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
 
 function archive(entries: Array<[string, Buffer]>): Buffer {
   const zip = new AdmZip();
@@ -35,9 +37,12 @@ function withDeclaredUncompressedSize(
   return buffer;
 }
 
-function expectCode(action: () => unknown, code: string) {
+async function expectCode(
+  action: () => Promise<unknown>,
+  code: string,
+): Promise<void> {
   try {
-    action();
+    await action();
     throw new Error("Expected archive validation to fail");
   } catch (error) {
     expect(error).toBeInstanceOf(ArchiveValidationError);
@@ -46,8 +51,8 @@ function expectCode(action: () => unknown, code: string) {
 }
 
 describe("analyzeArchive", () => {
-  it("naturally sorts raster pages by their original file names", () => {
-    const images = analyzeArchive(
+  it("naturally sorts raster pages by their original file names", async () => {
+    const images = await analyzeArchive(
       archive([
         ["10.png", png],
         ["2.png", png],
@@ -62,8 +67,8 @@ describe("analyzeArchive", () => {
     ]);
   });
 
-  it("rejects unsupported files including SVG", () => {
-    expectCode(
+  it("rejects unsupported files including SVG", async () => {
+    await expectCode(
       () =>
         analyzeArchive(
           archive([
@@ -75,15 +80,15 @@ describe("analyzeArchive", () => {
     );
   });
 
-  it("rejects files whose extension does not match the signature", () => {
-    expectCode(
+  it("rejects files whose extension does not match the signature", async () => {
+    await expectCode(
       () => analyzeArchive(archive([["1.jpg", png]])),
       "IMAGE_SIGNATURE_MISMATCH",
     );
   });
 
-  it("rejects a zero declared size before accepting an image entry", () => {
-    expectCode(
+  it("rejects a zero declared size before accepting an image entry", async () => {
+    await expectCode(
       () =>
         analyzeArchive(
           withDeclaredUncompressedSize(
@@ -95,23 +100,52 @@ describe("analyzeArchive", () => {
     );
   });
 
-  it("rejects unsafe traversal paths", () => {
+  it("rejects unsafe traversal paths", async () => {
     const zip = new AdmZip();
     zip.addFile("safe.png", png);
     const entry = zip.getEntry("safe.png");
     if (!entry) throw new Error("test entry missing");
     entry.entryName = "../safe.png";
 
-    expectCode(
+    await expectCode(
       () => analyzeArchive(zip.toBuffer()),
       "UNSAFE_ARCHIVE_PATH",
     );
   });
 
-  it("rejects a non-ZIP payload", () => {
-    expectCode(
+  it("rejects a non-ZIP payload", async () => {
+    await expectCode(
       () => analyzeArchive(Buffer.from("not a zip")),
       "ARCHIVE_INVALID",
+    );
+  });
+
+  it("rejects a file that has a valid signature but cannot be decoded", async () => {
+    const signatureOnly = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
+    ]);
+
+    await expectCode(
+      () => analyzeArchive(archive([["broken.png", signatureOnly]])),
+      "IMAGE_DECODE_FAILED",
+    );
+  });
+
+  it("rejects images that exceed the configured dimensions", async () => {
+    const oversized = await sharp({
+      create: {
+        width: 8_001,
+        height: 1,
+        channels: 3,
+        background: "#ffffff",
+      },
+    })
+      .png()
+      .toBuffer();
+
+    await expectCode(
+      () => analyzeArchive(archive([["too-wide.png", oversized]])),
+      "IMAGE_DIMENSIONS_TOO_LARGE",
     );
   });
 });

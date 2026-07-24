@@ -44,8 +44,21 @@ export function createApp({
   });
 
   app.use(
+    "/api/images/studio",
+    express.static(path.join(uploadDir, "studio"), {
+      dotfiles: "ignore",
+      fallthrough: false,
+      immutable: true,
+      maxAge: "1y",
+      setHeaders(res) {
+        res.setHeader("X-Content-Type-Options", "nosniff");
+      },
+    }),
+  );
+  app.use(
     "/api/images",
     express.static(uploadDir, {
+      dotfiles: "ignore",
       fallthrough: false,
       setHeaders(res) {
         res.setHeader("X-Content-Type-Options", "nosniff");
@@ -88,6 +101,18 @@ export function createApp({
             error.code === "LIMIT_FILE_SIZE"
               ? "ZIP 파일은 25MB 이하로 올려 주세요."
               : "ZIP 파일 하나만 올려 주세요.",
+        });
+        return;
+      }
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "status" in error &&
+        error.status === 404
+      ) {
+        res.status(404).json({
+          code: "IMAGE_NOT_FOUND",
+          message: "이미지를 찾을 수 없습니다.",
         });
         return;
       }

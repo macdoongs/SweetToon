@@ -4,6 +4,7 @@ import type {
   SeriesDetail,
   SeriesListResponse,
 } from "./reader-types";
+import { seriesFilterQuery, type SeriesFilter } from "./series-filter";
 import type { OrderDetail, OrderListResponse } from "./order-types";
 
 const API_INTERNAL_URL =
@@ -43,8 +44,10 @@ async function serverGetJson<T>(
   return (await response.json()) as T;
 }
 
-export function getSeriesList(): Promise<SeriesListResponse> {
-  return serverGetJson("/api/series", { fresh: true });
+export function getSeriesList(
+  filter: SeriesFilter = "all",
+): Promise<SeriesListResponse> {
+  return serverGetJson(seriesFilterQuery(filter), { fresh: true });
 }
 
 export function getSeriesDetail(slug: string): Promise<SeriesDetail> {

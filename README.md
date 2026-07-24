@@ -78,14 +78,14 @@ pwsh -File scripts/verify-e2e.ps1
 
 Compose 스모크 스크립트는 `sweettoon-verify-*` 이름의 독립 project와 임의 호스트
 포트를 사용하며 성공·실패 여부와 관계없이 자신이 만든 컨테이너와 볼륨을 정리합니다.
-브라우저 E2E도 같은 방식으로 독립 DB와 업로드 볼륨을 만들고 독자 감상, 소장본
-주문, 모바일 작가 스튜디오 흐름을 검증합니다. 실패하면 Playwright trace,
-스크린샷, 비디오와 HTML 리포트를 남깁니다. Jenkins도 같은 스크립트를 호출하므로
-로컬 검증과 CI 계약이 분리되지 않습니다.
+브라우저 E2E도 같은 방식으로 독립 DB와 업로드 볼륨을 만들고 URL 기반 작품 탐색,
+독자 감상, 소장본 주문, 모바일 작가 스튜디오 흐름을 검증합니다. 실패하면
+Playwright trace, 스크린샷, 비디오와 HTML 리포트를 남깁니다. Jenkins도 같은
+스크립트를 호출하므로 로컬 검증과 CI 계약이 분리되지 않습니다.
 
 ## 구현된 API
 
-- `GET /api/series` — 작품 목록
+- `GET /api/series?filter=all|ongoing|collectible` — 상태·소장 가능 작품 목록
 - `GET /api/series/:slug` — 작품, 시즌, 에피소드 상세
 - `GET /api/episodes/:id` — 에피소드 컷과 이전·다음 회차
 - `POST /api/print-quotes` — 완결 시즌 페이지 수 기반 Mock 견적
@@ -109,7 +109,7 @@ Compose 스모크 스크립트는 `sweettoon-verify-*` 이름의 독립 project�
 1. 웹 의존성 설치, lint, production build
 2. 서버 의존성 설치, Prisma schema 검증, TypeScript build, API·Mock provider 테스트
 3. 격리된 Docker Compose 프로젝트에서 전체 서비스 기동 및 health check
-4. Chromium에서 독자·주문·스튜디오 핵심 흐름 E2E
+4. Chromium에서 작품 탐색·독자·주문·스튜디오 핵심 흐름 E2E
 
 CD는 CI가 검증한 동일 Git SHA만 개발 서버에 전달합니다.
 

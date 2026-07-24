@@ -113,10 +113,26 @@ function makeApp() {
 
 describe("reader routes", () => {
   it("returns the discoverable series list", async () => {
-    const response = await request(makeApp()).get("/api/series").expect(200);
+    const repository = makeRepository();
+    const app = createApp({
+      readerRepository: repository,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+    });
+    const response = await request(app)
+      .get("/api/series?filter=collectible")
+      .expect(200);
 
     expect(response.body.items[0].slug).toBe("moonlight-laundry");
     expect(response.body.items[0].episodeCount).toBe(11);
+    expect(repository.listSeries).toHaveBeenCalledWith("collectible");
+  });
+
+  it("rejects an unknown series filter", async () => {
+    const response = await request(makeApp())
+      .get("/api/series?filter=weekday")
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_SERIES_FILTER");
   });
 
   it("returns a series with seasons and episodes", async () => {

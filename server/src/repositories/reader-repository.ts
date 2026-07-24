@@ -1,12 +1,13 @@
 import { PrismaClient } from "@prisma/client";
 import type {
   EpisodeReader,
+  SeriesFilter,
   SeriesDetail,
   SeriesListResponse,
 } from "../contracts/reader";
 
 export interface ReaderRepository {
-  listSeries(): Promise<SeriesListResponse>;
+  listSeries(filter?: SeriesFilter): Promise<SeriesListResponse>;
   findSeriesBySlug(slug: string): Promise<SeriesDetail | null>;
   findEpisodeById(id: string): Promise<EpisodeReader | null>;
 }
@@ -14,8 +15,14 @@ export interface ReaderRepository {
 export class PrismaReaderRepository implements ReaderRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async listSeries(): Promise<SeriesListResponse> {
+  async listSeries(filter: SeriesFilter = "all"): Promise<SeriesListResponse> {
     const series = await this.prisma.series.findMany({
+      where:
+        filter === "ongoing"
+          ? { status: "ongoing" }
+          : filter === "collectible"
+            ? { seasons: { some: { status: "completed" } } }
+            : undefined,
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       include: {
         author: true,

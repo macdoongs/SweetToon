@@ -47,6 +47,18 @@ pipeline {
             }
         }
 
+        stage('Browser E2E') {
+            steps {
+                powershell '''
+                    $ErrorActionPreference = "Stop"
+                    & "$env:WORKSPACE/scripts/verify-e2e.ps1" `
+                        -ProjectName $env:COMPOSE_PROJECT_NAME `
+                        -SkipBuild `
+                        -SkipInstall
+                '''
+            }
+        }
+
         stage('Deploy dev') {
             when {
                 expression {
@@ -66,6 +78,8 @@ pipeline {
 
     post {
         always {
+            archiveArtifacts artifacts: 'web/playwright-report/**,web/test-results/**',
+                allowEmptyArchive: true
             cleanWs()
         }
     }

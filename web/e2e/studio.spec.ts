@@ -1,0 +1,58 @@
+import AdmZip from "adm-zip";
+import { expect, test } from "@playwright/test";
+
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
+
+function episodeArchive(): Buffer {
+  const archive = new AdmZip();
+  archive.addFile("10.png", png);
+  archive.addFile("2.png", png);
+  archive.addFile("1.png", png);
+  return archive.toBuffer();
+}
+
+test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드를 발행한다", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/studio");
+
+  await expect(
+    page.getByRole("heading", { level: 1 }),
+  ).toContainText("원고 한 묶음을");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+
+  await page.getByLabel("제목").fill("E2E 새벽 원고");
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: "e2e-episode.cbz",
+    mimeType: "application/zip",
+    buffer: episodeArchive(),
+  });
+
+  const pageNames = page.locator(".page-preview-list li strong");
+  await expect(pageNames).toHaveText(["1.png", "2.png", "10.png"]);
+  await page
+    .getByRole("button", { name: "2.png 뒤로 이동" })
+    .click();
+  await expect(pageNames).toHaveText(["1.png", "10.png", "2.png"]);
+
+  await page.getByRole("button", { name: "에피소드 등록" }).click();
+  await expect(
+    page.getByRole("heading", {
+      level: 2,
+      name: "새 에피소드가 독자에게 열렸어요.",
+    }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "등록한 에피소드 보기" }).click();
+
+  await expect(page).toHaveURL(/\/read\/[^/]+$/);
+  await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await expect(page.locator(".webtoon-strip img")).toHaveCount(3);
+});

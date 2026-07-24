@@ -3,6 +3,7 @@ import type {
   CreateOrderRequest,
   OrderDetail,
   OrderListResponse,
+  OrderStatus,
 } from "../contracts/order";
 import type { PrintQuote } from "../printing/print-provider";
 
@@ -33,6 +34,12 @@ export interface OrderRepository {
     orderId: string,
     providerOrderId: string,
   ): Promise<OrderDetail>;
+  transitionStatus(
+    orderId: string,
+    expectedStatus: OrderStatus,
+    nextStatus: OrderStatus,
+    message: string,
+  ): Promise<OrderDetail | null>;
   markCanceled(orderId: string, message: string): Promise<void>;
   findById(id: string): Promise<OrderDetail | null>;
   listOrders(): Promise<OrderListResponse>;
@@ -185,12 +192,49 @@ export class PrismaOrderRepository implements OrderRepository {
     orderId: string,
     providerOrderId: string,
   ): Promise<OrderDetail> {
-    const order = await this.prisma.order.update({
-      where: { id: orderId },
-      data: { providerOrderId },
-      include: orderInclude,
+    const order = await this.prisma.$transaction(async (transaction) => {
+      await transaction.order.update({
+        where: { id: orderId },
+        data: { providerOrderId, status: "processing" },
+      });
+      await transaction.orderEvent.create({
+        data: {
+          orderId,
+          status: "processing",
+          message: "인쇄 접수를 마치고 소장본 제작을 시작했어요.",
+        },
+      });
+      return transaction.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: orderInclude,
+      });
     });
     return toOrderDetail(order);
+  }
+
+  async transitionStatus(
+    orderId: string,
+    expectedStatus: OrderStatus,
+    nextStatus: OrderStatus,
+    message: string,
+  ): Promise<OrderDetail | null> {
+    return this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.order.updateMany({
+        where: { id: orderId, status: expectedStatus },
+        data: { status: nextStatus },
+      });
+      if (updated.count === 0) {
+        return null;
+      }
+      await transaction.orderEvent.create({
+        data: { orderId, status: nextStatus, message },
+      });
+      const order = await transaction.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: orderInclude,
+      });
+      return toOrderDetail(order);
+    });
   }
 
   async markCanceled(orderId: string, message: string): Promise<void> {

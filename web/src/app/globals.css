@@ -899,7 +899,8 @@ button {
 
 .order-page,
 .orders-page,
-.order-detail-page {
+.order-detail-page,
+.operations-page {
   padding-bottom: 110px;
 }
 
@@ -930,6 +931,15 @@ button {
 
 .page-header--compact h1 {
   font-size: clamp(2.8rem, 5vw, 4.5rem);
+}
+
+.operations-link {
+  width: fit-content;
+  margin-top: 18px;
+  display: inline-flex;
+  color: var(--coral-dark);
+  font-size: 0.78rem;
+  font-weight: 850;
 }
 
 .order-layout {
@@ -1388,6 +1398,75 @@ button {
   overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 0.62rem;
+}
+
+.operations-list,
+.operations-error {
+  width: var(--content);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.operations-list {
+  display: grid;
+  gap: 12px;
+}
+
+.operations-card {
+  padding: 24px 26px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: var(--cream);
+}
+
+.operations-card h2 {
+  margin: 10px 0 3px;
+  letter-spacing: -0.04em;
+}
+
+.operations-card p,
+.operations-card small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.operations-card small {
+  margin-top: 8px;
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.operations-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.operations-card__actions > a {
+  color: var(--coral-dark);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.operations-card__done {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.operations-error {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(239, 104, 73, 0.12);
+  color: var(--coral-dark);
+  font-size: 0.8rem;
 }
 
 .studio-page {
@@ -2020,6 +2099,16 @@ body:has(.reader-page) .site-header {
 
   .order-list-card__arrow {
     display: none;
+  }
+
+  .operations-card {
+    padding: 20px;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .operations-card__actions {
+    justify-content: space-between;
   }
 
   .reader-toolbar {

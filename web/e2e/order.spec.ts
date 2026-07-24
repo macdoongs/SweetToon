@@ -40,4 +40,21 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
   const body = await response.json();
   expect(body).not.toHaveProperty("ordererName");
   expect(body).not.toHaveProperty("memo");
+
+  await page.goto("/operations/orders");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "소장본 제작 관리" }),
+  ).toBeVisible();
+  const operation = page
+    .locator(".operations-card")
+    .filter({ hasText: orderId ?? "" });
+  await expect(operation.getByText("제작 중", { exact: true })).toBeVisible();
+  await operation.getByRole("button", { name: "배송 시작" }).click();
+  await expect(operation.getByText("배송 중", { exact: true })).toBeVisible();
+  await operation.getByRole("button", { name: "완료 처리" }).click();
+  await expect(operation.getByText("완료", { exact: true })).toBeVisible();
+
+  await operation.getByRole("link", { name: "타임라인 보기" }).click();
+  await expect(page).toHaveURL(new RegExp(`/orders/${orderId}$`));
+  await expect(page.getByText("소장본 배송이 완료되었어요.")).toBeVisible();
 });

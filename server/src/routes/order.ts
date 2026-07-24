@@ -4,6 +4,7 @@ import {
   OrderDetailSchema,
   OrderIdParamSchema,
   OrderListResponseSchema,
+  OrderTransitionRequestSchema,
   PrintQuoteRequestSchema,
   PrintQuoteResponseSchema,
 } from "../contracts/order";
@@ -50,6 +51,28 @@ export function createOrderRouter(service: OrderUseCases): Router {
       return;
     }
     res.json(OrderDetailSchema.parse(await service.get(id.data)));
+  });
+
+  router.patch("/orders/:id/status", async (req, res) => {
+    const id = OrderIdParamSchema.safeParse(req.params.id);
+    if (!id.success) {
+      res.status(400).json({
+        code: "INVALID_ORDER_ID",
+        message: "주문 주소가 올바르지 않습니다.",
+      });
+      return;
+    }
+    const input = OrderTransitionRequestSchema.safeParse(req.body);
+    if (!input.success) {
+      res.status(400).json({
+        code: "INVALID_ORDER_STATUS",
+        message: "변경할 제작 상태를 다시 확인해 주세요.",
+      });
+      return;
+    }
+    res.json(
+      OrderDetailSchema.parse(await service.transition(id.data, input.data)),
+    );
   });
 
   return router;

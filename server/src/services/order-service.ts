@@ -2,6 +2,8 @@ import type {
   CreateOrderRequest,
   OrderDetail,
   OrderListResponse,
+  OrderStatus,
+  OrderTransitionRequest,
   PrintQuoteRequest,
   PrintQuoteResponse,
 } from "../contracts/order";
@@ -27,7 +29,20 @@ export interface OrderUseCases {
   create(input: CreateOrderRequest): Promise<OrderDetail>;
   get(id: string): Promise<OrderDetail>;
   list(): Promise<OrderListResponse>;
+  transition(id: string, input: OrderTransitionRequest): Promise<OrderDetail>;
 }
+
+const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = {
+  pending: "processing",
+  processing: "shipped",
+  shipped: "completed",
+};
+
+const transitionMessage: Record<"processing" | "shipped" | "completed", string> = {
+  processing: "소장본 제작을 시작했어요.",
+  shipped: "소장본 제작을 마치고 배송을 시작했어요.",
+  completed: "소장본 배송이 완료되었어요.",
+};
 
 export class OrderService implements OrderUseCases {
   constructor(
@@ -165,5 +180,41 @@ export class OrderService implements OrderUseCases {
 
   list(): Promise<OrderListResponse> {
     return this.repository.listOrders();
+  }
+
+  async transition(
+    id: string,
+    input: OrderTransitionRequest,
+  ): Promise<OrderDetail> {
+    const order = await this.repository.findById(id);
+    if (!order) {
+      throw new OrderServiceError(
+        "ORDER_NOT_FOUND",
+        "요청한 주문을 찾을 수 없습니다.",
+        404,
+      );
+    }
+    if (nextStatus[order.status] !== input.status) {
+      throw new OrderServiceError(
+        "INVALID_ORDER_TRANSITION",
+        "현재 제작 단계에서 선택할 수 없는 상태입니다.",
+        409,
+      );
+    }
+
+    const updated = await this.repository.transitionStatus(
+      id,
+      order.status,
+      input.status,
+      transitionMessage[input.status],
+    );
+    if (!updated) {
+      throw new OrderServiceError(
+        "ORDER_STATUS_CHANGED",
+        "다른 작업에서 상태가 변경되었습니다. 새로고침 후 다시 시도해 주세요.",
+        409,
+      );
+    }
+    return updated;
   }
 }

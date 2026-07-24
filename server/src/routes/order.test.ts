@@ -69,6 +69,10 @@ function makeService(): jest.Mocked<OrderUseCases> {
     create: jest.fn().mockResolvedValue(order),
     get: jest.fn().mockResolvedValue(order),
     list: jest.fn().mockResolvedValue({ items: [order] }),
+    transition: jest.fn().mockResolvedValue({
+      ...order,
+      status: "shipped",
+    }),
   };
 }
 
@@ -147,5 +151,28 @@ describe("order routes", () => {
       code: "ORDER_NOT_FOUND",
       message: "요청한 주문을 찾을 수 없습니다.",
     });
+  });
+
+  it("validates and applies an operator status transition", async () => {
+    const service = makeService();
+    const response = await request(makeApp(service))
+      .patch("/api/orders/cmorder000000000000000001/status")
+      .send({ status: "shipped" })
+      .expect(200);
+
+    expect(service.transition).toHaveBeenCalledWith(
+      "cmorder000000000000000001",
+      { status: "shipped" },
+    );
+    expect(response.body.status).toBe("shipped");
+  });
+
+  it("rejects an unsupported operator status", async () => {
+    const response = await request(makeApp())
+      .patch("/api/orders/cmorder000000000000000001/status")
+      .send({ status: "pending" })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_ORDER_STATUS");
   });
 });

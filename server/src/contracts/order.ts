@@ -44,6 +44,10 @@ export const CreateOrderRequestSchema = PrintQuoteRequestSchema.extend({
   memo: z.string().trim().max(200).nullable().optional(),
 });
 
+export const OrderTransitionRequestSchema = z.object({
+  status: z.enum(["processing", "shipped", "completed"]),
+});
+
 export const OrderEventSchema = z.object({
   id: z.string(),
   status: OrderStatusSchema,
@@ -90,3 +94,6 @@ export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
 export type OrderDetail = z.infer<typeof OrderDetailSchema>;
 export type OrderListResponse = z.infer<typeof OrderListResponseSchema>;
 export type OrderStatus = z.infer<typeof OrderStatusSchema>;
+export type OrderTransitionRequest = z.infer<
+  typeof OrderTransitionRequestSchema
+>;

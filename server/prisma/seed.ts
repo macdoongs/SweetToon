@@ -127,6 +127,7 @@ async function main() {
     const coverUrl = writeCoverSvg(path.join(spec.slug, "cover.svg"), spec.title, spec.hue);
     const series = await prisma.series.create({
       data: {
+        slug: spec.slug,
         authorId,
         title: spec.title,
         genre: spec.genre,

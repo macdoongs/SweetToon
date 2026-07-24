@@ -1,6 +1,25 @@
 # SweetToon
 
-읽던 웹툰의 완결 시즌을 실물 단행본으로 소장할 수 있는 웹툰 플랫폼입니다.
+읽던 웹툰을 세로 스크롤로 감상하고, 완결 시즌을 실물 단행본으로 소장할 수 있는 웹툰 플랫폼입니다.
+
+## 누구를 위한 서비스인가
+
+- **독자**는 작품을 발견하고 에피소드를 감상한 뒤, 좋아하는 완결 시즌을 소장본으로 주문합니다.
+- **창작자**는 웹툰 원고 묶음을 업로드해 연재하고 자기 작품을 독립 출판합니다.
+
+현재 구현된 첫 번째 사용자 흐름은 **홈에서 작품 발견 → 작품·회차 선택 → 세로 스크롤 감상**입니다.
+로그인 없이 데모 데이터를 바로 탐색할 수 있고, 로딩·빈 데이터·오류 상태를 각 화면에서 처리합니다.
+
+## Book Print API 정책
+
+과제 안내에 따라 `api.sweetbook.com`에는 직접 요청하지 않습니다. 애플리케이션은 외부 서비스 없이
+독립적으로 실행되며, 인쇄 연동 경계는 서버의 `PrintProvider` 인터페이스로 분리했습니다.
+
+- 기본값과 유일하게 허용되는 구현은 `MockPrintProvider`입니다.
+- `PRINT_PROVIDER=mock` 이외의 값은 서버가 명시적으로 거부하는 fail-closed 방식입니다.
+- Mock은 견적·주문·상태 확인 계약을 구현하므로 이후 실제 연동이 허용되더라도 도메인 로직과 UI를
+  바꾸지 않고 어댑터만 교체할 수 있습니다.
+- 현재 소장본 주문 버튼은 다음 개발 단계임을 명확히 표시하며 실제 결제나 외부 요청을 만들지 않습니다.
 
 ## 실행
 
@@ -22,21 +41,33 @@ docker compose up --build
 
 ```text
 web/      Next.js 16 + React 19
-server/   Express 5 + Prisma 6
+server/   Express 5 + Prisma 6 + Mock PrintProvider
 db        PostgreSQL 16
 ```
 
 웹, API, DB는 별도 컨테이너로 실행되지만 하나의 모노레포와 Docker Compose 실행 계약으로 관리합니다.
+Next.js Route Handler 대신 독립 Express API를 둔 이유는 웹 외 클라이언트와 B2B API 확장을 고려한
+API-first 경계를 보여주고, 이미지·압축 파일 처리와 웹 렌더링의 책임을 분리하기 위해서입니다.
+
+## 구현된 API
+
+- `GET /api/series` — 작품 목록
+- `GET /api/series/:slug` — 작품, 시즌, 에피소드 상세
+- `GET /api/episodes/:id` — 에피소드 컷과 이전·다음 회차
+- `GET /api/images/*` — 데모 및 업로드 이미지
+
+요청 파라미터와 응답은 Zod 계약으로 검증하고, 라우트는 저장소 인터페이스에 의존해 HTTP 테스트에서
+DB 없이 경계 조건을 검증합니다.
 
 ## CI
 
 루트 `Jenkinsfile`은 다음 검증을 수행합니다.
 
 1. 웹 의존성 설치, lint, production build
-2. 서버 의존성 설치, Prisma schema 검증, TypeScript build, 테스트
+2. 서버 의존성 설치, Prisma schema 검증, TypeScript build, API·Mock provider 테스트
 3. 격리된 Docker Compose 프로젝트에서 전체 서비스 기동 및 health check
 
-CD는 핵심 사용자 플로우와 배포 대상 환경이 준비된 후 `main`의 검증된 이미지에 연결합니다.
+CD는 CI가 검증한 동일 Git SHA만 개발 서버에 전달합니다.
 
 ## 개발 브랜치와 배포
 

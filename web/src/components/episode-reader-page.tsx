@@ -39,7 +39,7 @@ export function EpisodeReaderPage({
         if (!controller.signal.aborted) {
           setError({
             message:
-              reason instanceof Error
+              reason instanceof ApiError
                 ? reason.message
                 : "에피소드를 불러오지 못했습니다.",
             status: reason instanceof ApiError ? reason.status : undefined,
@@ -86,21 +86,24 @@ export function EpisodeReaderPage({
 
   return (
     <main className="reader-page">
-      <div className="reader-progress" aria-hidden="true">
-        <span style={{ width: `${progress}%` }} />
-      </div>
+      <div
+        className="reader-progress"
+        aria-hidden="true"
+        style={{ width: `${progress}%` }}
+      />
       <header className="reader-toolbar">
         <Link
+          className="reader-toolbar__back"
           href={`/series/${episode.series.slug}`}
           aria-label="작품으로 돌아가기"
         >
           ←
         </Link>
-        <div>
+        <div className="reader-toolbar__title">
           <span>
             {episode.series.title} · 시즌 {episode.season.number}
           </span>
-          <strong>{episodeLabel(episode.number, episode.title)}</strong>
+          <h1>{episodeLabel(episode.number, episode.title)}</h1>
         </div>
         <span className="reader-toolbar__progress">{progress}%</span>
       </header>
@@ -121,25 +124,26 @@ export function EpisodeReaderPage({
           aria-label={`${episode.title} 웹툰 본문`}
         >
           {episode.pages.map((page) => (
-            <Image
-              alt={`${episode.title} ${page.order}번째 컷`}
-              height={1200}
-              key={page.id}
-              priority={page.order <= 2}
-              src={page.imageUrl}
-              unoptimized
-              width={800}
-            />
+            <div className="webtoon-strip__cut" key={page.id}>
+              <Image
+                alt={`${episode.title} ${page.order}번째 컷`}
+                height={1200}
+                priority={page.order <= 2}
+                src={page.imageUrl}
+                unoptimized
+                width={800}
+              />
+            </div>
           ))}
         </article>
       )}
 
       <section className="reader-finish">
         <p className="eyebrow">여기까지 읽었어요</p>
-        <h1>
+        <h2>
           {episode.series.title} {episode.number}화를 완독했습니다.
-        </h1>
-        <div className="reader-finish__navigation">
+        </h2>
+        <div className="reader-navigation">
           {episode.navigation.previousEpisodeId ? (
             <Link
               className="button button--dark-ghost"

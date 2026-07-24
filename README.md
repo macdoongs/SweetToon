@@ -44,6 +44,8 @@
   `전체 / 연재 중 / 완결·소장 가능` URL 필터를 사용합니다.
 - 필터 상태를 query string에 보존해 뒤로가기·공유·서버 렌더링이 일치합니다.
 - 홈·작품·뷰어·주문·스튜디오마다 목적에 맞는 헤더와 breadcrumb를 제공합니다.
+- 일반 페이지의 푸터에는 서비스 탐색 링크와 함께 과제용 데모, Mock API,
+  실제 결제·배송 없음 같은 운영 범위를 명확히 표시합니다.
 - 로딩, 빈 데이터, 잘못된 ZIP, 중복 회차, 주문 실패와 동시 상태 변경을
   개발자 용어가 아닌 사용자 문장으로 구분합니다.
 - 대표작 `달빛 세탁소` 첫 화는 8개의 일관된 AI 생성 컷으로 실제 감상 흐름을
@@ -51,7 +53,10 @@
 
 각 공개 콘텐츠 페이지는 서버에서 초기 데이터를 렌더링합니다. 홈·작품·뷰어별
 title, description, canonical, Open Graph/Twitter Card와 JSON-LD를 제공하고,
-`robots.txt`, 동적 `sitemap.xml`, PNG 공유 이미지를 생성합니다.
+`robots.txt`, 동적 `sitemap.xml`, PNG 공유 이미지를 생성합니다. Web App
+Manifest와 서비스 워커를 제공해 홈 화면 설치가 가능하며, 네트워크가 끊긴
+탐색 요청은 전용 오프라인 안내 화면으로 전환합니다. 최신 회차는
+`/feed.xml` RSS 2.0 피드로 구독할 수 있습니다.
 
 ## 구현 범위
 
@@ -59,7 +64,7 @@ title, description, canonical, Open Graph/Twitter Card와 JSON-LD를 제공하�
 - **Lv2 부가 기능:** 완결 시즌 견적·주문·영속 상태 타임라인
 - **Lv2 창작 도구:** ZIP/CBZ 검증·자연 정렬 미리보기·회차 발행
 - **가점 범위:** 운영자 상태 전이, 반응형 UI, SEO, 이미지 검증·WebP 파생,
-  Mock 계약, 자동화된 Compose/E2E 검증
+  PWA 설치·오프라인 폴백, Mock 계약, 자동화된 Compose/E2E 검증
 - **의도적 비대상:** 회원/권한, 결제, 실제 배송사, 알림, 추천·댓글,
   Komga 연동, 실제 Book Print API 호출
 
@@ -142,9 +147,14 @@ pwsh -File scripts/verify-e2e.ps1
 Compose 스모크 스크립트는 `sweettoon-verify-*` 이름의 독립 project와 임의 호스트
 포트를 사용하며 성공·실패 여부와 관계없이 자신이 만든 컨테이너와 볼륨을 정리합니다.
 브라우저 E2E도 같은 방식으로 독립 DB와 업로드 볼륨을 만들고 URL 기반 작품 탐색,
-독자 감상, 소장본 주문, 모바일 작가 스튜디오 흐름을 검증합니다. 실패하면
+PWA·RSS, 독자 감상, 소장본 주문, 모바일 작가 스튜디오 흐름을 검증합니다. 실패하면
 Playwright trace, 스크린샷, 비디오와 HTML 리포트를 남깁니다. Jenkins도 같은
 스크립트를 호출하므로 로컬 검증과 CI 계약이 분리되지 않습니다.
+
+프론트엔드 E2E는 MSW나 `route.fulfill()`로 임시 HTTP 응답을 만들지 않고,
+Compose에서 실제 Express API와 PostgreSQL 시드 데이터를 호출합니다. 외부 인쇄
+서비스만 `PrintProvider` 경계의 Mock으로 대체하며, 서버 HTTP 테스트에서는
+repository와 use case를 fake 구현으로 주입해 DB 없이 오류 계약을 검증합니다.
 
 ## 구현된 API
 

@@ -115,6 +115,107 @@ button {
   color: var(--ink);
 }
 
+.site-footer {
+  border-top: 1px solid var(--line);
+  background: #ece4d8;
+}
+
+.site-footer__inner,
+.site-footer__legal {
+  width: var(--content);
+  margin: 0 auto;
+}
+
+.site-footer__inner {
+  padding: 58px 0 46px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 70px;
+}
+
+.site-footer__brand > p {
+  margin: 18px 0 16px;
+  color: var(--muted);
+  font-family: Georgia, "Noto Serif KR", serif;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.site-footer__badge {
+  padding: 5px 9px;
+  border: 1px solid rgba(32, 35, 30, 0.12);
+  border-radius: 999px;
+  display: inline-flex;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.site-footer__nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  gap: 54px;
+}
+
+.site-footer__nav > div {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.site-footer__nav strong {
+  margin-bottom: 4px;
+  font-size: 0.76rem;
+}
+
+.site-footer__nav a {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.site-footer__nav a:hover {
+  color: var(--coral-dark);
+}
+
+.site-footer__legal {
+  padding: 24px 0 34px;
+  border-top: 1px solid rgba(32, 35, 30, 0.1);
+}
+
+.site-footer__notices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.site-footer__notices span:not(:last-child)::after {
+  content: "";
+  width: 1px;
+  height: 10px;
+  margin-left: 18px;
+  display: inline-block;
+  vertical-align: -1px;
+  background: rgba(32, 35, 30, 0.18);
+}
+
+.site-footer__legal p {
+  max-width: 800px;
+  margin: 14px 0 8px;
+  color: var(--muted);
+  font-size: 0.67rem;
+}
+
+.site-footer__legal small {
+  color: rgba(32, 35, 30, 0.48);
+  font-size: 0.64rem;
+}
+
 .eyebrow {
   margin: 0 0 12px;
   color: var(--coral-dark);
@@ -181,6 +282,45 @@ button {
 
 .button--wide {
   width: 100%;
+}
+
+.offline-page {
+  width: min(680px, calc(100% - 40px));
+  min-height: 70vh;
+  margin: 0 auto;
+  padding: 110px 0;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.offline-page__mark {
+  width: 54px;
+  height: 54px;
+  margin-bottom: 28px;
+  border-radius: 18px 18px 18px 5px;
+  display: grid;
+  place-items: center;
+  background: var(--coral);
+  color: white;
+  font-size: 1.4rem;
+  font-weight: 900;
+}
+
+.offline-page h1 {
+  max-width: 620px;
+  margin: 0;
+  font-family: Georgia, "Noto Serif KR", serif;
+  font-size: clamp(2.7rem, 7vw, 5rem);
+  letter-spacing: -0.065em;
+  line-height: 1.08;
+}
+
+.offline-page > p:not(.eyebrow) {
+  max-width: 570px;
+  margin: 24px 0 32px;
+  color: var(--muted);
 }
 
 .hero {
@@ -1775,7 +1915,8 @@ button {
   font-weight: 700;
 }
 
-body:has(.reader-page) .site-header {
+body:has(.reader-page) .site-header,
+body:has(.reader-page) .site-footer {
   display: none;
 }
 
@@ -1810,9 +1951,11 @@ body:has(.reader-page) .site-header {
   text-align: center;
 }
 
-.reader-toolbar__title strong {
+.reader-toolbar__title h1 {
+  margin: 0;
   display: block;
   font-size: 0.86rem;
+  letter-spacing: -0.02em;
 }
 
 .reader-toolbar__title span {
@@ -1877,7 +2020,16 @@ body:has(.reader-page) .site-header {
 .reader-navigation {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.reader-finish__back {
+  margin-top: 24px;
+  display: inline-block;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.76rem;
+  font-weight: 750;
 }
 
 .reader-empty {
@@ -1939,6 +2091,25 @@ body:has(.reader-page) .site-header {
 
   .site-nav a:not(:last-child) {
     display: none;
+  }
+
+  .site-footer__inner {
+    padding: 42px 0 34px;
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  .site-footer__nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+  }
+
+  .site-footer__notices {
+    gap: 7px 12px;
+  }
+
+  .site-footer__notices span:not(:last-child)::after {
+    margin-left: 12px;
   }
 
   .hero {

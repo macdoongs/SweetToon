@@ -55,11 +55,14 @@ export async function generateMetadata({
         images: images?.map((image) => image.url),
       },
     };
-  } catch {
-    return {
-      title: "에피소드를 찾을 수 없습니다",
-      robots: { index: false, follow: false },
-    };
+  } catch (error) {
+    if (error instanceof ServerApiError && error.status === 404) {
+      return {
+        title: "에피소드를 찾을 수 없습니다",
+        robots: { index: false, follow: false },
+      };
+    }
+    throw error;
   }
 }
 

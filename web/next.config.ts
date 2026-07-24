@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Swagger UI requires its trailing slash so relative CSS/JS assets remain
+  // under /api-docs instead of resolving at the site root.
+  skipTrailingSlashRedirect: true,
   async headers() {
     return [
       {
@@ -31,6 +34,14 @@ const nextConfig: NextConfig = {
       {
         source: "/api/:path*",
         destination: `${apiBaseUrl}/api/:path*`,
+      },
+      {
+        source: "/api-docs/:path*",
+        destination: `${apiBaseUrl}/api-docs/:path*`,
+      },
+      {
+        source: "/openapi.json",
+        destination: `${apiBaseUrl}/openapi.json`,
       },
     ];
   },

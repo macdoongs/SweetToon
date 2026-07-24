@@ -19,6 +19,9 @@ const seriesList: SeriesListResponse = {
       title: "달빛 세탁소",
       synopsis: "얼룩진 기억을 맡기는 밤의 세탁소",
       genre: "힐링 판타지",
+      weekday: "mon",
+      freeVolumeCount: 0,
+      previewEpisodeCount: 3,
       coverUrl: "/api/images/moonlight-laundry/cover.svg",
       status: "ongoing",
       author: { name: "이수달" },
@@ -29,9 +32,15 @@ const seriesList: SeriesListResponse = {
         number: 1,
         title: "1화",
         publishedAt,
+        volumeNumber: 1,
+        access: "free",
       },
     },
   ],
+  page: 1,
+  nextPage: null,
+  total: 1,
+  facets: { genres: ["힐링 판타지"], weekdays: ["mon"] },
 };
 
 const seriesDetail: SeriesDetail = {
@@ -40,6 +49,9 @@ const seriesDetail: SeriesDetail = {
   title: "달빛 세탁소",
   synopsis: "얼룩진 기억을 맡기는 밤의 세탁소",
   genre: "힐링 판타지",
+  weekday: "mon",
+  freeVolumeCount: 0,
+  previewEpisodeCount: 3,
   coverUrl: "/api/images/moonlight-laundry/cover.svg",
   status: "ongoing",
   author: {
@@ -59,6 +71,8 @@ const seriesDetail: SeriesDetail = {
           number: 1,
           title: "1화",
           publishedAt,
+          volumeNumber: 1,
+          access: "free",
         },
       ],
     },
@@ -84,6 +98,12 @@ const episode: EpisodeReader = {
     { id: "page-1", order: 1, imageUrl: "/api/images/page-1.svg" },
     { id: "page-2", order: 2, imageUrl: "/api/images/page-2.svg" },
   ],
+  access: {
+    state: "free",
+    volumeNumber: 1,
+    freeVolumeCount: 0,
+    previewEpisodeCount: 3,
+  },
   navigation: {
     previousEpisodeId: null,
     nextEpisodeId: "episode-2",
@@ -124,7 +144,11 @@ describe("reader routes", () => {
 
     expect(response.body.items[0].slug).toBe("moonlight-laundry");
     expect(response.body.items[0].episodeCount).toBe(11);
-    expect(repository.listSeries).toHaveBeenCalledWith("collectible");
+    expect(repository.listSeries).toHaveBeenCalledWith({
+      filter: "collectible",
+      page: 1,
+      pageSize: 12,
+    });
   });
 
   it("rejects an unknown series filter", async () => {
@@ -169,5 +193,23 @@ describe("reader routes", () => {
       response.body.pages.map((page: { order: number }) => page.order),
     ).toEqual([1, 2]);
     expect(response.body.navigation.nextEpisodeId).toBe("episode-2");
+  });
+
+  it("passes an anonymous demo entitlement to the repository", async () => {
+    const repository = makeRepository();
+    const app = createApp({
+      readerRepository: repository,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+    });
+
+    await request(app)
+      .get("/api/episodes/episode-1")
+      .set("Authorization", "Bearer private-demo-token")
+      .expect(200);
+
+    expect(repository.findEpisodeById).toHaveBeenCalledWith(
+      "episode-1",
+      "private-demo-token",
+    );
   });
 });

@@ -21,6 +21,8 @@ const season: OrderableSeason = {
   title: "얼룩의 계절",
   status: "completed",
   pageCount: 64,
+  volumeNumber: 1,
+  episodeRange: { from: 1, to: 5 },
   series: {
     id: "series-1",
     slug: "moonlight-laundry",
@@ -32,6 +34,7 @@ const season: OrderableSeason = {
 const input: CreateOrderRequest = {
   requestKey: "f371de0c-01cd-4214-99f7-7cd8e1df82a0",
   seasonId: season.id,
+  volumeNumber: 1,
   bookSize: "A5",
   coverType: "hardcover",
   quantity: 1,
@@ -44,6 +47,7 @@ function orderFixture(overrides: Partial<OrderDetail> = {}): OrderDetail {
     id: "cmorder000000000000000001",
     providerOrderId: null,
     ordererType: "reader",
+    volumeNumber: input.volumeNumber,
     quantity: input.quantity,
     coverType: input.coverType,
     bookSize: input.bookSize,

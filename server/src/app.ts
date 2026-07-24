@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import multer from "multer";
+import swaggerUi from "swagger-ui-express";
 import path from "node:path";
 import fs from "node:fs";
 import type { ReaderRepository } from "./repositories/reader-repository";
@@ -17,6 +18,7 @@ import {
   StudioServiceError,
   type StudioUseCases,
 } from "./services/studio-service";
+import { openApiDocument } from "./openapi";
 
 export type AppOptions = {
   readerRepository: ReaderRepository;
@@ -42,6 +44,16 @@ export function createApp({
   app.get("/health", (_req, res) => {
     res.json({ ok: true, printProvider: printProvider.name });
   });
+  app.get("/openapi.json", (_req, res) => {
+    res.json(openApiDocument);
+  });
+  const swaggerHtml = swaggerUi.generateHTML(openApiDocument, {
+    customSiteTitle: "SweetToon API",
+  });
+  app.get(["/api-docs", "/api-docs/"], (_req, res) => {
+    res.type("html").send(swaggerHtml);
+  });
+  app.use("/api-docs", swaggerUi.serve);
 
   app.use(
     "/api/images/studio",

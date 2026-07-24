@@ -2,14 +2,21 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getJson } from "@/lib/api";
 import type { SeriesListResponse, SeriesSummary } from "@/lib/reader-types";
 import {
+  catalogHref,
   seriesFilterQuery,
+  type CatalogFilters,
   type SeriesFilter,
+  type Weekday,
 } from "@/lib/series-filter";
 import { ErrorState, LoadingCards } from "./reader-states";
+import {
+  getAllReadingProgress,
+  type ReadingProgress,
+} from "@/lib/reading-progress";
 
 const statusLabel = {
   ongoing: "연재 중",
@@ -30,10 +37,33 @@ const filterOptions: Array<{
   },
 ];
 
+const weekdayLabel: Record<Weekday, string> = {
+  mon: "월",
+  tue: "화",
+  wed: "수",
+  thu: "목",
+  fri: "금",
+  sat: "토",
+  sun: "일",
+};
+
+function getSeriesProgressFromStore(
+  store: Record<string, ReadingProgress>,
+  seriesSlug: string,
+) {
+  return Object.values(store)
+    .filter((progress) => progress.seriesSlug === seriesSlug)
+    .sort(
+      (left, right) =>
+        Date.parse(right.updatedAt) - Date.parse(left.updatedAt),
+    )[0];
+}
+
 function formatLatestDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
     month: "short",
     day: "numeric",
+    timeZone: "Asia/Seoul",
   }).format(new Date(value));
 }
 
@@ -62,19 +92,35 @@ function SeriesCover({
 }
 
 export function HomePage({
-  activeFilter,
+  activeFilters,
   initialData = null,
 }: {
-  activeFilter: SeriesFilter;
+  activeFilters: CatalogFilters;
   initialData?: SeriesListResponse | null;
 }) {
   const [data, setData] = useState<SeriesListResponse | null>(initialData);
   const [error, setError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [requestKey, setRequestKey] = useState(0);
+  const [readingProgress, setReadingProgress] = useState<
+    Record<string, ReadingProgress>
+  >({});
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const retry = useCallback(() => {
     setError(null);
     setRequestKey((current) => current + 1);
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => setReadingProgress(getAllReadingProgress());
+    const frame = requestAnimationFrame(refresh);
+    window.addEventListener("sweettoon:progress", refresh);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("sweettoon:progress", refresh);
+    };
   }, []);
 
   useEffect(() => {
@@ -84,7 +130,7 @@ export function HomePage({
 
     const controller = new AbortController();
     getJson<SeriesListResponse>(
-      seriesFilterQuery(activeFilter),
+      seriesFilterQuery(activeFilters),
       controller.signal,
     )
       .then(setData)
@@ -98,7 +144,44 @@ export function HomePage({
         }
       });
     return () => controller.abort();
-  }, [activeFilter, initialData, requestKey]);
+  }, [activeFilters, initialData, requestKey]);
+
+  const loadMore = useCallback(async () => {
+    if (!data?.nextPage || loadingMore) return;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const next = await getJson<SeriesListResponse>(
+        seriesFilterQuery(activeFilters, data.nextPage),
+      );
+      setData((current) =>
+        current
+          ? {
+              ...next,
+              items: [...current.items, ...next.items],
+              facets: current.facets,
+            }
+          : next,
+      );
+    } catch {
+      setLoadMoreError("다음 작품을 불러오지 못했어요.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [activeFilters, data, loadingMore]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !data?.nextPage) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) void loadMore();
+      },
+      { rootMargin: "500px 0px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [data?.nextPage, loadMore]);
 
   if (error) {
     return <ErrorState message={error} onRetry={retry} />;
@@ -173,14 +256,13 @@ export function HomePage({
             {filterOptions.map((option) => (
               <Link
                 aria-current={
-                  option.value === activeFilter ? "page" : undefined
+                  option.value === activeFilters.filter ? "page" : undefined
                 }
                 className="discover-filter"
-                href={
-                  option.value === "all"
-                    ? "/#discover"
-                    : `/?filter=${option.value}#discover`
-                }
+                href={catalogHref({
+                  ...activeFilters,
+                  filter: option.value,
+                })}
                 key={option.value}
                 title={option.description}
               >
@@ -189,24 +271,71 @@ export function HomePage({
             ))}
             {data ? (
               <span className="discover-filter__count">
-                {data.items.length}개 작품
+                {data.total}개 작품
               </span>
             ) : null}
           </nav>
+
+          {data ? (
+            <div className="catalog-sectors">
+              <nav aria-label="요일별 작품">
+                <strong>요일</strong>
+                <Link
+                  aria-current={!activeFilters.weekday ? "page" : undefined}
+                  href={catalogHref({ ...activeFilters, weekday: undefined })}
+                >
+                  전체
+                </Link>
+                {data.facets.weekdays.map((weekday) => (
+                  <Link
+                    aria-current={
+                      activeFilters.weekday === weekday ? "page" : undefined
+                    }
+                    href={catalogHref({ ...activeFilters, weekday })}
+                    key={weekday}
+                  >
+                    {weekdayLabel[weekday]}
+                  </Link>
+                ))}
+              </nav>
+              <nav aria-label="장르별 작품">
+                <strong>장르</strong>
+                <Link
+                  aria-current={!activeFilters.genre ? "page" : undefined}
+                  href={catalogHref({ ...activeFilters, genre: undefined })}
+                >
+                  전체
+                </Link>
+                {data.facets.genres.map((genre) => (
+                  <Link
+                    aria-current={
+                      activeFilters.genre === genre ? "page" : undefined
+                    }
+                    href={catalogHref({ ...activeFilters, genre })}
+                    key={genre}
+                  >
+                    {genre}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+          ) : null}
 
           {!data ? (
             <LoadingCards />
           ) : data.items.length === 0 ? (
             <div className="empty-library">
               <span>
-                {activeFilter === "ongoing"
+                {activeFilters.filter === "ongoing"
                   ? "지금 연재 중인 작품이 없어요."
-                  : activeFilter === "collectible"
+                  : activeFilters.filter === "collectible"
                     ? "아직 소장 가능한 완결 시즌이 없어요."
                     : "첫 작품을 준비하고 있어요."}
               </span>
               <p>다른 분류의 작품을 먼저 만나 보세요.</p>
-              {activeFilter !== "all" ? (
+              {activeFilters.filter !== "all" ||
+              activeFilters.genre ||
+              activeFilters.weekday ? (
                 <Link className="text-link" href="/#discover">
                   전체 작품 보기 →
                 </Link>
@@ -235,6 +364,35 @@ export function HomePage({
                       </Link>
                     </h3>
                     <p className="series-card__author">{series.author.name}</p>
+                    {getSeriesProgressFromStore(
+                      readingProgress,
+                      series.slug,
+                    ) ? (
+                      <Link
+                        className="series-card__continue"
+                        href={`/read/${getSeriesProgressFromStore(readingProgress, series.slug)?.episodeId}`}
+                      >
+                        <span>
+                          이어보기 ·{" "}
+                          {
+                            getSeriesProgressFromStore(
+                              readingProgress,
+                              series.slug,
+                            )?.episodeNumber
+                          }
+                          화
+                        </span>
+                        <progress
+                          max={100}
+                          value={
+                            getSeriesProgressFromStore(
+                              readingProgress,
+                              series.slug,
+                            )?.percent ?? 0
+                          }
+                        />
+                      </Link>
+                    ) : null}
                     {series.latestEpisode ? (
                       <Link
                         className="series-card__latest"
@@ -267,6 +425,24 @@ export function HomePage({
               ))}
             </div>
           )}
+          {data?.items.length ? (
+            <div className="catalog-load-more" ref={loadMoreRef}>
+              {loadMoreError ? (
+                <>
+                  <p role="alert">{loadMoreError}</p>
+                  <button className="button button--ghost" onClick={loadMore}>
+                    다시 불러오기
+                  </button>
+                </>
+              ) : data.nextPage ? (
+                <span aria-live="polite">
+                  {loadingMore ? "다음 작품을 펼치는 중…" : "아래로 더 둘러보세요"}
+                </span>
+              ) : (
+                <span>모든 작품을 둘러봤어요.</span>
+              )}
+            </div>
+          ) : null}
         </div>
       </section>
 

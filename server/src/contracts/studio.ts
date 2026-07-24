@@ -32,8 +32,21 @@ export const CreatedEpisodeSchema = z.object({
   readerUrl: z.string(),
 });
 
+export const AccessPolicySchema = z.object({
+  freeVolumeCount: z.number().int().min(0).max(20),
+  previewEpisodeCount: z.number().int().min(0).max(4),
+});
+
+export const AccessPolicyResponseSchema = AccessPolicySchema.extend({
+  seriesId: z.string(),
+});
+
 export type UploadPreview = z.infer<typeof UploadPreviewSchema>;
 export type CreateEpisodeRequest = z.infer<
   typeof CreateEpisodeRequestSchema
 >;
 export type CreatedEpisode = z.infer<typeof CreatedEpisodeSchema>;
+export type AccessPolicy = z.infer<typeof AccessPolicySchema>;
+export type AccessPolicyResponse = z.infer<
+  typeof AccessPolicyResponseSchema
+>;

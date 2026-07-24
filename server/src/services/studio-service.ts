@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 import type {
+  AccessPolicy,
+  AccessPolicyResponse,
   CreatedEpisode,
   CreateEpisodeRequest,
   UploadPreview,
@@ -36,6 +38,10 @@ export interface StudioUseCases {
   ): Promise<string>;
   createEpisode(input: CreateEpisodeRequest): Promise<CreatedEpisode>;
   cancelUpload(sessionId: string): Promise<void>;
+  updateAccessPolicy(
+    seriesId: string,
+    input: AccessPolicy,
+  ): Promise<AccessPolicyResponse>;
 }
 
 export class StudioService implements StudioUseCases {
@@ -174,5 +180,24 @@ export class StudioService implements StudioUseCases {
 
   async cancelUpload(sessionId: string): Promise<void> {
     await this.storage.removeSession(sessionId);
+  }
+
+  async updateAccessPolicy(
+    seriesId: string,
+    input: AccessPolicy,
+  ): Promise<AccessPolicyResponse> {
+    const updated = await this.repository.updateAccessPolicy(
+      seriesId,
+      input.freeVolumeCount,
+      input.previewEpisodeCount,
+    );
+    if (!updated) {
+      throw new StudioServiceError(
+        "SERIES_NOT_FOUND",
+        "공개 정책을 바꿀 작품을 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return updated;
   }
 }

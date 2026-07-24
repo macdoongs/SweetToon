@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { OrderDetail } from "@/lib/order-types";
+import { formatKoreanDateTime } from "@/lib/date-time";
 
 const statusLabel: Record<OrderDetail["status"], string> = {
   pending: "주문 접수",
@@ -37,8 +38,9 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
             : "소장본 주문을 받았어요."}
         </h1>
         <p>
-          {order.series.title} 시즌 {order.season.number}을 한 권의 책으로
-          준비합니다.
+          {order.series.title} 시즌 {order.season.number} ·{" "}
+          {order.volumeNumber}권을 준비합니다. 디지털 감상 이용권도 이
+          브라우저에 바로 열렸어요.
         </p>
       </header>
 
@@ -61,10 +63,7 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
                   <strong>{statusLabel[event.status]}</strong>
                   <p>{event.message ?? "상태가 변경되었어요."}</p>
                   <time dateTime={event.createdAt}>
-                    {new Intl.DateTimeFormat("ko-KR", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    }).format(new Date(event.createdAt))}
+                    {formatKoreanDateTime(event.createdAt)}
                   </time>
                 </div>
               </li>
@@ -83,6 +82,7 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
               <dd>{order.coverType === "hardcover" ? "하드커버" : "소프트커버"}</dd>
             </div>
             <div><dt>수량</dt><dd>{order.quantity}권</dd></div>
+            <div><dt>수록 범위</dt><dd>{order.volumeNumber}권 · 최대 5화</dd></div>
             {order.pageCount ? (
               <div><dt>페이지</dt><dd>{order.pageCount}쪽</dd></div>
             ) : null}

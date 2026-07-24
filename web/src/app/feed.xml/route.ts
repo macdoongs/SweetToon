@@ -1,4 +1,4 @@
-import { getSeriesList } from "@/lib/server-api";
+import { getAllSeries } from "@/lib/server-api";
 import {
   absoluteUrl,
   SITE_DESCRIPTION,
@@ -17,7 +17,7 @@ function escapeXml(value: string): string {
 }
 
 export async function GET(): Promise<Response> {
-  const { items } = await getSeriesList();
+  const { items } = await getAllSeries();
   const episodes = items
     .flatMap((series) =>
       series.latestEpisode

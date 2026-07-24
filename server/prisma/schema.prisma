@@ -25,6 +25,9 @@ model Series {
   title     String
   synopsis  String
   genre     String
+  weekday   String   @default("mon") // mon | tue | wed | thu | fri | sat | sun
+  freeVolumeCount Int @default(0)
+  previewEpisodeCount Int @default(3)
   coverUrl  String?
   status    String   @default("ongoing") // ongoing | completed
   createdAt DateTime @default(now())
@@ -78,6 +81,7 @@ model Order {
   providerOrderId       String?      @unique
   seriesId              String
   seasonId              String
+  volumeNumber          Int          @default(1)
   ordererName           String
   ordererType           String // reader(소장용) | creator(독립출판)
   quantity              Int          @default(1)

@@ -1,6 +1,7 @@
 # SweetToon
 
-읽던 웹툰을 세로 스크롤로 감상하고, 완결 시즌을 실물 단행본으로 소장할 수 있는 웹툰 플랫폼입니다.
+읽던 웹툰을 세로 스크롤·양면 보기로 감상하고, 5화 단위 소장본으로
+주문할 수 있는 웹툰 플랫폼입니다.
 
 ![SweetToon 홈](./docs/screenshots/home.png)
 
@@ -21,15 +22,19 @@
 로그인 없는 공용 데모이므로 `/orders`와 `/operations/orders`는 개인 계정 화면이
 아님을 UI에 명시하고 검색 색인에서도 제외했습니다. 실제 서비스에서는 인증과
 역할별 접근 제어가 먼저 추가되어야 합니다.
+로그인하지 않은 독자의 책갈피·읽기 진행도와 Mock 주문 해금 정보는 서버 계정
+대신 현재 브라우저의 `localStorage`에만 저장합니다. 따라서 같은 브라우저에서는
+다시 읽던 페이지로 돌아갈 수 있지만 다른 기기와 동기화되지는 않습니다.
 
 ## 핵심 사용자 흐름
 
-1. 홈에서 전체·연재 중·완결/소장 가능 작품을 탐색합니다.
-2. 작품 상세에서 회차를 골라 세로 스크롤로 감상합니다.
-3. 완결 시즌의 판형·표지·수량을 선택하고 Mock 견적을 확인합니다.
-4. 주문 후 제작 타임라인을 확인합니다.
-5. 창작자는 ZIP/CBZ 원고를 자연 정렬된 미리보기로 검수한 뒤 발행합니다.
-6. 데모 운영자는 접수·제작·배송·완료 순서만 허용된 상태 변경을 수행합니다.
+1. 홈에서 상태·요일·장르로 작품을 탐색하고 페이지를 이어 불러옵니다.
+2. 작품 상세에서 최신화/첫 화 순서와 5화 단위 권을 고릅니다.
+3. 무료 공개 범위는 세로 스크롤 또는 양면 보기로 감상하고 책갈피를 남깁니다.
+4. 잠긴 권은 판형·표지·수량을 선택하고 Mock 견적과 주문으로 해금합니다.
+5. 주문 후 한국 시간으로 표시되는 제작 타임라인을 확인합니다.
+6. 창작자는 ZIP/CBZ 원고를 검수해 발행하고 작품별 무료 권 수를 정합니다.
+7. 데모 운영자는 접수·제작·배송·완료 순서만 허용된 상태 변경을 수행합니다.
 
 | 웹툰 감상 | 제작 상태 관리 |
 | --- | --- |
@@ -40,8 +45,8 @@
 - 네이버 웹툰처럼 작품 탐색 밀도와 익숙한 세로 스크롤 읽기 방식을 참고하되,
   종이색·코럴 톤과 편집숍 같은 시각 언어로 `소장`이라는 제품 정체성을
   구분했습니다.
-- 작품이 4개인 데모에서 빈 요일 탭을 만들지 않고, 실제 데이터로 의미가 있는
-  `전체 / 연재 중 / 완결·소장 가능` URL 필터를 사용합니다.
+- 28개 작품을 상태·요일·장르 URL 필터로 나누고 12개씩 이어 불러와, 빈 섹션 없이
+  탐색 밀도와 무한 스크롤 상태를 확인할 수 있게 했습니다.
 - 필터 상태를 query string에 보존해 뒤로가기·공유·서버 렌더링이 일치합니다.
 - 홈·작품·뷰어·주문·스튜디오마다 목적에 맞는 헤더와 breadcrumb를 제공합니다.
 - 일반 페이지의 푸터에는 서비스 탐색 링크와 함께 과제용 데모, Mock API,
@@ -60,11 +65,14 @@ Manifest와 서비스 워커를 제공해 홈 화면 설치가 가능하며, 네
 
 ## 구현 범위
 
-- **Lv1 콘텐츠:** 작품 탐색, 상세, 세로 스크롤 뷰어, 이전·다음 화
-- **Lv2 부가 기능:** 완결 시즌 견적·주문·영속 상태 타임라인
-- **Lv2 창작 도구:** ZIP/CBZ 검증·자연 정렬 미리보기·회차 발행
+- **Lv1 콘텐츠:** 상태·요일·장르 탐색, 무한 스크롤, 상세 정렬, 세로/양면 뷰어,
+  이전·다음 화와 익명 책갈피
+- **Lv2 부가 기능:** 작가별 무료 범위, 5화 단위 권, Mock 견적·주문 해금,
+  영속 상태 타임라인
+- **Lv2 창작 도구:** ZIP/CBZ 검증·자연 정렬 미리보기·회차 발행·무료 정책 설정
 - **가점 범위:** 운영자 상태 전이, 반응형 UI, SEO, 이미지 검증·WebP 파생,
-  PWA 설치·오프라인 폴백, Mock 계약, 자동화된 Compose/E2E 검증
+  PWA 설치·오프라인 폴백, RSS, Swagger/OpenAPI, 선택형 R2 저장,
+  Mock 계약, 자동화된 Compose/E2E 검증
 - **의도적 비대상:** 회원/권한, 결제, 실제 배송사, 알림, 추천·댓글,
   Komga 연동, 실제 Book Print API 호출
 
@@ -92,11 +100,21 @@ docker compose up --build
 
 - 웹: http://localhost:3000
 - API 상태 확인: http://localhost:4000/health
+- Swagger UI: http://localhost:4000/api-docs
+- OpenAPI JSON: http://localhost:4000/openapi.json
 - PostgreSQL: localhost:5432
 
 기본값만으로 `.env` 없이 실행됩니다. 포트가 이미 사용 중이면
 `.env.example`을 `.env`로 복사하고 `WEB_PORT`, `SERVER_PORT`, `DB_PORT`를 변경합니다.
 첫 실행에서는 Prisma 마이그레이션과 데모 데이터 생성이 자동으로 수행됩니다. 이후 재시작에서는 기존 데이터를 보존합니다.
+
+기본 파일 저장소 대신 로컬 S3 호환 경계를 검증하려면 MinIO 오버레이를 함께
+실행합니다. API `9000`, 관리 콘솔 `9001`을 사용하며 별도 자격증명 없이 데모용
+버킷을 자동 생성합니다.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.minio.yml up --build
+```
 
 바로 확인할 수 있는 경로:
 
@@ -109,9 +127,10 @@ docker compose up --build
 ## 구조
 
 ```text
-web/      Next.js 16 + React 19
-server/   Express 5 + Prisma 6 + Mock PrintProvider
+web/      Next.js 16 + React 19 (독립 컨테이너 이미지)
+server/   Express 5 + Prisma 6 + Mock PrintProvider (독립 컨테이너 이미지)
 db        PostgreSQL 16
+assets    로컬 파일 기본값, 선택적으로 MinIO/Cloudflare R2
 ```
 
 웹, API, DB는 별도 컨테이너로 실행되지만 하나의 모노레포와 Docker Compose 실행 계약으로 관리합니다.
@@ -124,6 +143,13 @@ PostgreSQL은 주문·상태 이벤트와 업로드 발행처럼 동시 쓰기�
 교체할 수 있게 두었습니다. 현재 트래픽 규모에서 별도 DI 컨테이너나 범용 factory,
 애플리케이션 수준 connection pool 추상화는 복잡도만 늘리므로 Prisma의 pool과
 작은 provider factory만 사용합니다.
+
+작가 원고는 `StudioStorage` 경계 뒤에 있습니다. 기본 `filesystem` 구현은
+클린 클론 실행성을 보장하고, `ASSET_STORAGE_PROVIDER=r2`는 Cloudflare R2의
+S3 API로 확정 발행된 원본과 리더용 WebP를 올립니다. ZIP 미리보기는 두 모드
+모두 1시간짜리 로컬 staging에만 두며, R2 access key·secret·bucket은 Jenkins
+credential이나 배포 환경변수로만 주입합니다. MinIO 오버레이도 같은 어댑터를
+사용하므로 로컬에서 R2 경계를 재현할 수 있습니다.
 
 ## 개발 규약과 검증 하네스
 
@@ -158,7 +184,7 @@ repository와 use case를 fake 구현으로 주입해 DB 없이 오류 계약을
 
 ## 구현된 API
 
-- `GET /api/series?filter=all|ongoing|collectible` — 상태·소장 가능 작품 목록
+- `GET /api/series?filter=&weekday=&genre=&page=` — 필터와 페이지 기반 작품 목록
 - `GET /api/series/:slug` — 작품, 시즌, 에피소드 상세
 - `GET /api/episodes/:id` — 에피소드 컷과 이전·다음 회차
 - `POST /api/print-quotes` — 완결 시즌 페이지 수 기반 Mock 견적
@@ -169,12 +195,14 @@ repository와 use case를 fake 구현으로 주입해 DB 없이 오류 계약을
 - `POST /api/studio/uploads` — ZIP/CBZ 검증과 자연 정렬 미리보기
 - `GET /api/studio/uploads/:sessionId/pages/:pageId` — 만료되는 원고 미리보기
 - `POST /api/studio/episodes` — 확인한 페이지 순서로 에피소드 등록
+- `PATCH /api/studio/series/:seriesId/access-policy` — 무료 권·추가 미리보기 설정
 - `DELETE /api/studio/uploads/:sessionId` — 임시 업로드 취소·정리
 - `GET /api/images/*` — 데모 및 업로드 이미지
 
 요청 파라미터와 응답은 Zod 계약으로 검증합니다. 조회 라우트는 저장소 인터페이스에,
 상태 규칙이 있는 주문 라우트는 service(use case)에 의존해 HTTP 테스트에서 DB 없이
-경계 조건을 검증합니다.
+경계 조건을 검증합니다. 사람이 실행해 볼 수 있는 Swagger UI와 기계가 읽을 수 있는
+OpenAPI 3.1 문서를 각각 `/api-docs`, `/openapi.json`에서 제공합니다.
 
 ## AI 활용과 데모 데이터
 
@@ -193,6 +221,9 @@ repository와 use case를 fake 구현으로 주입해 DB 없이 오류 계약을
 
 - 인증이 과제 범위 밖이어서 주문·운영자 화면은 공용 데모입니다. 주문 API 응답은
   주문자 닉네임과 메모를 제외하지만, 실제 서비스에는 소유권 검증이 필요합니다.
+- 익명 진행도와 Mock 해금은 현재 브라우저에만 남습니다. 운영 서비스에서는 계정
+  동기화, 결제 검증과 짧은 수명의 서명 URL을 사용해야 하며, 공개 R2 파생본 URL은
+  과제 데모용 난수 경로 경계입니다.
 - Mock 인쇄 주문은 로컬 PostgreSQL 상태의 출발점만 제공합니다. 결제·배송 조회와
   외부 인쇄사 동기화는 구현하지 않았습니다.
 - 대표 1화를 제외한 콘텐츠는 기능 확인용 플레이스홀더입니다.

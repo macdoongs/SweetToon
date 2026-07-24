@@ -52,8 +52,12 @@ export class OrderService implements OrderUseCases {
 
   private async requireOrderableSeason(
     seasonId: string,
+    volumeNumber: number,
   ): Promise<OrderableSeason> {
-    const season = await this.repository.findOrderableSeason(seasonId);
+    const season = await this.repository.findOrderableSeason(
+      seasonId,
+      volumeNumber,
+    );
     if (!season) {
       throw new OrderServiceError(
         "SEASON_NOT_FOUND",
@@ -92,6 +96,8 @@ export class OrderService implements OrderUseCases {
     return {
       ...quote,
       pageCount: season.pageCount,
+      volumeNumber: season.volumeNumber,
+      episodeRange: season.episodeRange,
       series: {
         id: season.series.id,
         slug: season.series.slug,
@@ -106,7 +112,10 @@ export class OrderService implements OrderUseCases {
   }
 
   async quote(input: PrintQuoteRequest): Promise<PrintQuoteResponse> {
-    const season = await this.requireOrderableSeason(input.seasonId);
+    const season = await this.requireOrderableSeason(
+      input.seasonId,
+      input.volumeNumber,
+    );
     return this.buildQuote(input, season);
   }
 
@@ -116,7 +125,10 @@ export class OrderService implements OrderUseCases {
       return existing;
     }
 
-    const season = await this.requireOrderableSeason(input.seasonId);
+    const season = await this.requireOrderableSeason(
+      input.seasonId,
+      input.volumeNumber,
+    );
     const quote = await this.buildQuote(input, season);
     let order: OrderDetail;
     try {

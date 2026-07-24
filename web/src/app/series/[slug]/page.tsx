@@ -10,6 +10,10 @@ import { absoluteUrl } from "@/lib/site";
 
 type Props = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{
+    sort?: string | string[];
+    volume?: string | string[];
+  }>;
 };
 
 export async function generateMetadata({
@@ -57,8 +61,18 @@ export async function generateMetadata({
 
 export default async function Page({
   params,
+  searchParams,
 }: Props) {
-  const { slug } = await params;
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
+  const sortValue = Array.isArray(query.sort) ? query.sort[0] : query.sort;
+  const sort = sortValue === "latest" ? "latest" : "oldest";
+  const volumeValue = Array.isArray(query.volume)
+    ? query.volume[0]
+    : query.volume;
+  const volume =
+    volumeValue && /^[a-z0-9]+:\d+$/.test(volumeValue)
+      ? volumeValue
+      : undefined;
   let series: Awaited<ReturnType<typeof getSeriesDetail>>;
 
   try {
@@ -90,7 +104,13 @@ export default async function Page({
           },
         }}
       />
-      <SeriesDetailPage initialData={series} key={slug} slug={slug} />
+      <SeriesDetailPage
+        activeSort={sort}
+        activeVolume={volume}
+        initialData={series}
+        key={`${slug}:${sort}:${volume ?? ""}`}
+        slug={slug}
+      />
     </>
   );
 }

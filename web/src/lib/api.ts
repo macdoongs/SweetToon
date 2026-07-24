@@ -14,10 +14,11 @@ export class ApiError extends Error {
 export async function getJson<T>(
   path: string,
   signal?: AbortSignal,
+  headers: HeadersInit = {},
 ): Promise<T> {
   const response = await fetch(path, {
     signal,
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...headers },
   });
 
   if (!response.ok) {

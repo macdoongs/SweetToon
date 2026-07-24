@@ -71,6 +71,7 @@ type SeriesSpec = {
   slug: string;
   title: string;
   genre: string;
+  weekday: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
   synopsis: string;
   status: string;
   hue: number;
@@ -83,6 +84,7 @@ const SERIES: SeriesSpec[] = [
     slug: "moonlight-laundry",
     title: "달빛 세탁소",
     genre: "힐링 판타지",
+    weekday: "mon",
     synopsis: "밤에만 문을 여는 세탁소. 얼룩진 기억을 맡기면 아침엔 조금 가벼워져 있다.",
     status: "ongoing",
     hue: 255,
@@ -96,6 +98,7 @@ const SERIES: SeriesSpec[] = [
     slug: "corner-store",
     title: "골목 끝 편의점",
     genre: "일상",
+    weekday: "wed",
     synopsis: "심야 알바생 눈에만 보이는 단골들의 사정. 오늘도 삼각김밥은 하나 남는다.",
     status: "completed",
     hue: 35,
@@ -108,6 +111,7 @@ const SERIES: SeriesSpec[] = [
     slug: "neon-blade",
     title: "네온 검객",
     genre: "액션",
+    weekday: "fri",
     synopsis: "2077년 서울, 검 한 자루로 네온 뒷골목을 지키는 마지막 검객의 이야기.",
     status: "ongoing",
     hue: 315,
@@ -121,6 +125,7 @@ const SERIES: SeriesSpec[] = [
     slug: "rooftop-garden",
     title: "옥상 정원 클럽",
     genre: "로맨스",
+    weekday: "sun",
     synopsis: "회사 옥상 텃밭에서 시작된 점심시간 30분의 비밀 모임.",
     status: "ongoing",
     hue: 130,
@@ -128,6 +133,137 @@ const SERIES: SeriesSpec[] = [
     seasons: [{ number: 1, title: "파종", status: "ongoing", episodes: 4, pagesPerEp: 7 }],
   },
 ];
+
+const CATALOG_TITLES = [
+  "비 오는 날의 우체국",
+  "별을 줍는 아이",
+  "퇴근 후 마법상점",
+  "우리 동네 용사님",
+  "여름의 레코드",
+  "고양이 탐정 사무소",
+  "새벽 두 시의 식탁",
+  "유령과 룸메이트",
+  "청춘 버스 701",
+  "파란 신호등",
+  "도서관의 마지막 책",
+  "오늘도 맑음 연구소",
+  "괴물 신입사원",
+  "달리는 구름",
+  "낮잠 행성",
+  "오래된 카메라",
+  "마지막 홈런",
+  "심야 영화부",
+  "마법사와 택배기사",
+  "봄날의 체크메이트",
+  "작은 행성 식당",
+  "시간을 걷는 골목",
+  "바다 끝 기차역",
+  "소원을 수선합니다",
+] as const;
+
+const CATALOG_GENRES = [
+  "판타지",
+  "로맨스",
+  "일상",
+  "액션",
+  "미스터리",
+  "스포츠",
+] as const;
+const CATALOG_WEEKDAYS = [
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+  "sun",
+] as const;
+
+const CATALOG_SERIES: SeriesSpec[] = CATALOG_TITLES.map((title, index) => ({
+  slug: `catalog-${String(index + 1).padStart(2, "0")}`,
+  title,
+  genre: CATALOG_GENRES[index % CATALOG_GENRES.length],
+  weekday: CATALOG_WEEKDAYS[index % CATALOG_WEEKDAYS.length],
+  synopsis: `${title}에서 시작되는 다섯 번의 짧고 선명한 이야기.`,
+  status: index % 3 === 0 ? "completed" : "ongoing",
+  hue: (index * 37 + 20) % 360,
+  author: {
+    name: `데모작가 ${String((index % 8) + 1).padStart(2, "0")}`,
+    bio: "SweetToon 탐색과 로딩 흐름을 보여주는 데모 창작자입니다.",
+  },
+  seasons: [
+    {
+      number: 1,
+      title: "첫 번째 권",
+      status: index % 3 === 0 ? "completed" : "ongoing",
+      episodes: 5,
+      pagesPerEp: 1,
+    },
+  ],
+}));
+
+async function seedCatalogSeries() {
+  for (const spec of CATALOG_SERIES) {
+    if (await prisma.series.findUnique({ where: { slug: spec.slug } })) {
+      continue;
+    }
+    const author =
+      (await prisma.author.findFirst({ where: { name: spec.author.name } })) ??
+      (await prisma.author.create({ data: spec.author }));
+    const series = await prisma.series.create({
+      data: {
+        slug: spec.slug,
+        authorId: author.id,
+        title: spec.title,
+        genre: spec.genre,
+        weekday: spec.weekday,
+        synopsis: spec.synopsis,
+        status: spec.status,
+      },
+    });
+    const seasonSpec = spec.seasons[0];
+    const season = await prisma.season.create({
+      data: {
+        seriesId: series.id,
+        number: seasonSpec.number,
+        title: seasonSpec.title,
+        status: seasonSpec.status,
+      },
+    });
+    for (let ep = 1; ep <= seasonSpec.episodes; ep++) {
+      const episode = await prisma.episode.create({
+        data: {
+          seasonId: season.id,
+          number: ep,
+          title: `${ep}화`,
+          publishedAt: new Date(Date.now() - (5 - ep + indexOfWeekday(spec.weekday)) * 86400_000),
+        },
+      });
+      const rel = path.join(
+        spec.slug,
+        "s1",
+        `ep${String(ep).padStart(3, "0")}`,
+        "001.svg",
+      );
+      await prisma.page.create({
+        data: {
+          episodeId: episode.id,
+          order: 1,
+          imageUrl: writeCutSvg(
+            rel,
+            spec.title,
+            `${ep}화 · 데모 컷`,
+            spec.hue,
+          ),
+        },
+      });
+    }
+  }
+}
+
+function indexOfWeekday(weekday: SeriesSpec["weekday"]) {
+  return CATALOG_WEEKDAYS.indexOf(weekday);
+}
 
 async function main() {
   const coverUrls = new Map<string, string>(
@@ -147,9 +283,13 @@ async function main() {
     for (const spec of SERIES) {
       await prisma.series.updateMany({
         where: { slug: spec.slug },
-        data: { coverUrl: coverUrls.get(spec.slug) },
+        data: {
+          coverUrl: coverUrls.get(spec.slug),
+          weekday: spec.weekday,
+        },
       });
     }
+    await seedCatalogSeries();
     const showcaseEpisode = await prisma.episode.findFirst({
       where: {
         number: 1,
@@ -197,6 +337,7 @@ async function main() {
         authorId,
         title: spec.title,
         genre: spec.genre,
+        weekday: spec.weekday,
         synopsis: spec.synopsis,
         status: spec.status,
         coverUrl: coverUrls.get(spec.slug),
@@ -255,6 +396,8 @@ async function main() {
     }
   }
 
+  await seedCatalogSeries();
+
   // 샘플 주문 — 다양한 상태로 시드해 목록/타임라인 UI를 바로 확인 가능하게
   const laundry = await prisma.series.findFirstOrThrow({ where: { title: "달빛 세탁소" }, include: { seasons: true } });
   const store = await prisma.series.findFirstOrThrow({ where: { title: "골목 끝 편의점" }, include: { seasons: true } });
@@ -303,6 +446,7 @@ async function main() {
         providerOrderId: `mock_seed_${orderIndex + 1}`,
         seriesId: spec.series.id,
         seasonId: season.id,
+        volumeNumber: 1,
         ordererName: spec.ordererName,
         ordererType: spec.ordererType,
         quantity: spec.quantity,

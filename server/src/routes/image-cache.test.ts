@@ -7,7 +7,13 @@ import type { ReaderRepository } from "../repositories/reader-repository";
 
 function readerRepository(): ReaderRepository {
   return {
-    listSeries: jest.fn().mockResolvedValue({ items: [] }),
+    listSeries: jest.fn().mockResolvedValue({
+      items: [],
+      page: 1,
+      nextPage: null,
+      total: 0,
+      facets: { genres: [], weekdays: [] },
+    }),
     findSeriesBySlug: jest.fn().mockResolvedValue(null),
     findEpisodeById: jest.fn().mockResolvedValue(null),
   };

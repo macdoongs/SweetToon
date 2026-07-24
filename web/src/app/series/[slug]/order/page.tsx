@@ -5,7 +5,10 @@ import { getSeriesDetail, ServerApiError } from "@/lib/server-api";
 
 type Props = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ season?: string | string[] }>;
+  searchParams: Promise<{
+    season?: string | string[];
+    volume?: string | string[];
+  }>;
 };
 
 export const metadata: Metadata = {
@@ -19,6 +22,10 @@ export default async function Page({ params, searchParams }: Props) {
   const seasonId = Array.isArray(query.season)
     ? query.season[0]
     : query.season;
+  const volumeValue = Array.isArray(query.volume)
+    ? query.volume[0]
+    : query.volume;
+  const volumeNumber = Number(volumeValue);
 
   let series: Awaited<ReturnType<typeof getSeriesDetail>>;
   try {
@@ -37,6 +44,23 @@ export default async function Page({ params, searchParams }: Props) {
   if (!season) {
     notFound();
   }
+  const volumeEpisodes = season.episodes.filter(
+    (episode) => episode.volumeNumber === volumeNumber,
+  );
+  if (
+    !Number.isInteger(volumeNumber) ||
+    volumeNumber < 1 ||
+    volumeEpisodes.length === 0
+  ) {
+    notFound();
+  }
 
-  return <OrderFormPage season={season} series={series} />;
+  return (
+    <OrderFormPage
+      season={season}
+      series={series}
+      volumeEpisodes={volumeEpisodes}
+      volumeNumber={volumeNumber}
+    />
+  );
 }

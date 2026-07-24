@@ -29,6 +29,7 @@ export function SiteFooter() {
           <div>
             <strong>프로젝트</strong>
             <Link href="/operations/orders">제작 운영 데모</Link>
+            <a href="/api-docs/">API 문서</a>
             <a href={`${repositoryUrl}#readme`}>서비스 소개</a>
             <a href={repositoryUrl} rel="noreferrer" target="_blank">
               GitHub 저장소 ↗

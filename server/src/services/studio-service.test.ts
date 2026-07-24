@@ -54,6 +54,11 @@ function makeDependencies() {
     findSeason: jest.fn().mockResolvedValue(season),
     createEpisode: jest.fn().mockResolvedValue({ id: "episode-12" }),
     deleteEpisode: jest.fn().mockResolvedValue(undefined),
+    updateAccessPolicy: jest.fn().mockResolvedValue({
+      seriesId: season.series.id,
+      freeVolumeCount: 1,
+      previewEpisodeCount: 2,
+    }),
   };
   const storage: jest.Mocked<StudioStorage> = {
     createSession: jest.fn().mockResolvedValue(session),

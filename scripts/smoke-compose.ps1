@@ -125,6 +125,7 @@ try {
 
             const specification = {
               seasonId: selected.season.id,
+              volumeNumber: 1,
               bookSize: 'A5',
               coverType: 'softcover',
               quantity: 1
@@ -171,6 +172,31 @@ try {
     } "mock quote and persistent order flow"
 
     Invoke-Checked {
+        docker compose exec -T web node -e "
+          Promise.all([
+            fetch('http://localhost:3000/openapi.json'),
+            fetch('http://localhost:3000/api-docs/')
+          ])
+            .then(async ([contractResponse, docsResponse]) => {
+              if (!contractResponse.ok || !docsResponse.ok) process.exit(1)
+              const contract = await contractResponse.json()
+              const docs = await docsResponse.text()
+              if (
+                contract.openapi !== '3.1.0' ||
+                !docs.includes('SweetToon API')
+              ) {
+                process.exit(1)
+              }
+              console.log('openapi and swagger ok')
+            })
+            .catch(error => {
+              console.error(error)
+              process.exit(1)
+            })
+        "
+    } "OpenAPI and Swagger proxy check"
+
+    Invoke-Checked {
         docker compose exec -T server node -e "
           const AdmZip = require('adm-zip')
           const base = 'http://localhost:4000'
@@ -198,6 +224,25 @@ try {
               }
             }
             if (!selected) throw new Error('ongoing season not found')
+            const episodeNumber =
+              Math.max(0, ...selected.season.episodes.map(item => item.number)) +
+              1
+            await json(
+              '/api/studio/series/' +
+                encodeURIComponent(selected.detail.id) +
+                '/access-policy',
+              {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json'
+                },
+                body: JSON.stringify({
+                  freeVolumeCount: 20,
+                  previewEpisodeCount: 0
+                })
+              }
+            )
 
             const png = Buffer.from(
               'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -231,7 +276,7 @@ try {
               body: JSON.stringify({
                 sessionId: preview.sessionId,
                 seasonId: selected.season.id,
-                number: 9999,
+                number: episodeNumber,
                 title: 'Smoke Episode',
                 pageIds: preview.pages.map(page => page.id)
               })

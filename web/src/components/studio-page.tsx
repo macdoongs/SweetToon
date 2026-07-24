@@ -12,11 +12,14 @@ import {
 import {
   ApiError,
   deleteRequest,
+  patchJson,
   postFormData,
   postJson,
 } from "@/lib/api";
 import type { SeriesDetail } from "@/lib/reader-types";
 import type {
+  AccessPolicy,
+  AccessPolicyResponse,
   CreatedEpisode,
   CreateEpisodeRequest,
   UploadPreview,
@@ -35,9 +38,25 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     [series],
   );
   const [seriesId, setSeriesId] = useState(availableSeries[0]?.id ?? "");
+  const [policies, setPolicies] = useState<Record<string, AccessPolicy>>(() =>
+    Object.fromEntries(
+      series.map((item) => [
+        item.id,
+        {
+          freeVolumeCount: item.freeVolumeCount,
+          previewEpisodeCount: item.previewEpisodeCount,
+        },
+      ]),
+    ),
+  );
+  const [policyBusy, setPolicyBusy] = useState(false);
+  const [policyMessage, setPolicyMessage] = useState<string | null>(null);
   const selectedSeries =
     availableSeries.find((item) => item.id === seriesId) ??
     availableSeries[0];
+  const selectedPolicy = selectedSeries
+    ? policies[selectedSeries.id]
+    : undefined;
   const ongoingSeasons =
     selectedSeries?.seasons.filter((season) => season.status === "ongoing") ??
     [];
@@ -67,6 +86,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       (season) => season.status === "ongoing",
     );
     setSeriesId(nextSeriesId);
+    setPolicyMessage(null);
     setSeasonId(nextSeason?.id ?? "");
     setEpisodeNumber(
       nextSeason
@@ -76,6 +96,31 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           ) + 1
         : 1,
     );
+  }
+
+  async function saveAccessPolicy() {
+    if (!selectedSeries || !selectedPolicy) return;
+    setPolicyBusy(true);
+    setPolicyMessage(null);
+    try {
+      const updated = await patchJson<AccessPolicy, AccessPolicyResponse>(
+        `/api/studio/series/${encodeURIComponent(selectedSeries.id)}/access-policy`,
+        selectedPolicy,
+      );
+      setPolicies((current) => ({
+        ...current,
+        [updated.seriesId]: updated,
+      }));
+      setPolicyMessage("독자 공개 범위를 저장했어요.");
+    } catch (reason) {
+      setPolicyMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "공개 범위를 저장하지 못했습니다.",
+      );
+    } finally {
+      setPolicyBusy(false);
+    }
   }
 
   function chooseSeason(nextSeasonId: string) {
@@ -223,6 +268,64 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                 ))}
               </select>
             </label>
+            {selectedSeries && selectedPolicy ? (
+              <section className="studio-access-policy">
+                <div>
+                  <strong>독자 공개 범위</strong>
+                  <p>한 권은 5화이며, 무료 권 다음에 일부 화를 더 공개할 수 있어요.</p>
+                </div>
+                <label className="field">
+                  <span>무료 공개 권 수</span>
+                  <input
+                    max={20}
+                    min={0}
+                    onChange={(event) =>
+                      setPolicies((current) => ({
+                        ...current,
+                        [selectedSeries.id]: {
+                          ...selectedPolicy,
+                          freeVolumeCount: Number(event.target.value),
+                        },
+                      }))
+                    }
+                    type="number"
+                    value={selectedPolicy.freeVolumeCount}
+                  />
+                </label>
+                <label className="field">
+                  <span>다음 권 미리보기</span>
+                  <select
+                    onChange={(event) =>
+                      setPolicies((current) => ({
+                        ...current,
+                        [selectedSeries.id]: {
+                          ...selectedPolicy,
+                          previewEpisodeCount: Number(event.target.value),
+                        },
+                      }))
+                    }
+                    value={selectedPolicy.previewEpisodeCount}
+                  >
+                    {[0, 1, 2, 3, 4].map((count) => (
+                      <option key={count} value={count}>
+                        {count}화
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="button button--ghost button--wide"
+                  disabled={policyBusy}
+                  onClick={() => void saveAccessPolicy()}
+                  type="button"
+                >
+                  {policyBusy ? "저장 중…" : "공개 범위 저장"}
+                </button>
+                {policyMessage ? (
+                  <p aria-live="polite">{policyMessage}</p>
+                ) : null}
+              </section>
+            ) : null}
             <label className="field">
               <span>시즌</span>
               <select

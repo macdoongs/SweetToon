@@ -7,21 +7,13 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
 
   const cards = page.locator(".series-card");
   const allCount = await cards.count();
-  expect(allCount).toBeGreaterThan(1);
-  const firstCover = cards.first().locator("img");
-  await expect(firstCover).toHaveAttribute(
-    "src",
-    /\/_next\/image\?url=%2Fapi%2Fimages%2F[^&]+cover\.webp/,
-  );
-  await expect
-    .poll(() =>
-      firstCover.evaluate(
-        (image) => (image as HTMLImageElement).naturalWidth,
-      ),
-    )
-    .toBeGreaterThan(0);
+  expect(allCount).toBe(12);
+  await expect(cards.first().locator(".series-cover--empty")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "전체", exact: true }),
+    page.getByRole("link", {
+      name: "전체",
+      description: "모든 작품",
+    }),
   ).toHaveAttribute("aria-current", "page");
 
   await page.getByRole("link", { name: "연재 중", exact: true }).click();
@@ -30,7 +22,6 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
     page.getByRole("link", { name: "연재 중", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   expect(await cards.count()).toBeGreaterThan(0);
-  expect(await cards.count()).toBeLessThan(allCount);
 
   await page
     .getByRole("link", { name: "완결·소장 가능", exact: true })
@@ -49,6 +40,38 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
   await expect(
     page.getByRole("link", { name: "연재 중", exact: true }),
   ).toHaveAttribute("aria-current", "page");
+
+  await page.getByRole("navigation", { name: "요일별 작품" })
+    .getByRole("link", { name: "월", exact: true })
+    .click();
+  await expect(page).toHaveURL(/weekday=mon/);
+  await expect(
+    page.getByRole("navigation", { name: "요일별 작품" })
+      .getByRole("link", { name: "월", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await page.goto("/#discover");
+  const initialPageCount = await cards.count();
+  await page.evaluate(() =>
+    window.scrollTo(0, document.documentElement.scrollHeight),
+  );
+  await expect.poll(() => cards.count()).toBeGreaterThan(initialPageCount);
+  await page.evaluate(() =>
+    window.scrollTo(0, document.documentElement.scrollHeight),
+  );
+  await expect.poll(() => cards.count()).toBe(28);
+  const optimizedCover = cards.locator("img").first();
+  await expect(optimizedCover).toHaveAttribute(
+    "src",
+    /\/_next\/image\?url=%2Fapi%2Fimages%2F[^&]+cover\.webp/,
+  );
+  await expect
+    .poll(() =>
+      optimizedCover.evaluate(
+        (image) => (image as HTMLImageElement).naturalWidth,
+      ),
+    )
+    .toBeGreaterThan(0);
 
   const footer = page.locator(".site-footer");
   await expect(footer).toBeVisible();

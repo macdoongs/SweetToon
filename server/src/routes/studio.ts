@@ -1,7 +1,10 @@
 import path from "node:path";
 import { Router } from "express";
 import multer from "multer";
+import { z } from "zod";
 import {
+  AccessPolicyResponseSchema,
+  AccessPolicySchema,
   CreatedEpisodeSchema,
   CreateEpisodeRequestSchema,
   UploadPageIdSchema,
@@ -83,6 +86,23 @@ export function createStudioRouter(service: StudioUseCases): Router {
     }
     const created = await service.createEpisode(input.data);
     res.status(201).json(CreatedEpisodeSchema.parse(created));
+  });
+
+  router.patch("/studio/series/:seriesId/access-policy", async (req, res) => {
+    const seriesId = z.string().min(1).max(80).safeParse(req.params.seriesId);
+    const input = AccessPolicySchema.safeParse(req.body);
+    if (!seriesId.success || !input.success) {
+      res.status(400).json({
+        code: "INVALID_ACCESS_POLICY",
+        message: "무료 공개 권 수와 미리보기 화 수를 다시 확인해 주세요.",
+      });
+      return;
+    }
+    res.json(
+      AccessPolicyResponseSchema.parse(
+        await service.updateAccessPolicy(seriesId.data, input.data),
+      ),
+    );
   });
 
   router.delete("/studio/uploads/:sessionId", async (req, res) => {

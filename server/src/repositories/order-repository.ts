@@ -13,6 +13,8 @@ export type OrderableSeason = {
   title: string | null;
   status: string;
   pageCount: number;
+  volumeNumber: number;
+  episodeRange: { from: number; to: number };
   series: {
     id: string;
     slug: string;
@@ -27,7 +29,10 @@ export type CreatePendingOrderInput = CreateOrderRequest & {
 };
 
 export interface OrderRepository {
-  findOrderableSeason(id: string): Promise<OrderableSeason | null>;
+  findOrderableSeason(
+    id: string,
+    volumeNumber: number,
+  ): Promise<OrderableSeason | null>;
   findByRequestKey(requestKey: string): Promise<OrderDetail | null>;
   createPendingOrder(input: CreatePendingOrderInput): Promise<OrderDetail>;
   attachProviderOrder(
@@ -60,6 +65,7 @@ function toOrderDetail(order: OrderWithRelations): OrderDetail {
     id: order.id,
     providerOrderId: order.providerOrderId,
     ordererType: order.ordererType === "creator" ? "creator" : "reader",
+    volumeNumber: order.volumeNumber,
     quantity: order.quantity,
     coverType: order.coverType,
     bookSize: order.bookSize,
@@ -106,12 +112,20 @@ function toOrderDetail(order: OrderWithRelations): OrderDetail {
 export class PrismaOrderRepository implements OrderRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findOrderableSeason(id: string): Promise<OrderableSeason | null> {
+  async findOrderableSeason(
+    id: string,
+    volumeNumber: number,
+  ): Promise<OrderableSeason | null> {
+    const episodeFrom = (volumeNumber - 1) * 5 + 1;
+    const episodeTo = volumeNumber * 5;
     const season = await this.prisma.season.findUnique({
       where: { id },
       include: {
         series: true,
         episodes: {
+          where: {
+            number: { gte: episodeFrom, lte: episodeTo },
+          },
           select: {
             _count: { select: { pages: true } },
           },
@@ -132,6 +146,14 @@ export class PrismaOrderRepository implements OrderRepository {
         (total, episode) => total + episode._count.pages,
         0,
       ),
+      volumeNumber,
+      episodeRange: {
+        from: episodeFrom,
+        to: Math.min(
+          episodeTo,
+          episodeFrom + season.episodes.length - 1,
+        ),
+      },
       series: {
         id: season.series.id,
         slug: season.series.slug,
@@ -158,6 +180,7 @@ export class PrismaOrderRepository implements OrderRepository {
           requestKey: input.requestKey,
           seriesId: input.season.series.id,
           seasonId: input.season.id,
+          volumeNumber: input.season.volumeNumber,
           ordererName: input.ordererName,
           ordererType: "reader",
           quantity: input.quantity,

@@ -13,6 +13,7 @@ const order: OrderDetail = {
   id: "cmorder000000000000000001",
   providerOrderId: "mock-order-1",
   ordererType: "reader",
+  volumeNumber: 1,
   quantity: 1,
   coverType: "hardcover",
   bookSize: "A5",
@@ -40,7 +41,13 @@ const order: OrderDetail = {
 
 function makeReaderRepository(): ReaderRepository {
   return {
-    listSeries: jest.fn().mockResolvedValue({ items: [] }),
+    listSeries: jest.fn().mockResolvedValue({
+      items: [],
+      page: 1,
+      nextPage: null,
+      total: 0,
+      facets: { genres: [], weekdays: [] },
+    }),
     findSeriesBySlug: jest.fn().mockResolvedValue(null),
     findEpisodeById: jest.fn().mockResolvedValue(null),
   };
@@ -55,6 +62,8 @@ function makeService(): jest.Mocked<OrderUseCases> {
       totalPrice: 9_940,
       estimatedBusinessDays: 5,
       pageCount: 64,
+      volumeNumber: 1,
+      episodeRange: { from: 1, to: 5 },
       series: {
         id: "series-1",
         slug: "moonlight-laundry",
@@ -90,6 +99,7 @@ describe("order routes", () => {
       .post("/api/print-quotes")
       .send({
         seasonId: "cmseason00000000000000001",
+        volumeNumber: 1,
         bookSize: "A5",
         coverType: "hardcover",
         quantity: 1,
@@ -116,6 +126,7 @@ describe("order routes", () => {
       .send({
         requestKey: "f371de0c-01cd-4214-99f7-7cd8e1df82a0",
         seasonId: "cmseason00000000000000001",
+        volumeNumber: 1,
         bookSize: "A5",
         coverType: "hardcover",
         quantity: 1,

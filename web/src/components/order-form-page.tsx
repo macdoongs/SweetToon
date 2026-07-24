@@ -13,6 +13,7 @@ import type {
   PrintQuoteResponse,
 } from "@/lib/order-types";
 import type { SeriesDetail } from "@/lib/reader-types";
+import { saveDemoEntitlement } from "@/lib/demo-entitlements";
 
 const won = new Intl.NumberFormat("ko-KR", {
   style: "currency",
@@ -25,9 +26,13 @@ type Season = SeriesDetail["seasons"][number];
 export function OrderFormPage({
   series,
   season,
+  volumeNumber,
+  volumeEpisodes,
 }: {
   series: SeriesDetail;
   season: Season;
+  volumeNumber: number;
+  volumeEpisodes: Season["episodes"];
 }) {
   const router = useRouter();
   const requestKey = useRef<string | null>(null);
@@ -42,6 +47,7 @@ export function OrderFormPage({
 
   const specification: PrintQuoteRequest = {
     seasonId: season.id,
+    volumeNumber,
     bookSize,
     coverType,
     quantity,
@@ -97,6 +103,7 @@ export function OrderFormPage({
           memo: memo.trim() || null,
         },
       );
+      saveDemoEntitlement(season.id, volumeNumber, requestKey.current);
       router.push(`/orders/${encodeURIComponent(created.id)}`);
     } catch (reason) {
       if (
@@ -131,7 +138,7 @@ export function OrderFormPage({
         <p className="eyebrow">Shelf edition</p>
         <h1>읽던 이야기를<br />한 권으로 소장하세요.</h1>
         <p>
-          {series.title} · 시즌 {season.number}{" "}
+          {series.title} · 시즌 {season.number} · {volumeNumber}권{" "}
           {season.title ? `「${season.title}」` : ""}
         </p>
       </header>
@@ -253,7 +260,8 @@ export function OrderFormPage({
           <p className="eyebrow">Order summary</p>
           <h2>{series.title}</h2>
           <p>
-            시즌 {season.number} · {season.title ?? `시즌 ${season.number}`}
+            시즌 {season.number} · {volumeNumber}권 ·{" "}
+            {volumeEpisodes.at(0)?.number}~{volumeEpisodes.at(-1)?.number}화
           </p>
           <dl>
             <div><dt>판형</dt><dd>{bookSize}</dd></div>
@@ -302,6 +310,7 @@ export function OrderFormPage({
           ) : null}
           <p className="order-summary__notice">
             실제 결제나 인쇄 API 호출 없이 Mock provider로 접수됩니다.
+            주문 직후 이 브라우저에 해당 권의 디지털 이용권이 저장됩니다.
           </p>
         </aside>
       </form>

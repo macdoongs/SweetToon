@@ -10,7 +10,13 @@ const pageId = "b74fb5ce-d837-40a6-ab85-e34f67f8668f";
 
 function readerRepository(): ReaderRepository {
   return {
-    listSeries: jest.fn().mockResolvedValue({ items: [] }),
+    listSeries: jest.fn().mockResolvedValue({
+      items: [],
+      page: 1,
+      nextPage: null,
+      total: 0,
+      facets: { genres: [], weekdays: [] },
+    }),
     findSeriesBySlug: jest.fn().mockResolvedValue(null),
     findEpisodeById: jest.fn().mockResolvedValue(null),
   };
@@ -39,6 +45,11 @@ function studioService(): jest.Mocked<StudioUseCases> {
       readerUrl: "/read/episode-12",
     }),
     cancelUpload: jest.fn().mockResolvedValue(undefined),
+    updateAccessPolicy: jest.fn().mockResolvedValue({
+      seriesId: "series-1",
+      freeVolumeCount: 1,
+      previewEpisodeCount: 2,
+    }),
   };
 }
 
@@ -51,6 +62,24 @@ function app(service = studioService()) {
 }
 
 describe("studio routes", () => {
+  it("updates a creator-defined free reading policy", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .patch("/api/studio/series/series-1/access-policy")
+      .send({ freeVolumeCount: 1, previewEpisodeCount: 2 })
+      .expect(200);
+
+    expect(response.body).toEqual({
+      seriesId: "series-1",
+      freeVolumeCount: 1,
+      previewEpisodeCount: 2,
+    });
+    expect(service.updateAccessPolicy).toHaveBeenCalledWith("series-1", {
+      freeVolumeCount: 1,
+      previewEpisodeCount: 2,
+    });
+  });
+
   it("accepts one ZIP archive and returns a preview session", async () => {
     const service = studioService();
     const response = await request(app(service))

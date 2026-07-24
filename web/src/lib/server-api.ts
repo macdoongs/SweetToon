@@ -4,7 +4,10 @@ import type {
   SeriesDetail,
   SeriesListResponse,
 } from "./reader-types";
-import { seriesFilterQuery, type SeriesFilter } from "./series-filter";
+import {
+  seriesFilterQuery,
+  type CatalogFilters,
+} from "./series-filter";
 import type { OrderDetail, OrderListResponse } from "./order-types";
 
 const API_INTERNAL_URL =
@@ -45,9 +48,22 @@ async function serverGetJson<T>(
 }
 
 export function getSeriesList(
-  filter: SeriesFilter = "all",
+  filters: CatalogFilters = { filter: "all" },
+  page = 1,
 ): Promise<SeriesListResponse> {
-  return serverGetJson(seriesFilterQuery(filter), { fresh: true });
+  return serverGetJson(seriesFilterQuery(filters, page), { fresh: true });
+}
+
+export async function getAllSeries(): Promise<SeriesListResponse> {
+  let page = 1;
+  let result = await getSeriesList({ filter: "all" }, page);
+  const items = [...result.items];
+  while (result.nextPage) {
+    page = result.nextPage;
+    result = await getSeriesList({ filter: "all" }, page);
+    items.push(...result.items);
+  }
+  return { ...result, items, page: 1, nextPage: null };
 }
 
 export function getSeriesDetail(slug: string): Promise<SeriesDetail> {

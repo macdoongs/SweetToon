@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import type { AccessPolicyResponse } from "../contracts/studio";
 
 export type StudioSeason = {
   id: string;
@@ -35,6 +36,11 @@ export interface StudioRepository {
     input: CreateStudioEpisodeInput,
   ): Promise<CreatedStudioEpisode>;
   deleteEpisode(id: string): Promise<void>;
+  updateAccessPolicy(
+    seriesId: string,
+    freeVolumeCount: number,
+    previewEpisodeCount: number,
+  ): Promise<AccessPolicyResponse | null>;
 }
 
 export class PrismaStudioRepository implements StudioRepository {
@@ -92,5 +98,26 @@ export class PrismaStudioRepository implements StudioRepository {
 
   async deleteEpisode(id: string): Promise<void> {
     await this.prisma.episode.delete({ where: { id } }).catch(() => undefined);
+  }
+
+  async updateAccessPolicy(
+    seriesId: string,
+    freeVolumeCount: number,
+    previewEpisodeCount: number,
+  ): Promise<AccessPolicyResponse | null> {
+    const updated = await this.prisma.series
+      .update({
+        where: { id: seriesId },
+        data: { freeVolumeCount, previewEpisodeCount },
+        select: { id: true, freeVolumeCount: true, previewEpisodeCount: true },
+      })
+      .catch(() => null);
+    return updated
+      ? {
+          seriesId: updated.id,
+          freeVolumeCount: updated.freeVolumeCount,
+          previewEpisodeCount: updated.previewEpisodeCount,
+        }
+      : null;
   }
 }

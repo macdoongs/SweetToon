@@ -23,6 +23,14 @@ services:
       PORT: 4000
       UPLOAD_DIR: /app/data/uploads
       PRINT_PROVIDER: ${PRINT_PROVIDER:-mock}
+      ASSET_STORAGE_PROVIDER: ${ASSET_STORAGE_PROVIDER:-filesystem}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      R2_FORCE_PATH_STYLE: ${R2_FORCE_PATH_STYLE:-false}
     ports:
       - "${SERVER_PORT:-4000}:4000"
     volumes:

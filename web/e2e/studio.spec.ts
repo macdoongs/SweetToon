@@ -19,6 +19,11 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/studio");
+  await expect(page.getByText("독자 공개 범위")).toBeVisible();
+  await page.getByLabel("무료 공개 권 수").fill("1");
+  await page.getByLabel("다음 권 미리보기").selectOption("2");
+  await page.getByRole("button", { name: "공개 범위 저장" }).click();
+  await expect(page.getByText("독자 공개 범위를 저장했어요.")).toBeVisible();
 
   await expect(
     page.getByRole("heading", { level: 1 }),
@@ -67,22 +72,29 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
     .locator(".webtoon-strip img")
     .first()
     .getAttribute("src");
-  expect(publishedUrl).toContain("/api/images/studio/");
+  const objectStorage = process.env.E2E_ASSET_STORAGE === "r2";
+  if (objectStorage) {
+    expect(publishedUrl).toMatch(/^http:\/\/localhost:\d+\/sweettoon-assets\//);
+  } else {
+    expect(publishedUrl).toContain("/api/images/studio/");
+  }
   expect(publishedUrl).toContain("/reader/001.webp");
 
   const publishedResponse = await page.request.get(publishedUrl!);
   expect(publishedResponse.headers()["cache-control"]).toContain("immutable");
   expect(publishedResponse.headers()["content-type"]).toContain("image/webp");
 
-  const optimizedQuery = new URLSearchParams({
-    url: publishedUrl!,
-    w: "640",
-    q: "75",
-  });
-  const optimizedResponse = await page.request.get(
-    `/_next/image?${optimizedQuery.toString()}`,
-    { headers: { Accept: "image/webp" } },
-  );
-  expect(optimizedResponse.ok()).toBeTruthy();
-  expect(optimizedResponse.headers()["content-type"]).toContain("image/webp");
+  if (!objectStorage) {
+    const optimizedQuery = new URLSearchParams({
+      url: publishedUrl!,
+      w: "640",
+      q: "75",
+    });
+    const optimizedResponse = await page.request.get(
+      `/_next/image?${optimizedQuery.toString()}`,
+      { headers: { Accept: "image/webp" } },
+    );
+    expect(optimizedResponse.ok()).toBeTruthy();
+    expect(optimizedResponse.headers()["content-type"]).toContain("image/webp");
+  }
 });

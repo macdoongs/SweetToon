@@ -90,7 +90,7 @@ export default async function Page({
           },
         }}
       />
-      <SeriesDetailPage initialData={series} slug={slug} />
+      <SeriesDetailPage initialData={series} key={slug} slug={slug} />
     </>
   );
 }

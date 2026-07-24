@@ -38,7 +38,10 @@ export function SeriesDetailPage({
     }
 
     const controller = new AbortController();
-    getJson<SeriesDetail>(`/api/series/${slug}`, controller.signal)
+    getJson<SeriesDetail>(
+      `/api/series/${encodeURIComponent(slug)}`,
+      controller.signal,
+    )
       .then(setSeries)
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
@@ -203,9 +206,23 @@ export function SeriesDetailPage({
         <div className="edition-card__status">
           <strong>{completedSeasons.length}</strong>
           <span>소장 가능한 시즌</span>
-          <button className="button button--muted" disabled>
-            주문 기능 준비 중
-          </button>
+          {completedSeasons.length > 0 ? (
+            <div className="edition-card__actions">
+              {completedSeasons.map((season) => (
+                <Link
+                  className="button button--light"
+                  href={`/series/${encodeURIComponent(series.slug)}/order?season=${encodeURIComponent(season.id)}`}
+                  key={season.id}
+                >
+                  시즌 {season.number} 주문하기
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <span className="edition-card__unavailable">
+              완결 시즌이 생기면 주문할 수 있어요
+            </span>
+          )}
         </div>
       </section>
     </main>

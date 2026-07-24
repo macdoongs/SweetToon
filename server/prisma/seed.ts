@@ -175,10 +175,10 @@ async function main() {
 
   const ordersSpec = [
     { series: laundry, ordererName: "김소장", ordererType: "reader", coverType: "hardcover", bookSize: "A5", quantity: 1, status: "completed", memo: "1시즌 정주행 기념 소장!" },
-    { series: store, ordererName: "박야근", ordererType: "creator", coverType: "softcover", bookSize: "B6", quantity: 20, status: "processing", memo: "독립출판 마켓용 견본 포함" },
+    { series: store, ordererName: "박야근", ordererType: "creator", coverType: "softcover", bookSize: "B5", quantity: 20, status: "processing", memo: "독립출판 마켓용 견본 포함" },
     { series: blade, ordererName: "홍독자", ordererType: "reader", coverType: "softcover", bookSize: "A5", quantity: 2, status: "shipped", memo: null },
     { series: laundry, ordererName: "최수집", ordererType: "reader", coverType: "hardcover", bookSize: "A5", quantity: 1, status: "pending", memo: "선물용 포장 가능한가요?" },
-    { series: store, ordererName: "정단골", ordererType: "reader", coverType: "softcover", bookSize: "B6", quantity: 1, status: "canceled", memo: null },
+    { series: store, ordererName: "정단골", ordererType: "reader", coverType: "softcover", bookSize: "B5", quantity: 1, status: "canceled", memo: null },
   ];
 
   const STATUS_FLOW: Record<string, string[]> = {
@@ -197,10 +197,23 @@ async function main() {
   };
 
   let dayOffset = 14;
-  for (const spec of ordersSpec) {
+  for (const [orderIndex, spec] of ordersSpec.entries()) {
     const season = spec.series.seasons[0];
+    const episodes = await prisma.episode.findMany({
+      where: { seasonId: season.id },
+      select: { _count: { select: { pages: true } } },
+    });
+    const pageCount = episodes.reduce(
+      (total, episode) => total + episode._count.pages,
+      0,
+    );
+    const basePrice = spec.bookSize === "B5" ? 4_800 : 4_200;
+    const coverPrice = spec.coverType === "hardcover" ? 3_500 : 0;
+    const unitPrice = basePrice + coverPrice + pageCount * 35;
     const order = await prisma.order.create({
       data: {
+        requestKey: `00000000-0000-4000-8000-${String(orderIndex + 1).padStart(12, "0")}`,
+        providerOrderId: `mock_seed_${orderIndex + 1}`,
         seriesId: spec.series.id,
         seasonId: season.id,
         ordererName: spec.ordererName,
@@ -208,6 +221,11 @@ async function main() {
         quantity: spec.quantity,
         coverType: spec.coverType,
         bookSize: spec.bookSize,
+        pageCount,
+        currency: "KRW",
+        unitPrice,
+        totalPrice: unitPrice * spec.quantity,
+        estimatedBusinessDays: 5,
         memo: spec.memo,
         status: spec.status,
         createdAt: new Date(Date.now() - dayOffset * 86400_000),

@@ -98,7 +98,11 @@ export default async function Page({
           },
         }}
       />
-      <EpisodeReaderPage initialData={episode} episodeId={episodeId} />
+      <EpisodeReaderPage
+        episodeId={episodeId}
+        initialData={episode}
+        key={episodeId}
+      />
     </>
   );
 }

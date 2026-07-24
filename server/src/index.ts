@@ -5,6 +5,9 @@ import { PrismaReaderRepository } from "./repositories/reader-repository";
 import { PrismaOrderRepository } from "./repositories/order-repository";
 import { createPrintProvider } from "./printing/mock-print-provider";
 import { OrderService } from "./services/order-service";
+import { PrismaStudioRepository } from "./repositories/studio-repository";
+import { FileStudioStorage } from "./uploads/upload-session-storage";
+import { StudioService } from "./services/studio-service";
 
 const PORT = Number(process.env.PORT ?? 4000);
 export const UPLOAD_DIR = process.env.UPLOAD_DIR
@@ -13,12 +16,17 @@ export const UPLOAD_DIR = process.env.UPLOAD_DIR
 
 const prisma = new PrismaClient();
 const printProvider = createPrintProvider();
+const studioStorage = new FileStudioStorage(UPLOAD_DIR);
 const app = createApp({
   readerRepository: new PrismaReaderRepository(prisma),
   printProvider,
   orderService: new OrderService(
     new PrismaOrderRepository(prisma),
     printProvider,
+  ),
+  studioService: new StudioService(
+    new PrismaStudioRepository(prisma),
+    studioStorage,
   ),
   uploadDir: UPLOAD_DIR,
 });

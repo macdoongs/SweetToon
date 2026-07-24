@@ -85,6 +85,10 @@ Jenkins도 같은 스크립트를 호출하므로 로컬 검증과 CI 계약이 
 - `POST /api/orders` — 멱등 요청 키를 사용한 소장본 주문 접수
 - `GET /api/orders` — 데모 사용자의 주문 목록
 - `GET /api/orders/:id` — 주문 사양과 상태 변경 타임라인
+- `POST /api/studio/uploads` — ZIP/CBZ 검증과 자연 정렬 미리보기
+- `GET /api/studio/uploads/:sessionId/pages/:pageId` — 만료되는 원고 미리보기
+- `POST /api/studio/episodes` — 확인한 페이지 순서로 에피소드 등록
+- `DELETE /api/studio/uploads/:sessionId` — 임시 업로드 취소·정리
 - `GET /api/images/*` — 데모 및 업로드 이미지
 
 요청 파라미터와 응답은 Zod 계약으로 검증합니다. 조회 라우트는 저장소 인터페이스에,

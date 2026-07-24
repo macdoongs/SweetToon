@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import multer from "multer";
 import path from "node:path";
 import fs from "node:fs";
 import type { ReaderRepository } from "./repositories/reader-repository";
@@ -11,11 +12,17 @@ import {
   OrderServiceError,
   type OrderUseCases,
 } from "./services/order-service";
+import { createStudioRouter } from "./routes/studio";
+import {
+  StudioServiceError,
+  type StudioUseCases,
+} from "./services/studio-service";
 
 export type AppOptions = {
   readerRepository: ReaderRepository;
   printProvider?: PrintProvider;
   orderService?: OrderUseCases;
+  studioService?: StudioUseCases;
   uploadDir?: string;
 };
 
@@ -23,6 +30,7 @@ export function createApp({
   readerRepository,
   printProvider = createPrintProvider(),
   orderService,
+  studioService,
   uploadDir = path.join(process.cwd(), "data", "uploads"),
 }: AppOptions): Express {
   const app = express();
@@ -48,6 +56,9 @@ export function createApp({
   if (orderService) {
     app.use("/api", createOrderRouter(orderService));
   }
+  if (studioService) {
+    app.use("/api", createStudioRouter(studioService));
+  }
 
   app.use(
     (
@@ -60,6 +71,23 @@ export function createApp({
         res.status(error.status).json({
           code: error.code,
           message: error.message,
+        });
+        return;
+      }
+      if (error instanceof StudioServiceError) {
+        res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      if (error instanceof multer.MulterError) {
+        res.status(400).json({
+          code: "ARCHIVE_UPLOAD_REJECTED",
+          message:
+            error.code === "LIMIT_FILE_SIZE"
+              ? "ZIP 파일은 25MB 이하로 올려 주세요."
+              : "ZIP 파일 하나만 올려 주세요.",
         });
         return;
       }

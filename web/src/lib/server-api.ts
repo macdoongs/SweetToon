@@ -44,15 +44,19 @@ async function serverGetJson<T>(
 }
 
 export function getSeriesList(): Promise<SeriesListResponse> {
-  return serverGetJson("/api/series");
+  return serverGetJson("/api/series", { fresh: true });
 }
 
 export function getSeriesDetail(slug: string): Promise<SeriesDetail> {
-  return serverGetJson(`/api/series/${encodeURIComponent(slug)}`);
+  return serverGetJson(`/api/series/${encodeURIComponent(slug)}`, {
+    fresh: true,
+  });
 }
 
 export function getEpisode(episodeId: string): Promise<EpisodeReader> {
-  return serverGetJson(`/api/episodes/${encodeURIComponent(episodeId)}`);
+  return serverGetJson(`/api/episodes/${encodeURIComponent(episodeId)}`, {
+    fresh: true,
+  });
 }
 
 export function getOrders(): Promise<OrderListResponse> {

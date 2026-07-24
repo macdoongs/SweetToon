@@ -26,20 +26,13 @@ function writeCutSvg(relPath: string, title: string, label: string, hue: number)
   return `/api/images/${relPath.split(path.sep).join("/")}`;
 }
 
-function writeCoverSvg(relPath: string, title: string, hue: number) {
+function writeCoverImage(relPath: string, assetName: string) {
   const abs = path.join(UPLOAD_DIR, relPath);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="840" viewBox="0 0 600 840">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="hsl(${hue},55%,60%)"/>
-      <stop offset="100%" stop-color="hsl(${(hue + 60) % 360},55%,40%)"/>
-    </linearGradient>
-  </defs>
-  <rect width="600" height="840" fill="url(#g)"/>
-  <text x="300" y="430" text-anchor="middle" font-family="sans-serif" font-size="52" font-weight="bold" fill="white">${title}</text>
-</svg>`;
-  fs.writeFileSync(abs, svg, "utf-8");
+  fs.copyFileSync(
+    path.join(process.cwd(), "prisma", "assets", "covers", assetName),
+    abs,
+  );
   return `/api/images/${relPath.split(path.sep).join("/")}`;
 }
 
@@ -106,11 +99,28 @@ const SERIES: SeriesSpec[] = [
 ];
 
 async function main() {
+  const coverUrls = new Map<string, string>(
+    SERIES.map((spec) => [
+      spec.slug,
+      writeCoverImage(
+        path.join(spec.slug, "cover.webp"),
+        `${spec.slug}.webp`,
+      ),
+    ] as const),
+  );
   // 컨테이너 재시작 시 사용자가 만든 주문과 콘텐츠를 보존한다.
-  // 데모 데이터는 빈 DB에만 최초 1회 생성한다.
+  // 데모 레코드는 빈 DB에만 만들고, 정적 데모 표지만 안전하게 갱신한다.
   const existingSeries = await prisma.series.count();
   if (existingSeries > 0) {
-    console.log(`Seed 건너뜀: 작품 ${existingSeries}개가 이미 있습니다.`);
+    for (const spec of SERIES) {
+      await prisma.series.updateMany({
+        where: { slug: spec.slug },
+        data: { coverUrl: coverUrls.get(spec.slug) },
+      });
+    }
+    console.log(
+      `Seed 데이터 유지: 기존 작품 ${existingSeries}개, 데모 표지만 갱신했습니다.`,
+    );
     return;
   }
 
@@ -124,7 +134,6 @@ async function main() {
       authors.set(spec.author.name, authorId);
     }
 
-    const coverUrl = writeCoverSvg(path.join(spec.slug, "cover.svg"), spec.title, spec.hue);
     const series = await prisma.series.create({
       data: {
         slug: spec.slug,
@@ -133,7 +142,7 @@ async function main() {
         genre: spec.genre,
         synopsis: spec.synopsis,
         status: spec.status,
-        coverUrl,
+        coverUrl: coverUrls.get(spec.slug),
       },
     });
 

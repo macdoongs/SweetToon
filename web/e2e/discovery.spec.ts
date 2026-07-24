@@ -8,6 +8,18 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
   const cards = page.locator(".series-card");
   const allCount = await cards.count();
   expect(allCount).toBeGreaterThan(1);
+  const firstCover = cards.first().locator("img");
+  await expect(firstCover).toHaveAttribute(
+    "src",
+    /\/_next\/image\?url=%2Fapi%2Fimages%2F[^&]+cover\.webp/,
+  );
+  await expect
+    .poll(() =>
+      firstCover.evaluate(
+        (image) => (image as HTMLImageElement).naturalWidth,
+      ),
+    )
+    .toBeGreaterThan(0);
   await expect(
     page.getByRole("link", { name: "전체", exact: true }),
   ).toHaveAttribute("aria-current", "page");

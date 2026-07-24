@@ -37,3 +37,13 @@ db        PostgreSQL 16
 3. 격리된 Docker Compose 프로젝트에서 전체 서비스 기동 및 health check
 
 CD는 핵심 사용자 플로우와 배포 대상 환경이 준비된 후 `main`의 검증된 이미지에 연결합니다.
+
+## 개발 브랜치와 배포
+
+- 기능 작업: `dev`에서 분기한 별도 branch/worktree
+- 통합: 검증된 PR을 `dev`에 병합
+- 개발 배포: `Jenkinsfile.deploy`이 `.48` Linux 노드에서 `docker-compose.prod.yml`을 적용
+- 제출 후보: 검증된 `dev`를 `main`으로 승격
+
+개발 배포는 기존 `traefik-net`에 연결되며 `sweettoon.katsuranbo.com` Host 규칙으로만 노출됩니다.
+운영 DB 값은 Jenkins secret-file credential `sweettoon-prod-env`로 주입하고 저장소에는 커밋하지 않습니다.

@@ -1,0 +1,69 @@
+pipeline {
+    agent { label 'linux-build' }
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        timeout(time: 20, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+    }
+
+    environment {
+        COMPOSE_PROJECT_NAME = 'sweettoon'
+        COMPOSE_FILES = '-f docker-compose.yml -f docker-compose.prod.yml'
+        DEPLOY_ENV_FILE = credentials('sweettoon-prod-env')
+    }
+
+    stages {
+        stage('Preflight') {
+            steps {
+                sh '''
+                    set -eu
+                    test "$(git branch --show-current)" = "dev"
+                    docker network inspect traefik-net >/dev/null
+                    docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" config --quiet
+                '''
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh '''
+                    set -eu
+                    docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" build
+                '''
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh '''
+                    set -eu
+                    docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" up -d --wait --wait-timeout 120 --remove-orphans
+                '''
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                sh '''
+                    set -eu
+                    docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" ps
+                    docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T server \
+                      node -e "fetch('http://localhost:4000/health').then(r => { if (!r.ok) process.exit(1); console.log('api ok') }).catch(() => process.exit(1))"
+                    docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web \
+                      node -e "fetch('http://localhost:3000').then(r => { if (!r.ok) process.exit(1); console.log('web ok') }).catch(() => process.exit(1))"
+                    curl --fail --silent --show-error \
+                      -H 'Host: sweettoon.katsuranbo.com' \
+                      http://192.168.101.48/ >/dev/null
+                '''
+            }
+        }
+    }
+
+    post {
+        failure {
+            sh 'docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" logs --no-color --tail 200 || true'
+        }
+    }
+}

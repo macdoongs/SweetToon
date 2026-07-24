@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: sweettoon
-      POSTGRES_PASSWORD: sweettoon
-      POSTGRES_DB: sweettoon
+      POSTGRES_USER: ${POSTGRES_USER:-sweettoon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sweettoon}
+      POSTGRES_DB: ${POSTGRES_DB:-sweettoon}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
@@ -19,7 +19,7 @@ services:
     build:
       context: ./server
     environment:
-      DATABASE_URL: postgresql://sweettoon:sweettoon@db:5432/sweettoon
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sweettoon}:${POSTGRES_PASSWORD:-sweettoon}@db:5432/${POSTGRES_DB:-sweettoon}
       PORT: 4000
       UPLOAD_DIR: /app/data/uploads
     ports:

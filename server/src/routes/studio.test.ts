@@ -103,6 +103,20 @@ describe("studio routes", () => {
     expect(response.body.code).toBe("ARCHIVE_EXTENSION_INVALID");
   });
 
+  it("rate-limits repeated archive uploads from one client", async () => {
+    const application = app();
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await request(application)
+        .post("/api/studio/uploads")
+        .expect(400);
+    }
+    const response = await request(application)
+      .post("/api/studio/uploads")
+      .expect(429);
+
+    expect(response.body.code).toBe("UPLOAD_RATE_LIMITED");
+  });
+
   it("validates episode metadata and confirmed page order", async () => {
     const service = studioService();
     const response = await request(app(service))

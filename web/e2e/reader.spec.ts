@@ -28,6 +28,13 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await page.getByRole("button", { name: "양면 보기" }).click();
   await expect(page.locator(".reader-paged")).toBeVisible();
   await expect(page.getByText(/1 \//)).toBeVisible();
+  await page.getByRole("button", { name: "화면 설정" }).click();
+  await page.getByLabel("오른쪽에서 왼쪽").check();
+  await page.getByRole("button", { name: "화면 설정" }).click();
+  await expect(page.locator(".reader-paged--rtl")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "다음 양면" }),
+  ).toHaveClass(/reader-paged__turn--previous/);
   await page.getByRole("button", { name: "페이지", exact: true }).click();
   await expect(page.getByRole("complementary", { name: "페이지 탐색기" }))
     .toBeVisible();
@@ -73,6 +80,7 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(page).toHaveURL(/\/read\/[^/]+$/);
   await expect(page.locator(".reader-toolbar h1")).not.toHaveText(currentEpisode);
   await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(80);
 });
 
 test("Swagger UI와 OpenAPI 계약을 같은 웹 주소에서 확인한다", async ({

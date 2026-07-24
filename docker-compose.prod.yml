@@ -22,7 +22,9 @@ services:
       - "traefik.http.routers.sweettoon.rule=Host(`sweettoon.katsuranbo.com`)"
       - "traefik.http.routers.sweettoon.entrypoints=web"
       - "traefik.http.routers.sweettoon.service=sweettoon"
+      - "traefik.http.routers.sweettoon.middlewares=sweettoon-upload-buffer"
       - "traefik.http.services.sweettoon.loadbalancer.server.port=3000"
+      - "traefik.http.middlewares.sweettoon-upload-buffer.buffering.maxRequestBodyBytes=27262976"
 
 networks:
   traefik-net:

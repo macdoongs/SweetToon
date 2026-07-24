@@ -2258,6 +2258,10 @@ body:has(.reader-page) .site-footer {
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.34);
 }
 
+.reader-paged--rtl .reader-paged__spread {
+  flex-direction: row-reverse;
+}
+
 .reader-paged__spread img {
   width: auto;
   height: auto;
@@ -2285,15 +2289,25 @@ body:has(.reader-page) .site-footer {
 .reader-paged__turn {
   position: absolute;
   z-index: 2;
-  top: 50%;
-  width: 46px;
-  height: 64px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.42);
+  top: 0;
+  width: clamp(58px, 12vw, 180px);
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: white;
   font-size: 1.4rem;
   cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.reader-paged__turn:not(:disabled):hover,
+.reader-paged__turn:not(:disabled):focus-visible {
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.28),
+    transparent
+  );
 }
 
 .reader-paged__turn:disabled {
@@ -2302,11 +2316,20 @@ body:has(.reader-page) .site-footer {
 }
 
 .reader-paged__turn--previous {
-  left: 18px;
+  left: 0;
 }
 
 .reader-paged__turn--next {
-  right: 18px;
+  right: 0;
+}
+
+.reader-paged__turn--next:not(:disabled):hover,
+.reader-paged__turn--next:not(:disabled):focus-visible {
+  background: linear-gradient(
+    to left,
+    rgba(0, 0, 0, 0.28),
+    transparent
+  );
 }
 
 .reader-paged__counter {

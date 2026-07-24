@@ -17,6 +17,7 @@ describe("createStudioStorage", () => {
         R2_ACCESS_KEY_ID: "access",
         R2_SECRET_ACCESS_KEY: "secret",
         R2_BUCKET: "sweettoon-assets",
+        R2_PRIVATE_BUCKET: "sweettoon-originals",
         R2_PUBLIC_BASE_URL: "https://assets.example.com",
       }),
     ).toBeInstanceOf(R2StudioStorage);

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Router } from "express";
 import multer from "multer";
+import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import {
   AccessPolicyResponseSchema,
@@ -25,9 +26,22 @@ const archiveUpload = multer({
 
 export function createStudioRouter(service: StudioUseCases): Router {
   const router = Router();
+  const uploadRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    handler: (_req, res) => {
+      res.status(429).json({
+        code: "UPLOAD_RATE_LIMITED",
+        message: "짧은 시간에 업로드가 너무 많아요. 잠시 뒤 다시 시도해 주세요.",
+      });
+    },
+  });
 
   router.post(
     "/studio/uploads",
+    uploadRateLimit,
     archiveUpload.single("archive"),
     async (req, res) => {
       if (!req.file) {

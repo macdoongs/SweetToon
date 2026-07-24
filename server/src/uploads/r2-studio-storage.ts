@@ -20,6 +20,7 @@ import {
 type R2StudioStorageOptions = {
   client: S3Client;
   bucket: string;
+  privateBucket: string;
   publicBaseUrl: string;
   stagingDir: string;
 };
@@ -120,7 +121,7 @@ export class R2StudioStorage implements StudioStorage {
 
         await this.options.client.send(
           new PutObjectCommand({
-            Bucket: this.options.bucket,
+            Bucket: this.options.privateBucket,
             Key: originalKey,
             Body: await fs.readFile(sourcePath),
             ContentType: contentType(extension),
@@ -143,7 +144,10 @@ export class R2StudioStorage implements StudioStorage {
         imageUrls,
       };
     } catch (error) {
-      await this.removePrefix(prefix);
+      await Promise.allSettled([
+        this.removePrefix(this.options.bucket, prefix),
+        this.removePrefix(this.options.privateBucket, prefix),
+      ]);
       throw error;
     }
   }
@@ -151,15 +155,19 @@ export class R2StudioStorage implements StudioStorage {
   async removePublished(directory: string): Promise<void> {
     const expected = `r2://${this.options.bucket}/studio/`;
     if (!directory.startsWith(expected)) return;
-    await this.removePrefix(directory.slice(`r2://${this.options.bucket}/`.length));
+    const prefix = directory.slice(`r2://${this.options.bucket}/`.length);
+    await Promise.all([
+      this.removePrefix(this.options.bucket, prefix),
+      this.removePrefix(this.options.privateBucket, prefix),
+    ]);
   }
 
-  private async removePrefix(prefix: string): Promise<void> {
+  private async removePrefix(bucket: string, prefix: string): Promise<void> {
     let continuationToken: string | undefined;
     do {
       const listed = await this.options.client.send(
         new ListObjectsV2Command({
-          Bucket: this.options.bucket,
+          Bucket: bucket,
           Prefix: `${prefix.replace(/\/+$/, "")}/`,
           ContinuationToken: continuationToken,
         }),
@@ -171,7 +179,7 @@ export class R2StudioStorage implements StudioStorage {
       if (objects.length > 0) {
         await this.options.client.send(
           new DeleteObjectsCommand({
-            Bucket: this.options.bucket,
+            Bucket: bucket,
             Delete: { Objects: objects, Quiet: true },
           }),
         );

@@ -19,6 +19,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sweettoon}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-sweettoon-local-secret}
       MINIO_BUCKET: ${R2_BUCKET:-sweettoon-assets}
+      MINIO_PRIVATE_BUCKET: ${R2_PRIVATE_BUCKET:-sweettoon-originals}
     entrypoint: /bin/sh
     command:
       - -c
@@ -26,6 +27,7 @@ services:
         until mc alias set local http://minio:9000
         "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 1; done;
         mc mb --ignore-existing "local/$${MINIO_BUCKET}";
+        mc mb --ignore-existing "local/$${MINIO_PRIVATE_BUCKET}";
         mc anonymous set download "local/$${MINIO_BUCKET}"
 
   server:
@@ -36,6 +38,7 @@ services:
       R2_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-sweettoon}
       R2_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-sweettoon-local-secret}
       R2_BUCKET: ${R2_BUCKET:-sweettoon-assets}
+      R2_PRIVATE_BUCKET: ${R2_PRIVATE_BUCKET:-sweettoon-originals}
       R2_PUBLIC_BASE_URL: http://localhost:${MINIO_PORT:-9000}/${R2_BUCKET:-sweettoon-assets}
       R2_FORCE_PATH_STYLE: "true"
     depends_on:

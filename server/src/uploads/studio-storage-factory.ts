@@ -43,6 +43,7 @@ export function createStudioStorage(
       credentials: { accessKeyId, secretAccessKey },
     }),
     bucket: requireValue(environment, "R2_BUCKET"),
+    privateBucket: requireValue(environment, "R2_PRIVATE_BUCKET"),
     publicBaseUrl: requireValue(environment, "R2_PUBLIC_BASE_URL"),
     stagingDir: uploadDir,
   });

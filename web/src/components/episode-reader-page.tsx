@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -22,6 +23,7 @@ import { ErrorState, PageLoading } from "./reader-states";
 type ReaderMode = "webtoon" | "double";
 type ScaleType = "screen" | "width" | "height" | "original";
 type Background = "black" | "gray" | "white";
+type ReadingDirection = "ltr" | "rtl";
 type Page = EpisodeReader["pages"][number];
 
 const SETTINGS_KEY = "sweettoon:reader-settings";
@@ -30,6 +32,7 @@ function loadSettings(): {
   mode: ReaderMode;
   scale: ScaleType;
   background: Background;
+  direction: ReadingDirection;
 } {
   try {
     const value = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}");
@@ -45,9 +48,15 @@ function loadSettings(): {
         value.background === "gray" || value.background === "white"
           ? value.background
           : "black",
+      direction: value.direction === "rtl" ? "rtl" : "ltr",
     };
   } catch {
-    return { mode: "webtoon", scale: "screen", background: "black" };
+    return {
+      mode: "webtoon",
+      scale: "screen",
+      background: "black",
+      direction: "ltr",
+    };
   }
 }
 
@@ -99,6 +108,7 @@ export function EpisodeReaderPage({
   const [mode, setMode] = useState<ReaderMode>("webtoon");
   const [scale, setScale] = useState<ScaleType>("screen");
   const [background, setBackground] = useState<Background>("black");
+  const [direction, setDirection] = useState<ReadingDirection>("ltr");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [thumbnailsOpen, setThumbnailsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -115,12 +125,27 @@ export function EpisodeReaderPage({
     setRequestKey((current) => current + 1);
   }, []);
 
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const previousBehavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = "auto";
+    window.scrollTo(0, 0);
+    const frame = requestAnimationFrame(() => {
+      root.style.scrollBehavior = previousBehavior;
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      root.style.scrollBehavior = previousBehavior;
+    };
+  }, [episodeId]);
+
   useEffect(() => {
     const saved = loadSettings();
     const frame = requestAnimationFrame(() => {
       setMode(saved.mode);
       setScale(saved.scale);
       setBackground(saved.background);
+      setDirection(saved.direction);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -128,9 +153,9 @@ export function EpisodeReaderPage({
   useEffect(() => {
     localStorage.setItem(
       SETTINGS_KEY,
-      JSON.stringify({ mode, scale, background }),
+      JSON.stringify({ mode, scale, background, direction }),
     );
-  }, [background, mode, scale]);
+  }, [background, direction, mode, scale]);
 
   useEffect(() => {
     const locked = initialData?.access.state === "locked";
@@ -346,19 +371,23 @@ export function EpisodeReaderPage({
         setSettingsOpen(false);
       }
       if (mode === "double" && event.key === "ArrowLeft") {
-        goToSpread(spreadIndex - 1);
+        goToSpread(spreadIndex + (direction === "rtl" ? 1 : -1));
       }
       if (
         mode === "double" &&
         (event.key === "ArrowRight" || event.key === " ")
       ) {
         event.preventDefault();
-        goToSpread(spreadIndex + 1);
+        goToSpread(
+          event.key === " "
+            ? spreadIndex + 1
+            : spreadIndex + (direction === "rtl" ? -1 : 1),
+        );
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [goToSpread, mode, spreadIndex]);
+  }, [direction, goToSpread, mode, spreadIndex]);
 
   if (error) {
     return (
@@ -489,6 +518,25 @@ export function EpisodeReaderPage({
               </label>
             ))}
           </fieldset>
+          <fieldset>
+            <legend>양면 읽기 방향</legend>
+            {(
+              [
+                ["ltr", "왼쪽에서 오른쪽"],
+                ["rtl", "오른쪽에서 왼쪽"],
+              ] as const
+            ).map(([value, label]) => (
+              <label key={value}>
+                <input
+                  checked={direction === value}
+                  name="direction"
+                  onChange={() => setDirection(value)}
+                  type="radio"
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
         </section>
       ) : null}
 
@@ -496,7 +544,7 @@ export function EpisodeReaderPage({
         <section className="reader-popover reader-help" aria-label="키보드 도움말">
           <h2>키보드로 읽기</h2>
           <dl>
-            <div><dt>← / →</dt><dd>양면 보기 페이지 이동</dd></div>
+            <div><dt>← / →</dt><dd>읽기 방향에 맞춰 양면 이동</dd></div>
             <div><dt>Space</dt><dd>다음 양면</dd></div>
             <div><dt>T</dt><dd>페이지 탐색기 열기</dd></div>
             <div><dt>?</dt><dd>도움말 열기</dd></div>
@@ -560,14 +608,20 @@ export function EpisodeReaderPage({
         </article>
       ) : (
         <section
-          className={`reader-paged reader-paged--${scale}`}
+          className={`reader-paged reader-paged--${scale} reader-paged--${direction}`}
           aria-label={`${episode.title} 양면 본문`}
         >
           <button
-            aria-label="이전 양면"
+            aria-label={direction === "rtl" ? "다음 양면" : "이전 양면"}
             className="reader-paged__turn reader-paged__turn--previous"
-            disabled={spreadIndex === 0}
-            onClick={() => goToSpread(spreadIndex - 1)}
+            disabled={
+              direction === "rtl"
+                ? spreadIndex >= spreads.length - 1
+                : spreadIndex === 0
+            }
+            onClick={() =>
+              goToSpread(spreadIndex + (direction === "rtl" ? 1 : -1))
+            }
           >
             ←
           </button>
@@ -585,10 +639,16 @@ export function EpisodeReaderPage({
             ))}
           </div>
           <button
-            aria-label="다음 양면"
+            aria-label={direction === "rtl" ? "이전 양면" : "다음 양면"}
             className="reader-paged__turn reader-paged__turn--next"
-            disabled={spreadIndex >= spreads.length - 1}
-            onClick={() => goToSpread(spreadIndex + 1)}
+            disabled={
+              direction === "rtl"
+                ? spreadIndex === 0
+                : spreadIndex >= spreads.length - 1
+            }
+            onClick={() =>
+              goToSpread(spreadIndex + (direction === "rtl" ? -1 : 1))
+            }
           >
             →
           </button>

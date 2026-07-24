@@ -84,6 +84,14 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
   expect(publishedResponse.headers()["cache-control"]).toContain("immutable");
   expect(publishedResponse.headers()["content-type"]).toContain("image/webp");
 
+  if (objectStorage) {
+    const privateOriginalUrl = publishedUrl!
+      .replace("/sweettoon-assets/", "/sweettoon-originals/")
+      .replace("/reader/001.webp", "/.original/001.png");
+    const privateResponse = await page.request.get(privateOriginalUrl);
+    expect(privateResponse.status()).toBe(403);
+  }
+
   if (!objectStorage) {
     const optimizedQuery = new URLSearchParams({
       url: publishedUrl!,

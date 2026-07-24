@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import multer from "multer";
 import swaggerUi from "swagger-ui-express";
 import path from "node:path";
@@ -26,6 +27,7 @@ export type AppOptions = {
   orderService?: OrderUseCases;
   studioService?: StudioUseCases;
   uploadDir?: string;
+  allowedOrigins?: string[];
 };
 
 export function createApp({
@@ -34,11 +36,31 @@ export function createApp({
   orderService,
   studioService,
   uploadDir = path.join(process.cwd(), "data", "uploads"),
+  allowedOrigins = [],
 }: AppOptions): Express {
   const app = express();
   fs.mkdirSync(uploadDir, { recursive: true });
 
-  app.use(cors());
+  app.set("trust proxy", 1);
+  app.use(
+    helmet({
+      // Swagger UI uses an inline bootstrap script. The public web app keeps
+      // its own CSP; API responses still receive the remaining Helmet headers.
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+    }),
+  );
+  app.use(
+    cors({
+      credentials: false,
+      origin(origin, callback) {
+        callback(
+          null,
+          !origin || allowedOrigins.includes(origin),
+        );
+      },
+    }),
+  );
   app.use(express.json());
 
   app.get("/health", (_req, res) => {

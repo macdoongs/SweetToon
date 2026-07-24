@@ -17,6 +17,10 @@ export const UPLOAD_DIR = process.env.UPLOAD_DIR
 const prisma = new PrismaClient();
 const printProvider = createPrintProvider();
 const studioStorage = createStudioStorage(UPLOAD_DIR);
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const app = createApp({
   readerRepository: new PrismaReaderRepository(prisma),
   printProvider,
@@ -29,6 +33,7 @@ const app = createApp({
     studioStorage,
   ),
   uploadDir: UPLOAD_DIR,
+  allowedOrigins,
 });
 
 app.listen(PORT, () => {

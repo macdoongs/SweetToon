@@ -65,6 +65,32 @@ export async function postJson<TInput, TResponse>(
   return (await response.json()) as TResponse;
 }
 
+export async function patchJson<TInput, TResponse>(
+  path: string,
+  body: TInput,
+): Promise<TResponse> {
+  const response = await fetch(path, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as {
+      code?: string;
+      message?: string;
+    } | null;
+    throw new ApiError(
+      error?.message ?? "상태를 변경하지 못했습니다.",
+      response.status,
+      error?.code,
+    );
+  }
+  return (await response.json()) as TResponse;
+}
+
 export async function postFormData<TResponse>(
   path: string,
   formData: FormData,

@@ -62,3 +62,6 @@ export type OrderDetail = {
 };
 
 export type OrderListResponse = { items: OrderDetail[] };
+export type OrderTransitionRequest = {
+  status: "processing" | "shipped" | "completed";
+};

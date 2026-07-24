@@ -87,9 +87,10 @@ function makeDependencies() {
     attachProviderOrder: jest
       .fn()
       .mockImplementation(async (_id, providerOrderId) => {
-        savedOrder = orderFixture({ providerOrderId });
+        savedOrder = orderFixture({ providerOrderId, status: "processing" });
         return savedOrder;
       }),
+    transitionStatus: jest.fn(),
     markCanceled: jest.fn().mockResolvedValue(undefined),
     findById: jest.fn().mockResolvedValue(null),
     listOrders: jest.fn().mockResolvedValue({ items: [] }),
@@ -208,5 +209,45 @@ describe("OrderService", () => {
       "cmorder000000000000000001",
       expect.any(String),
     );
+  });
+
+  it("moves an order through only the next production status", async () => {
+    const { service, repository } = makeDependencies();
+    repository.findById.mockResolvedValue(
+      orderFixture({ status: "processing" }),
+    );
+    repository.transitionStatus.mockResolvedValue(
+      orderFixture({ status: "shipped" }),
+    );
+
+    const updated = await service.transition(
+      "cmorder000000000000000001",
+      { status: "shipped" },
+    );
+
+    expect(updated.status).toBe("shipped");
+    expect(repository.transitionStatus).toHaveBeenCalledWith(
+      "cmorder000000000000000001",
+      "processing",
+      "shipped",
+      "소장본 제작을 마치고 배송을 시작했어요.",
+    );
+  });
+
+  it("rejects skipped or terminal production transitions", async () => {
+    const { service, repository } = makeDependencies();
+    repository.findById.mockResolvedValue(
+      orderFixture({ status: "processing" }),
+    );
+
+    await expect(
+      service.transition("cmorder000000000000000001", {
+        status: "completed",
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ORDER_TRANSITION",
+      status: 409,
+    } satisfies Partial<OrderServiceError>);
+    expect(repository.transitionStatus).not.toHaveBeenCalled();
   });
 });

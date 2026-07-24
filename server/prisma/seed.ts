@@ -36,6 +36,37 @@ function writeCoverImage(relPath: string, assetName: string) {
   return `/api/images/${relPath.split(path.sep).join("/")}`;
 }
 
+const SHOWCASE_PAGE_ASSETS = Array.from(
+  { length: 8 },
+  (_, index) => `${String(index + 1).padStart(3, "0")}.webp`,
+);
+
+function writeShowcasePages() {
+  return SHOWCASE_PAGE_ASSETS.map((assetName) => {
+    const relPath = path.join(
+      "moonlight-laundry",
+      "s1",
+      "ep001",
+      assetName,
+    );
+    const abs = path.join(UPLOAD_DIR, relPath);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.copyFileSync(
+      path.join(
+        process.cwd(),
+        "prisma",
+        "assets",
+        "episodes",
+        "moonlight-laundry",
+        "s1e1",
+        assetName,
+      ),
+      abs,
+    );
+    return `/api/images/${relPath.split(path.sep).join("/")}`;
+  });
+}
+
 type SeriesSpec = {
   slug: string;
   title: string;
@@ -108,6 +139,7 @@ async function main() {
       ),
     ] as const),
   );
+  const showcasePageUrls = writeShowcasePages();
   // 컨테이너 재시작 시 사용자가 만든 주문과 콘텐츠를 보존한다.
   // 데모 레코드는 빈 DB에만 만들고, 정적 데모 표지만 안전하게 갱신한다.
   const existingSeries = await prisma.series.count();
@@ -118,8 +150,33 @@ async function main() {
         data: { coverUrl: coverUrls.get(spec.slug) },
       });
     }
+    const showcaseEpisode = await prisma.episode.findFirst({
+      where: {
+        number: 1,
+        season: {
+          number: 1,
+          series: { slug: "moonlight-laundry" },
+        },
+      },
+      include: { pages: { orderBy: { order: "asc" } } },
+    });
+    if (showcaseEpisode) {
+      await prisma.episode.update({
+        where: { id: showcaseEpisode.id },
+        data: { title: "맡겨진 얼룩" },
+      });
+      for (const [index, page] of showcaseEpisode.pages.entries()) {
+        const imageUrl = showcasePageUrls[index];
+        if (imageUrl) {
+          await prisma.page.update({
+            where: { id: page.id },
+            data: { imageUrl },
+          });
+        }
+      }
+    }
     console.log(
-      `Seed 데이터 유지: 기존 작품 ${existingSeries}개, 데모 표지만 갱신했습니다.`,
+      `Seed 데이터 유지: 기존 작품 ${existingSeries}개, 표지와 대표 1화를 갱신했습니다.`,
     );
     return;
   }
@@ -161,14 +218,35 @@ async function main() {
           data: {
             seasonId: season.id,
             number: ep,
-            title: `${ep}화`,
+            title:
+              spec.slug === "moonlight-laundry" &&
+              seasonSpec.number === 1 &&
+              ep === 1
+                ? "맡겨진 얼룩"
+                : `${ep}화`,
             publishedAt: new Date(Date.now() - (seasonSpec.episodes - ep) * 7 * 86400_000),
           },
         });
 
         for (let pg = 1; pg <= seasonSpec.pagesPerEp; pg++) {
-          const rel = path.join(spec.slug, `s${seasonSpec.number}`, `ep${String(ep).padStart(3, "0")}`, `${String(pg).padStart(3, "0")}.svg`);
-          const imageUrl = writeCutSvg(rel, spec.title, `시즌${seasonSpec.number} · ${ep}화 · ${pg}컷`, spec.hue);
+          const isShowcasePage =
+            spec.slug === "moonlight-laundry" &&
+            seasonSpec.number === 1 &&
+            ep === 1;
+          const rel = path.join(
+            spec.slug,
+            `s${seasonSpec.number}`,
+            `ep${String(ep).padStart(3, "0")}`,
+            `${String(pg).padStart(3, "0")}.svg`,
+          );
+          const imageUrl = isShowcasePage
+            ? showcasePageUrls[pg - 1]
+            : writeCutSvg(
+                rel,
+                spec.title,
+                `시즌${seasonSpec.number} · ${ep}화 · ${pg}컷`,
+                spec.hue,
+              );
           await prisma.page.create({
             data: { episodeId: episode.id, order: pg, imageUrl },
           });

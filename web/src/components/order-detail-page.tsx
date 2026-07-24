@@ -21,7 +21,7 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
       <nav className="page-breadcrumb" aria-label="현재 위치">
         <Link href="/">홈</Link>
         <span aria-hidden="true">/</span>
-        <Link href="/orders">내 주문</Link>
+        <Link href="/orders">주문 현황</Link>
         <span aria-hidden="true">/</span>
         <strong aria-current="page">{order.series.title}</strong>
       </nav>

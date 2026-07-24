@@ -153,9 +153,10 @@ try {
             const persisted = await json(
               '/api/orders/' + encodeURIComponent(order.id)
             )
+            const eventStatuses = persisted.events.map(event => event.status)
             if (
-              persisted.status !== 'pending' ||
-              persisted.events.length < 1 ||
+              persisted.status !== 'processing' ||
+              eventStatuses.join(',') !== 'pending,processing' ||
               !persisted.providerOrderId
             ) {
               throw new Error('persistent order verification failed')

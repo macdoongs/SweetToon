@@ -16,12 +16,18 @@ export function OrderListPage({ orders }: { orders: OrderDetail[] }) {
       <nav className="page-breadcrumb" aria-label="현재 위치">
         <Link href="/">홈</Link>
         <span aria-hidden="true">/</span>
-        <strong aria-current="page">내 주문</strong>
+        <strong aria-current="page">주문 현황</strong>
       </nav>
       <header className="page-header page-header--compact">
-        <p className="eyebrow">My shelf</p>
-        <h1>내 주문</h1>
-        <p>데모 계정에 접수된 소장본 제작 상태를 한눈에 확인하세요.</p>
+        <p className="eyebrow">Shared demo</p>
+        <h1>데모 주문 현황</h1>
+        <p>
+          로그인 없는 공용 데모입니다. 소장본 제작 흐름과 상태 변화를
+          확인해 보세요.
+        </p>
+        <Link className="operations-link" href="/operations/orders">
+          데모 운영자 화면에서 상태 변경하기 →
+        </Link>
       </header>
 
       {orders.length === 0 ? (

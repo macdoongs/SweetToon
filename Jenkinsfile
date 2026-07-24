@@ -62,6 +62,22 @@ pipeline {
                 '''
             }
         }
+
+        stage('Deploy dev') {
+            when {
+                expression {
+                    env.GIT_BRANCH == 'origin/dev' || env.BRANCH_NAME == 'dev'
+                }
+            }
+            steps {
+                build job: 'SweetToon-Deploy-Dev',
+                    parameters: [
+                        string(name: 'EXPECTED_COMMIT', value: env.GIT_COMMIT)
+                    ],
+                    propagate: true,
+                    wait: true
+            }
+        }
     }
 
     post {

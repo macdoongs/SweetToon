@@ -1,6 +1,14 @@
 pipeline {
     agent { label 'linux-build' }
 
+    parameters {
+        string(
+            name: 'EXPECTED_COMMIT',
+            defaultValue: '',
+            description: 'CI에서 검증한 Git SHA. 비어 있으면 수동 배포로 간주합니다.'
+        )
+    }
+
     options {
         disableConcurrentBuilds()
         timestamps()
@@ -19,7 +27,18 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    test "$(git branch --show-current)" = "dev"
+                    actual_commit="$(git rev-parse HEAD)"
+                    if [ -n "${EXPECTED_COMMIT}" ] && [ "${actual_commit}" != "${EXPECTED_COMMIT}" ]; then
+                      echo "Refusing to deploy ${actual_commit}; CI validated ${EXPECTED_COMMIT}" >&2
+                      exit 1
+                    fi
+                    case "${GIT_BRANCH:-}" in
+                      origin/dev|*/dev) ;;
+                      *)
+                        echo "Refusing to deploy non-dev branch: ${GIT_BRANCH:-unknown}" >&2
+                        exit 1
+                        ;;
+                    esac
                     docker network inspect traefik-net >/dev/null
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" config --quiet
                 '''

@@ -47,3 +47,6 @@ CD는 핵심 사용자 플로우와 배포 대상 환경이 준비된 후 `main`
 
 개발 배포는 기존 `traefik-net`에 연결되며 `sweettoon.katsuranbo.com` Host 규칙으로만 노출됩니다.
 운영 DB 값은 Jenkins secret-file credential `sweettoon-prod-env`로 주입하고 저장소에는 커밋하지 않습니다.
+CI 검증이 모두 성공하면 검증한 Git SHA를 `SweetToon-Deploy-Dev`에 전달합니다.
+배포 작업은 체크아웃한 SHA가 전달받은 SHA와 다르면 중단하여, 검증되지 않은 최신
+커밋이 우연히 배포되는 것을 방지합니다.

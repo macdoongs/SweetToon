@@ -147,7 +147,7 @@ try {
               body: JSON.stringify({
                 ...specification,
                 requestKey: crypto.randomUUID(),
-                ordererName: '스모크검증'
+                ordererName: 'SmokeTest'
               })
             })
             const persisted = await json(

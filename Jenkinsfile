@@ -19,31 +19,19 @@ pipeline {
             parallel {
                 stage('Web') {
                     steps {
-                        dir('web') {
-                            powershell '''
-                                $ErrorActionPreference = "Stop"
-                                npm ci
-                                npm audit --omit=dev --audit-level=high
-                                npm run lint
-                                npm run build
-                            '''
-                        }
+                        powershell '''
+                            $ErrorActionPreference = "Stop"
+                            & "$env:WORKSPACE/scripts/verify-web.ps1"
+                        '''
                     }
                 }
 
                 stage('Server') {
                     steps {
-                        dir('server') {
-                            powershell '''
-                                $ErrorActionPreference = "Stop"
-                                $env:DATABASE_URL = "postgresql://sweettoon:sweettoon@localhost:5432/sweettoon"
-                                npm ci
-                                npm audit --omit=dev --audit-level=high
-                                npx prisma validate
-                                npm run build
-                                npm run test --if-present
-                            '''
-                        }
+                        powershell '''
+                            $ErrorActionPreference = "Stop"
+                            & "$env:WORKSPACE/scripts/verify-server.ps1"
+                        '''
                     }
                 }
             }
@@ -53,12 +41,8 @@ pipeline {
             steps {
                 powershell '''
                     $ErrorActionPreference = "Stop"
-                    docker compose config --quiet
-                    docker compose build
-                    docker compose up -d --wait --wait-timeout 120
-                    docker compose ps
-                    docker compose exec -T server node -e "fetch('http://localhost:4000/health').then(async r => { if (!r.ok) process.exit(1); console.log(await r.text()) }).catch(() => process.exit(1))"
-                    docker compose exec -T web node -e "fetch('http://localhost:3000').then(r => { if (!r.ok) process.exit(1); console.log('web ok') }).catch(() => process.exit(1))"
+                    & "$env:WORKSPACE/scripts/smoke-compose.ps1" `
+                        -ProjectName $env:COMPOSE_PROJECT_NAME
                 '''
             }
         }
@@ -81,11 +65,7 @@ pipeline {
     }
 
     post {
-        unsuccessful {
-            powershell 'docker compose logs --no-color --tail 200'
-        }
         always {
-            powershell 'docker compose down --volumes --remove-orphans'
             cleanWs()
         }
     }

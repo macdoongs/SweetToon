@@ -67,12 +67,19 @@ try {
         docker compose up -d --wait --wait-timeout 120
     } "Docker Compose startup"
 
-    $portMapping = docker compose port web 3000 |
-        Select-Object -First 1
-    if ($LASTEXITCODE -ne 0 -or $portMapping -notmatch ":(\d+)$") {
+    $portOutput = docker compose port web 3000
+    $portExitCode = $LASTEXITCODE
+    $portMapping = $portOutput | Select-Object -First 1
+    $portMatch = [regex]::Match(
+        [string]$portMapping,
+        ":(?<port>[0-9]+)\s*$"
+    )
+    if ($portExitCode -ne 0 -or -not $portMatch.Success) {
         throw "Could not resolve the Compose web port: $portMapping"
     }
-    $env:E2E_BASE_URL = "http://127.0.0.1:$($Matches[1])"
+    $env:E2E_BASE_URL = "http://127.0.0.1:$(
+        $portMatch.Groups["port"].Value
+    )"
 
     Push-Location $webRoot
     try {

@@ -54,6 +54,26 @@ db        PostgreSQL 16
 Next.js Route Handler 대신 독립 Express API를 둔 이유는 웹 외 클라이언트와 B2B API 확장을 고려한
 API-first 경계를 보여주고, 이미지·압축 파일 처리와 웹 렌더링의 책임을 분리하기 위해서입니다.
 
+## 개발 규약과 검증 하네스
+
+- [`AGENTS.md`](./AGENTS.md) — 사람·Codex·Claude가 공유하는 아키텍처와 안전 규약
+- [`docs/REVIEW_CHECKLIST.md`](./docs/REVIEW_CHECKLIST.md) — 과제 기준과 PR 리뷰 체크리스트
+- `scripts/verify-web.ps1` — 의존성, audit, lint, Next.js production build
+- `scripts/verify-server.ps1` — 의존성, audit, Prisma 검증, TypeScript build, Jest
+- `scripts/smoke-compose.ps1` — 격리된 Compose 전체 기동과 Mock/API/SSR 스모크 검증
+
+로컬 PowerShell 7 또는 Jenkins의 Windows PowerShell에서 전체 검증을 순서대로 실행합니다.
+
+```powershell
+pwsh -File scripts/verify-web.ps1
+pwsh -File scripts/verify-server.ps1
+pwsh -File scripts/smoke-compose.ps1
+```
+
+Compose 스모크 스크립트는 `sweettoon-verify-*` 이름의 독립 project와 임의 호스트
+포트를 사용하며 성공·실패 여부와 관계없이 자신이 만든 컨테이너와 볼륨을 정리합니다.
+Jenkins도 같은 스크립트를 호출하므로 로컬 검증과 CI 계약이 분리되지 않습니다.
+
 ## 구현된 API
 
 - `GET /api/series` — 작품 목록

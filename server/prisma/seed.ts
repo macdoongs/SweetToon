@@ -26,21 +26,45 @@ function writeCutSvg(relPath: string, title: string, label: string, hue: number)
   return `/api/images/${relPath.split(path.sep).join("/")}`;
 }
 
-function writeCoverSvg(relPath: string, title: string, hue: number) {
+function writeCoverImage(relPath: string, assetName: string) {
   const abs = path.join(UPLOAD_DIR, relPath);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="840" viewBox="0 0 600 840">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="hsl(${hue},55%,60%)"/>
-      <stop offset="100%" stop-color="hsl(${(hue + 60) % 360},55%,40%)"/>
-    </linearGradient>
-  </defs>
-  <rect width="600" height="840" fill="url(#g)"/>
-  <text x="300" y="430" text-anchor="middle" font-family="sans-serif" font-size="52" font-weight="bold" fill="white">${title}</text>
-</svg>`;
-  fs.writeFileSync(abs, svg, "utf-8");
+  fs.copyFileSync(
+    path.join(process.cwd(), "prisma", "assets", "covers", assetName),
+    abs,
+  );
   return `/api/images/${relPath.split(path.sep).join("/")}`;
+}
+
+const SHOWCASE_PAGE_ASSETS = Array.from(
+  { length: 8 },
+  (_, index) => `${String(index + 1).padStart(3, "0")}.webp`,
+);
+
+function writeShowcasePages() {
+  return SHOWCASE_PAGE_ASSETS.map((assetName) => {
+    const relPath = path.join(
+      "moonlight-laundry",
+      "s1",
+      "ep001",
+      assetName,
+    );
+    const abs = path.join(UPLOAD_DIR, relPath);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.copyFileSync(
+      path.join(
+        process.cwd(),
+        "prisma",
+        "assets",
+        "episodes",
+        "moonlight-laundry",
+        "s1e1",
+        assetName,
+      ),
+      abs,
+    );
+    return `/api/images/${relPath.split(path.sep).join("/")}`;
+  });
 }
 
 type SeriesSpec = {
@@ -106,14 +130,56 @@ const SERIES: SeriesSpec[] = [
 ];
 
 async function main() {
-  // 재실행 안전: 전체 삭제 후 재시드
-  await prisma.orderEvent.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.page.deleteMany();
-  await prisma.episode.deleteMany();
-  await prisma.season.deleteMany();
-  await prisma.series.deleteMany();
-  await prisma.author.deleteMany();
+  const coverUrls = new Map<string, string>(
+    SERIES.map((spec) => [
+      spec.slug,
+      writeCoverImage(
+        path.join(spec.slug, "cover.webp"),
+        `${spec.slug}.webp`,
+      ),
+    ] as const),
+  );
+  const showcasePageUrls = writeShowcasePages();
+  // 컨테이너 재시작 시 사용자가 만든 주문과 콘텐츠를 보존한다.
+  // 데모 레코드는 빈 DB에만 만들고, 정적 데모 표지만 안전하게 갱신한다.
+  const existingSeries = await prisma.series.count();
+  if (existingSeries > 0) {
+    for (const spec of SERIES) {
+      await prisma.series.updateMany({
+        where: { slug: spec.slug },
+        data: { coverUrl: coverUrls.get(spec.slug) },
+      });
+    }
+    const showcaseEpisode = await prisma.episode.findFirst({
+      where: {
+        number: 1,
+        season: {
+          number: 1,
+          series: { slug: "moonlight-laundry" },
+        },
+      },
+      include: { pages: { orderBy: { order: "asc" } } },
+    });
+    if (showcaseEpisode) {
+      await prisma.episode.update({
+        where: { id: showcaseEpisode.id },
+        data: { title: "맡겨진 얼룩" },
+      });
+      for (const [index, page] of showcaseEpisode.pages.entries()) {
+        const imageUrl = showcasePageUrls[index];
+        if (imageUrl) {
+          await prisma.page.update({
+            where: { id: page.id },
+            data: { imageUrl },
+          });
+        }
+      }
+    }
+    console.log(
+      `Seed 데이터 유지: 기존 작품 ${existingSeries}개, 표지와 대표 1화를 갱신했습니다.`,
+    );
+    return;
+  }
 
   const authors = new Map<string, string>();
 
@@ -125,15 +191,15 @@ async function main() {
       authors.set(spec.author.name, authorId);
     }
 
-    const coverUrl = writeCoverSvg(path.join(spec.slug, "cover.svg"), spec.title, spec.hue);
     const series = await prisma.series.create({
       data: {
+        slug: spec.slug,
         authorId,
         title: spec.title,
         genre: spec.genre,
         synopsis: spec.synopsis,
         status: spec.status,
-        coverUrl,
+        coverUrl: coverUrls.get(spec.slug),
       },
     });
 
@@ -152,14 +218,35 @@ async function main() {
           data: {
             seasonId: season.id,
             number: ep,
-            title: `${ep}화`,
+            title:
+              spec.slug === "moonlight-laundry" &&
+              seasonSpec.number === 1 &&
+              ep === 1
+                ? "맡겨진 얼룩"
+                : `${ep}화`,
             publishedAt: new Date(Date.now() - (seasonSpec.episodes - ep) * 7 * 86400_000),
           },
         });
 
         for (let pg = 1; pg <= seasonSpec.pagesPerEp; pg++) {
-          const rel = path.join(spec.slug, `s${seasonSpec.number}`, `ep${String(ep).padStart(3, "0")}`, `${String(pg).padStart(3, "0")}.svg`);
-          const imageUrl = writeCutSvg(rel, spec.title, `시즌${seasonSpec.number} · ${ep}화 · ${pg}컷`, spec.hue);
+          const isShowcasePage =
+            spec.slug === "moonlight-laundry" &&
+            seasonSpec.number === 1 &&
+            ep === 1;
+          const rel = path.join(
+            spec.slug,
+            `s${seasonSpec.number}`,
+            `ep${String(ep).padStart(3, "0")}`,
+            `${String(pg).padStart(3, "0")}.svg`,
+          );
+          const imageUrl = isShowcasePage
+            ? showcasePageUrls[pg - 1]
+            : writeCutSvg(
+                rel,
+                spec.title,
+                `시즌${seasonSpec.number} · ${ep}화 · ${pg}컷`,
+                spec.hue,
+              );
           await prisma.page.create({
             data: { episodeId: episode.id, order: pg, imageUrl },
           });
@@ -175,10 +262,10 @@ async function main() {
 
   const ordersSpec = [
     { series: laundry, ordererName: "김소장", ordererType: "reader", coverType: "hardcover", bookSize: "A5", quantity: 1, status: "completed", memo: "1시즌 정주행 기념 소장!" },
-    { series: store, ordererName: "박야근", ordererType: "creator", coverType: "softcover", bookSize: "B6", quantity: 20, status: "processing", memo: "독립출판 마켓용 견본 포함" },
+    { series: store, ordererName: "박야근", ordererType: "creator", coverType: "softcover", bookSize: "B5", quantity: 20, status: "processing", memo: "독립출판 마켓용 견본 포함" },
     { series: blade, ordererName: "홍독자", ordererType: "reader", coverType: "softcover", bookSize: "A5", quantity: 2, status: "shipped", memo: null },
     { series: laundry, ordererName: "최수집", ordererType: "reader", coverType: "hardcover", bookSize: "A5", quantity: 1, status: "pending", memo: "선물용 포장 가능한가요?" },
-    { series: store, ordererName: "정단골", ordererType: "reader", coverType: "softcover", bookSize: "B6", quantity: 1, status: "canceled", memo: null },
+    { series: store, ordererName: "정단골", ordererType: "reader", coverType: "softcover", bookSize: "B5", quantity: 1, status: "canceled", memo: null },
   ];
 
   const STATUS_FLOW: Record<string, string[]> = {
@@ -197,10 +284,23 @@ async function main() {
   };
 
   let dayOffset = 14;
-  for (const spec of ordersSpec) {
+  for (const [orderIndex, spec] of ordersSpec.entries()) {
     const season = spec.series.seasons[0];
+    const episodes = await prisma.episode.findMany({
+      where: { seasonId: season.id },
+      select: { _count: { select: { pages: true } } },
+    });
+    const pageCount = episodes.reduce(
+      (total, episode) => total + episode._count.pages,
+      0,
+    );
+    const basePrice = spec.bookSize === "B5" ? 4_800 : 4_200;
+    const coverPrice = spec.coverType === "hardcover" ? 3_500 : 0;
+    const unitPrice = basePrice + coverPrice + pageCount * 35;
     const order = await prisma.order.create({
       data: {
+        requestKey: `00000000-0000-4000-8000-${String(orderIndex + 1).padStart(12, "0")}`,
+        providerOrderId: `mock_seed_${orderIndex + 1}`,
         seriesId: spec.series.id,
         seasonId: season.id,
         ordererName: spec.ordererName,
@@ -208,6 +308,11 @@ async function main() {
         quantity: spec.quantity,
         coverType: spec.coverType,
         bookSize: spec.bookSize,
+        pageCount,
+        currency: "KRW",
+        unitPrice,
+        totalPrice: unitPrice * spec.quantity,
+        estimatedBusinessDays: 5,
         memo: spec.memo,
         status: spec.status,
         createdAt: new Date(Date.now() - dayOffset * 86400_000),

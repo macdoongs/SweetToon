@@ -1,0 +1,173 @@
+import os from "node:os";
+import path from "node:path";
+import request from "supertest";
+import { createApp } from "../app";
+import type {
+  EpisodeReader,
+  SeriesDetail,
+  SeriesListResponse,
+} from "../contracts/reader";
+import type { ReaderRepository } from "../repositories/reader-repository";
+
+const publishedAt = "2026-07-20T00:00:00.000Z";
+
+const seriesList: SeriesListResponse = {
+  items: [
+    {
+      id: "series-1",
+      slug: "moonlight-laundry",
+      title: "달빛 세탁소",
+      synopsis: "얼룩진 기억을 맡기는 밤의 세탁소",
+      genre: "힐링 판타지",
+      coverUrl: "/api/images/moonlight-laundry/cover.svg",
+      status: "ongoing",
+      author: { name: "이수달" },
+      episodeCount: 11,
+      completedSeasonCount: 1,
+      latestEpisode: {
+        id: "episode-1",
+        number: 1,
+        title: "1화",
+        publishedAt,
+      },
+    },
+  ],
+};
+
+const seriesDetail: SeriesDetail = {
+  id: "series-1",
+  slug: "moonlight-laundry",
+  title: "달빛 세탁소",
+  synopsis: "얼룩진 기억을 맡기는 밤의 세탁소",
+  genre: "힐링 판타지",
+  coverUrl: "/api/images/moonlight-laundry/cover.svg",
+  status: "ongoing",
+  author: {
+    name: "이수달",
+    bio: "밤 산책과 빨래 개는 시간을 좋아합니다.",
+    avatarUrl: null,
+  },
+  seasons: [
+    {
+      id: "season-1",
+      number: 1,
+      title: "얼룩의 계절",
+      status: "completed",
+      episodes: [
+        {
+          id: "episode-1",
+          number: 1,
+          title: "1화",
+          publishedAt,
+        },
+      ],
+    },
+  ],
+};
+
+const episode: EpisodeReader = {
+  id: "episode-1",
+  number: 1,
+  title: "1화",
+  publishedAt,
+  series: {
+    id: "series-1",
+    slug: "moonlight-laundry",
+    title: "달빛 세탁소",
+  },
+  season: {
+    id: "season-1",
+    number: 1,
+    title: "얼룩의 계절",
+  },
+  pages: [
+    { id: "page-1", order: 1, imageUrl: "/api/images/page-1.svg" },
+    { id: "page-2", order: 2, imageUrl: "/api/images/page-2.svg" },
+  ],
+  navigation: {
+    previousEpisodeId: null,
+    nextEpisodeId: "episode-2",
+  },
+};
+
+function makeRepository(): jest.Mocked<ReaderRepository> {
+  return {
+    listSeries: jest.fn().mockResolvedValue(seriesList),
+    findSeriesBySlug: jest
+      .fn()
+      .mockImplementation(async (slug) =>
+        slug === seriesDetail.slug ? seriesDetail : null,
+      ),
+    findEpisodeById: jest
+      .fn()
+      .mockImplementation(async (id) => (id === episode.id ? episode : null)),
+  };
+}
+
+function makeApp() {
+  return createApp({
+    readerRepository: makeRepository(),
+    uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+  });
+}
+
+describe("reader routes", () => {
+  it("returns the discoverable series list", async () => {
+    const repository = makeRepository();
+    const app = createApp({
+      readerRepository: repository,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+    });
+    const response = await request(app)
+      .get("/api/series?filter=collectible")
+      .expect(200);
+
+    expect(response.body.items[0].slug).toBe("moonlight-laundry");
+    expect(response.body.items[0].episodeCount).toBe(11);
+    expect(repository.listSeries).toHaveBeenCalledWith("collectible");
+  });
+
+  it("rejects an unknown series filter", async () => {
+    const response = await request(makeApp())
+      .get("/api/series?filter=weekday")
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_SERIES_FILTER");
+  });
+
+  it("returns a series with seasons and episodes", async () => {
+    const response = await request(makeApp())
+      .get("/api/series/moonlight-laundry")
+      .expect(200);
+
+    expect(response.body.seasons[0].status).toBe("completed");
+    expect(response.body.seasons[0].episodes[0].id).toBe("episode-1");
+  });
+
+  it("rejects malformed slugs with a user-facing error", async () => {
+    const response = await request(makeApp())
+      .get("/api/series/NOT_VALID")
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_SERIES_SLUG");
+  });
+
+  it("returns a clear 404 when a series does not exist", async () => {
+    const response = await request(makeApp())
+      .get("/api/series/missing-series")
+      .expect(404);
+
+    expect(response.body.code).toBe("SERIES_NOT_FOUND");
+  });
+
+  it("returns ordered pages and episode navigation", async () => {
+    const response = await request(makeApp())
+      .get("/api/episodes/episode-1")
+      .expect(200);
+
+    expect(
+      response.body.pages.map((page: { order: number }) => page.order),
+    ).toEqual([1, 2]);
+    expect(response.body.navigation.nextEpisodeId).toBe("episode-2");
+  });
+});

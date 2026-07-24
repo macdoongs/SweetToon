@@ -20,6 +20,7 @@ model Author {
 // 작품
 model Series {
   id        String   @id @default(cuid())
+  slug      String   @unique
   authorId  String
   title     String
   synopsis  String
@@ -72,21 +73,28 @@ model Page {
 
 // 단행본 주문 — 결제·배송·인증 없음. 기록과 상태 흐름 관리까지 (Lv2)
 model Order {
-  id           String       @id @default(cuid())
-  seriesId     String
-  seasonId     String
-  ordererName  String
-  ordererType  String // reader(소장용) | creator(독립출판)
-  quantity     Int          @default(1)
-  coverType    String // softcover | hardcover
-  bookSize     String // A5 | B6 등
-  memo         String?
-  status       String       @default("pending") // pending | processing | shipped | completed | canceled
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  series       Series       @relation(fields: [seriesId], references: [id], onDelete: Cascade)
-  season       Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  events       OrderEvent[]
+  id                    String       @id @default(cuid())
+  requestKey            String?      @unique
+  providerOrderId       String?      @unique
+  seriesId              String
+  seasonId              String
+  ordererName           String
+  ordererType           String // reader(소장용) | creator(독립출판)
+  quantity              Int          @default(1)
+  coverType             String // softcover | hardcover
+  bookSize              String // A5 | B5 등
+  pageCount             Int?
+  currency              String?      @default("KRW")
+  unitPrice             Int?
+  totalPrice            Int?
+  estimatedBusinessDays Int?
+  memo                   String?
+  status                 String       @default("pending") // pending | processing | shipped | completed | canceled
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  series                 Series       @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  season                 Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  events                 OrderEvent[]
 }
 
 // 주문 상태 변경 이력 — "내 책이 어디쯤인지" 타임라인 UI의 근거 데이터 (Lv3)

@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 작가 — 회원 인증은 과제 범위 밖이므로 프로필 수준만 관리
+model Author {
+  id        String   @id @default(cuid())
+  name      String
+  bio       String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  series    Series[]
+}
+
+// 작품
+model Series {
+  id        String   @id @default(cuid())
+  authorId  String
+  title     String
+  synopsis  String
+  genre     String
+  coverUrl  String?
+  status    String   @default("ongoing") // ongoing | completed
+  createdAt DateTime @default(now())
+  author    Author   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  seasons   Season[]
+  orders    Order[]
+}
+
+// 시즌 — 단행본 주문의 단위
+model Season {
+  id       String    @id @default(cuid())
+  seriesId String
+  number   Int
+  title    String?
+  status   String    @default("ongoing") // ongoing | completed
+  series   Series    @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  episodes Episode[]
+  orders   Order[]
+
+  @@unique([seriesId, number])
+}
+
+// 에피소드 — zip(CBZ) 업로드 1건 = 에피소드 1화
+model Episode {
+  id          String   @id @default(cuid())
+  seasonId    String
+  number      Int
+  title       String
+  publishedAt DateTime @default(now())
+  season      Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  pages       Page[]
+
+  @@unique([seasonId, number])
+}
+
+// 페이지 — zip 내 이미지 1장, 파일명 자연 정렬 순서를 order에 고정
+model Page {
+  id        String  @id @default(cuid())
+  episodeId String
+  order     Int
+  imageUrl  String
+  episode   Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([episodeId, order])
+}
+
+// 단행본 주문 — 결제·배송·인증 없음. 기록과 상태 흐름 관리까지 (Lv2)
+model Order {
+  id           String       @id @default(cuid())
+  seriesId     String
+  seasonId     String
+  ordererName  String
+  ordererType  String // reader(소장용) | creator(독립출판)
+  quantity     Int          @default(1)
+  coverType    String // softcover | hardcover
+  bookSize     String // A5 | B6 등
+  memo         String?
+  status       String       @default("pending") // pending | processing | shipped | completed | canceled
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  series       Series       @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  season       Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  events       OrderEvent[]
+}
+
+// 주문 상태 변경 이력 — "내 책이 어디쯤인지" 타임라인 UI의 근거 데이터 (Lv3)
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  status    String
+  message   String?
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}

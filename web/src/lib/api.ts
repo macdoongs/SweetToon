@@ -64,3 +64,33 @@ export async function postJson<TInput, TResponse>(
 
   return (await response.json()) as TResponse;
 }
+
+export async function postFormData<TResponse>(
+  path: string,
+  formData: FormData,
+): Promise<TResponse> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    body: formData,
+  });
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as {
+      code?: string;
+      message?: string;
+    } | null;
+    throw new ApiError(
+      error?.message ?? "파일을 올리지 못했습니다.",
+      response.status,
+      error?.code,
+    );
+  }
+  return (await response.json()) as TResponse;
+}
+
+export async function deleteRequest(path: string): Promise<void> {
+  const response = await fetch(path, { method: "DELETE" });
+  if (!response.ok && response.status !== 404) {
+    throw new ApiError("임시 파일을 정리하지 못했습니다.", response.status);
+  }
+}

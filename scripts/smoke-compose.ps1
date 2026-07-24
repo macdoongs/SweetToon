@@ -170,6 +170,91 @@ try {
     } "mock quote and persistent order flow"
 
     Invoke-Checked {
+        docker compose exec -T server node -e "
+          const AdmZip = require('adm-zip')
+          const base = 'http://localhost:4000'
+          async function json(path, options) {
+            const response = await fetch(base + path, options)
+            if (!response.ok) {
+              const body = await response.text()
+              throw new Error(path + ' returned ' + response.status + ': ' + body)
+            }
+            return response.json()
+          }
+          async function verifyStudioFlow() {
+            const list = await json('/api/series')
+            let selected
+            for (const item of list.items) {
+              const detail = await json(
+                '/api/series/' + encodeURIComponent(item.slug)
+              )
+              const season = detail.seasons.find(
+                candidate => candidate.status === 'ongoing'
+              )
+              if (season) {
+                selected = { detail, season }
+                break
+              }
+            }
+            if (!selected) throw new Error('ongoing season not found')
+
+            const png = Buffer.from(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+              'base64'
+            )
+            const zip = new AdmZip()
+            zip.addFile('10.png', png)
+            zip.addFile('2.png', png)
+            zip.addFile('1.png', png)
+            const form = new FormData()
+            form.append(
+              'archive',
+              new Blob([zip.toBuffer()], { type: 'application/zip' }),
+              'smoke.zip'
+            )
+            const preview = await json('/api/studio/uploads', {
+              method: 'POST',
+              body: form
+            })
+            const names = preview.pages.map(page => page.originalName).join(',')
+            if (names !== '1.png,2.png,10.png') {
+              throw new Error('natural page order failed: ' + names)
+            }
+
+            const created = await json('/api/studio/episodes', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+              },
+              body: JSON.stringify({
+                sessionId: preview.sessionId,
+                seasonId: selected.season.id,
+                number: 9999,
+                title: 'Smoke Episode',
+                pageIds: preview.pages.map(page => page.id)
+              })
+            })
+            const episode = await json(
+              '/api/episodes/' + encodeURIComponent(created.episodeId)
+            )
+            if (episode.pages.length !== 3) {
+              throw new Error('studio episode pages were not persisted')
+            }
+            const imageResponse = await fetch(base + episode.pages[0].imageUrl)
+            if (!imageResponse.ok) {
+              throw new Error('published studio image is unavailable')
+            }
+            console.log('studio-episode=' + created.episodeId)
+          }
+          verifyStudioFlow().catch(error => {
+            console.error(error)
+            process.exit(1)
+          })
+        "
+    } "studio ZIP preview and episode publication"
+
+    Invoke-Checked {
         docker compose exec -T web node -e "
           fetch('http://localhost:3000')
             .then(r => r.ok ? r.text() : Promise.reject(new Error(r.status)))

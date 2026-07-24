@@ -20,6 +20,7 @@ model Author {
 // 작품
 model Series {
   id        String   @id @default(cuid())
+  slug      String   @unique
   authorId  String
   title     String
   synopsis  String

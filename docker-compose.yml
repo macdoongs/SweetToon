@@ -22,6 +22,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-sweettoon}:${POSTGRES_PASSWORD:-sweettoon}@db:5432/${POSTGRES_DB:-sweettoon}
       PORT: 4000
       UPLOAD_DIR: /app/data/uploads
+      PRINT_PROVIDER: ${PRINT_PROVIDER:-mock}
     ports:
       - "${SERVER_PORT:-4000}:4000"
     volumes:

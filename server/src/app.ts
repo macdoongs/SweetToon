@@ -20,6 +20,9 @@ import {
   type StudioUseCases,
 } from "./services/studio-service";
 import { openApiDocument } from "./openapi";
+import type { RequestHandler } from "express";
+import type { Store } from "express-rate-limit";
+import type { SecurityAuditLogger } from "./security/audit-logger";
 
 export type AppOptions = {
   readerRepository: ReaderRepository;
@@ -28,6 +31,10 @@ export type AppOptions = {
   studioService?: StudioUseCases;
   uploadDir?: string;
   allowedOrigins?: string[];
+  studioMutationGuard?: RequestHandler;
+  operationsGuard?: RequestHandler;
+  uploadRateLimitStore?: Store;
+  auditLogger?: SecurityAuditLogger;
 };
 
 export function createApp({
@@ -37,6 +44,10 @@ export function createApp({
   studioService,
   uploadDir = path.join(process.cwd(), "data", "uploads"),
   allowedOrigins = [],
+  studioMutationGuard,
+  operationsGuard,
+  uploadRateLimitStore,
+  auditLogger,
 }: AppOptions): Express {
   const app = express();
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -101,10 +112,20 @@ export function createApp({
   );
   app.use("/api", createReaderRouter(readerRepository));
   if (orderService) {
-    app.use("/api", createOrderRouter(orderService));
+    app.use(
+      "/api",
+      createOrderRouter(orderService, { operationsGuard, auditLogger }),
+    );
   }
   if (studioService) {
-    app.use("/api", createStudioRouter(studioService));
+    app.use(
+      "/api",
+      createStudioRouter(studioService, {
+        mutationGuard: studioMutationGuard,
+        rateLimitStore: uploadRateLimitStore,
+        auditLogger,
+      }),
+    );
   }
 
   app.use(

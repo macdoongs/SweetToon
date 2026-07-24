@@ -110,3 +110,17 @@ model OrderEvent {
   createdAt DateTime @default(now())
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
+
+// 보안 감사 로그 — 원문 IP나 업로드 파일명 대신 최소 정보와 해시만 보관
+model SecurityAuditEvent {
+  id         String   @id @default(cuid())
+  action     String
+  outcome    String
+  statusCode Int
+  ipHash     String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+}

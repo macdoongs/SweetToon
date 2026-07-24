@@ -4,6 +4,7 @@ import request from "supertest";
 import { createApp } from "../app";
 import type { ReaderRepository } from "../repositories/reader-repository";
 import type { StudioUseCases } from "../services/studio-service";
+import type { SecurityAuditLogger } from "../security/audit-logger";
 
 const sessionId = "a62ba8b5-f8aa-4220-a849-55a49be66f5a";
 const pageId = "b74fb5ce-d837-40a6-ab85-e34f67f8668f";
@@ -53,15 +54,38 @@ function studioService(): jest.Mocked<StudioUseCases> {
   };
 }
 
-function app(service = studioService()) {
+function app(
+  service = studioService(),
+  auditLogger?: SecurityAuditLogger,
+) {
   return createApp({
     readerRepository: readerRepository(),
     studioService: service,
+    auditLogger,
     uploadDir: path.join(os.tmpdir(), "sweettoon-studio-route-tests"),
   });
 }
 
 describe("studio routes", () => {
+  it("records a minimal security audit event for upload attempts", async () => {
+    const auditLogger: jest.Mocked<SecurityAuditLogger> = {
+      record: jest.fn().mockResolvedValue(undefined),
+    };
+    await request(app(studioService(), auditLogger))
+      .post("/api/studio/uploads")
+      .attach("archive", Buffer.from("PK archive"), "episode.zip")
+      .expect(201);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(auditLogger.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "studio.upload.preview",
+        outcome: "allowed",
+        statusCode: 201,
+      }),
+    );
+  });
+
   it("updates a creator-defined free reading policy", async () => {
     const service = studioService();
     const response = await request(app(service))

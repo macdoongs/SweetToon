@@ -8,6 +8,10 @@ import type {
   OrderStatus,
   OrderTransitionRequest,
 } from "@/lib/order-types";
+import {
+  loadSecurityAccessKey,
+  saveSecurityAccessKey,
+} from "@/lib/security-access";
 
 const statusLabel: Record<OrderStatus, string> = {
   pending: "접수",
@@ -36,6 +40,9 @@ export function OperationsOrderPage({
   const [orders, setOrders] = useState(initialOrders);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [accessKey, setAccessKey] = useState(() =>
+    loadSecurityAccessKey("operations"),
+  );
 
   async function advance(order: OrderDetail) {
     const action = nextAction[order.status];
@@ -46,6 +53,9 @@ export function OperationsOrderPage({
       const updated = await patchJson<OrderTransitionRequest, OrderDetail>(
         `/api/orders/${encodeURIComponent(order.id)}/status`,
         { status: action.status },
+        accessKey.trim()
+          ? { "x-sweettoon-operations-key": accessKey.trim() }
+          : {},
       );
       setOrders((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
@@ -79,6 +89,24 @@ export function OperationsOrderPage({
           독자 주문 현황으로 돌아가기 →
         </Link>
       </header>
+
+      <details className="operations-security-access">
+        <summary>운영 보안 설정</summary>
+        <label className="field">
+          <span>운영자 접근 키</span>
+          <input
+            autoComplete="off"
+            onChange={(event) => {
+              setAccessKey(event.target.value);
+              saveSecurityAccessKey("operations", event.target.value);
+            }}
+            placeholder="운영 strict 모드에서만 필요"
+            type="password"
+            value={accessKey}
+          />
+        </label>
+        <p>키는 현재 탭의 sessionStorage에만 보관됩니다.</p>
+      </details>
 
       {error ? (
         <p className="operations-error" role="alert">{error}</p>

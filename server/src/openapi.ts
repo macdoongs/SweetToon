@@ -210,6 +210,7 @@ export const openApiDocument = {
       patch: {
         tags: ["Orders"],
         summary: "데모 제작 상태를 다음 단계로 변경합니다.",
+        security: [{ operationsApiKey: [] }, {}],
         parameters: [{ $ref: "#/components/parameters/Id" }],
         requestBody: {
           required: true,
@@ -245,6 +246,7 @@ export const openApiDocument = {
       post: {
         tags: ["Studio"],
         summary: "ZIP/CBZ를 검증하고 자연 정렬된 미리보기를 만듭니다.",
+        security: [{ studioApiKey: [] }, {}],
         requestBody: {
           required: true,
           content: {
@@ -273,6 +275,7 @@ export const openApiDocument = {
       post: {
         tags: ["Studio"],
         summary: "확인한 페이지 순서로 에피소드를 발행합니다.",
+        security: [{ studioApiKey: [] }, {}],
         requestBody: {
           required: true,
           content: {
@@ -310,6 +313,7 @@ export const openApiDocument = {
       patch: {
         tags: ["Studio"],
         summary: "작품별 무료 권·추가 미리보기 화 수를 변경합니다.",
+        security: [{ studioApiKey: [] }, {}],
         parameters: [
           {
             name: "seriesId",
@@ -339,6 +343,18 @@ export const openApiDocument = {
         type: "http",
         scheme: "bearer",
         description: "Mock 주문 생성 시 브라우저가 보관하는 requestKey",
+      },
+      studioApiKey: {
+        type: "apiKey",
+        in: "header",
+        name: "x-sweettoon-studio-key",
+        description: "API_SECURITY_MODE=strict일 때 필요한 작가 도구 접근 키",
+      },
+      operationsApiKey: {
+        type: "apiKey",
+        in: "header",
+        name: "x-sweettoon-operations-key",
+        description: "API_SECURITY_MODE=strict일 때 필요한 운영 도구 접근 키",
       },
     },
     parameters: {

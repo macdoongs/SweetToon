@@ -19,6 +19,7 @@
 - 세로/양면 리더, 익명 책갈피·진행도, 한국 시간 주문 타임라인
 - Swagger/OpenAPI와 filesystem/R2 교체형 작품 스토리지
 - 업로드 속도 제한·보안 헤더·CORS allowlist와 원본/파생본 버킷 분리
+- Redis 공유 속도 제한, 운영 API key 경계, 보안 감사 로그와 선택적 ClamAV 검사
 
 ## 구현 우선순위
 

@@ -8,6 +8,10 @@ import type {
   UploadSession,
 } from "../uploads/upload-session-storage";
 import { StudioService } from "./studio-service";
+import {
+  MalwareDetectedError,
+  type MalwareScanner,
+} from "../security/malware-scanner";
 
 const session: UploadSession = {
   id: "a62ba8b5-f8aa-4220-a849-55a49be66f5a",
@@ -49,7 +53,7 @@ const input: CreateEpisodeRequest = {
   pageIds: session.pages.map((page) => page.id),
 };
 
-function makeDependencies() {
+function makeDependencies(malwareScanner?: MalwareScanner) {
   const repository: jest.Mocked<StudioRepository> = {
     findSeason: jest.fn().mockResolvedValue(season),
     createEpisode: jest.fn().mockResolvedValue({ id: "episode-12" }),
@@ -75,11 +79,29 @@ function makeDependencies() {
   return {
     repository,
     storage,
-    service: new StudioService(repository, storage),
+    service: new StudioService(repository, storage, malwareScanner),
   };
 }
 
 describe("StudioService", () => {
+  it("rejects a malware finding before archive analysis or staging", async () => {
+    const malwareScanner: MalwareScanner = {
+      name: "test",
+      scan: jest
+        .fn()
+        .mockRejectedValue(new MalwareDetectedError("test-signature")),
+    };
+    const { service, storage } = makeDependencies(malwareScanner);
+
+    await expect(
+      service.previewArchive("episode.zip", Buffer.from("PK archive")),
+    ).rejects.toMatchObject({
+      code: "ARCHIVE_MALWARE_DETECTED",
+      status: 422,
+    });
+    expect(storage.createSession).not.toHaveBeenCalled();
+  });
+
   it("publishes files in the confirmed order and creates one episode", async () => {
     const { service, repository, storage } = makeDependencies();
     const reversed = {

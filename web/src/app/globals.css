@@ -1168,6 +1168,44 @@ button {
   font-weight: 850;
 }
 
+.operations-security-access,
+.studio-security-access {
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.operations-security-access {
+  width: var(--content);
+  margin: -18px auto 28px;
+  padding: 14px 18px;
+}
+
+.studio-security-access {
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: var(--paper);
+}
+
+.operations-security-access summary,
+.studio-security-access summary {
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.operations-security-access .field,
+.studio-security-access .field {
+  max-width: 420px;
+  margin-top: 14px;
+}
+
+.operations-security-access p,
+.studio-security-access p {
+  margin: 8px 0 0;
+}
+
 .order-layout {
   width: var(--content);
   margin: 0 auto;

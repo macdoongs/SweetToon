@@ -45,8 +45,8 @@ export function OrderListPage({ orders }: { orders: OrderDetail[] }) {
                   <Image
                     alt=""
                     height={168}
+                    sizes="(max-width: 700px) 64px, 86px"
                     src={order.series.coverUrl}
-                    unoptimized
                     width={120}
                   />
                 ) : (

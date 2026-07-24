@@ -1,5 +1,6 @@
 import path from "node:path";
 import AdmZip from "adm-zip";
+import sharp, { type Metadata } from "sharp";
 
 export const ARCHIVE_LIMITS = {
   maxArchiveBytes: 25 * 1024 * 1024,
@@ -7,6 +8,9 @@ export const ARCHIVE_LIMITS = {
   maxImages: 80,
   maxImageBytes: 12 * 1024 * 1024,
   maxExpandedBytes: 160 * 1024 * 1024,
+  maxImagePixels: 40_000_000,
+  maxImageWidth: 8_000,
+  maxImageHeight: 30_000,
 } as const;
 
 export type RasterKind = "png" | "jpeg" | "webp";
@@ -83,7 +87,46 @@ function expectedKind(extension: string): RasterKind | null {
   return null;
 }
 
-export function analyzeArchive(buffer: Buffer): AnalyzedImage[] {
+async function validateImageDimensions(data: Buffer): Promise<void> {
+  let metadata: Metadata;
+  try {
+    metadata = await sharp(data, {
+      animated: true,
+      failOn: "error",
+      limitInputPixels: ARCHIVE_LIMITS.maxImagePixels,
+    }).metadata();
+  } catch {
+    throw new ArchiveValidationError(
+      "IMAGE_DECODE_FAILED",
+      "열 수 없거나 픽셀 크기가 너무 큰 이미지가 포함되어 있습니다.",
+    );
+  }
+
+  if (!metadata.width || !metadata.height) {
+    throw new ArchiveValidationError(
+      "IMAGE_DIMENSIONS_INVALID",
+      "가로·세로 크기를 확인할 수 없는 이미지가 포함되어 있습니다.",
+    );
+  }
+  if (
+    metadata.width > ARCHIVE_LIMITS.maxImageWidth ||
+    metadata.height > ARCHIVE_LIMITS.maxImageHeight ||
+    metadata.width * metadata.height > ARCHIVE_LIMITS.maxImagePixels
+  ) {
+    throw new ArchiveValidationError(
+      "IMAGE_DIMENSIONS_TOO_LARGE",
+      "이미지는 가로 8,000px, 세로 30,000px, 총 4천만 픽셀 이하여야 합니다.",
+    );
+  }
+  if ((metadata.pages ?? 1) > 1) {
+    throw new ArchiveValidationError(
+      "ANIMATED_IMAGE_UNSUPPORTED",
+      "움직이는 WebP는 원고로 등록할 수 없습니다. 정지 이미지로 바꿔 주세요.",
+    );
+  }
+}
+
+export async function analyzeArchive(buffer: Buffer): Promise<AnalyzedImage[]> {
   if (buffer.length === 0 || buffer.length > ARCHIVE_LIMITS.maxArchiveBytes) {
     throw new ArchiveValidationError(
       "ARCHIVE_SIZE_INVALID",
@@ -137,7 +180,8 @@ export function analyzeArchive(buffer: Buffer): AnalyzedImage[] {
 
   let expandedBytes = 0;
   let actualExpandedBytes = 0;
-  const images = fileEntries.map((entry) => {
+  const images: AnalyzedImage[] = [];
+  for (const entry of fileEntries) {
     if (hasUnsafePath(entry.entryName)) {
       throw new ArchiveValidationError(
         "UNSAFE_ARCHIVE_PATH",
@@ -210,15 +254,16 @@ export function analyzeArchive(buffer: Buffer): AnalyzedImage[] {
       );
     }
 
-    return {
+    await validateImageDimensions(data);
+    images.push({
       originalName: entry.entryName,
       extension:
         detected === "jpeg"
           ? "jpg"
           : detected,
       data,
-    } satisfies AnalyzedImage;
-  });
+    });
+  }
 
   return images.sort((left, right) =>
     naturalCollator.compare(left.originalName, right.originalName),

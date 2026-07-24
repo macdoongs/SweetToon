@@ -1,9 +1,15 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { AnalyzedImage } from "./archive-analyzer";
+import sharp from "sharp";
+import {
+  ARCHIVE_LIMITS,
+  type AnalyzedImage,
+} from "./archive-analyzer";
 
 const SESSION_TTL_MS = 60 * 60 * 1000;
+const READER_IMAGE_WIDTH = 1_600;
+const READER_IMAGE_QUALITY = 82;
 
 export type StoredPage = {
   id: string;
@@ -160,18 +166,46 @@ export class FileStudioStorage implements StudioStorage {
     fs.mkdirSync(destination, { recursive: false });
 
     try {
-      const imageUrls = orderedPageIds.map((pageId, index) => {
+      const originalDirectory = path.join(destination, ".original");
+      const readerDirectory = path.join(destination, "reader");
+      await fs.promises.mkdir(originalDirectory);
+      await fs.promises.mkdir(readerDirectory);
+
+      const imageUrls: string[] = [];
+      // Sequential processing bounds libvips memory while a large episode is
+      // being published.
+      for (const [index, pageId] of orderedPageIds.entries()) {
         const page = session.pages.find((candidate) => candidate.id === pageId);
         if (!page) throw new Error("Unknown staged page");
         const extension = path.extname(page.storedName);
-        const outputName = `${String(index + 1).padStart(3, "0")}${extension}`;
-        fs.copyFileSync(
-          path.join(this.sessionDir(session.id), page.storedName),
-          path.join(destination, outputName),
+        const baseName = String(index + 1).padStart(3, "0");
+        const sourcePath = path.join(
+          this.sessionDir(session.id),
+          page.storedName,
+        );
+        await fs.promises.copyFile(
+          sourcePath,
+          path.join(originalDirectory, `${baseName}${extension}`),
           fs.constants.COPYFILE_EXCL,
         );
-        return `/api/images/studio/${safeSegments.join("/")}/${outputName}`;
-      });
+        await sharp(sourcePath, {
+          failOn: "error",
+          limitInputPixels: ARCHIVE_LIMITS.maxImagePixels,
+        })
+          .rotate()
+          .resize({
+            width: READER_IMAGE_WIDTH,
+            withoutEnlargement: true,
+          })
+          .webp({
+            effort: 4,
+            quality: READER_IMAGE_QUALITY,
+          })
+          .toFile(path.join(readerDirectory, `${baseName}.webp`));
+        imageUrls.push(
+          `/api/images/studio/${safeSegments.join("/")}/reader/${baseName}.webp`,
+        );
+      }
       return { directory: destination, imageUrls };
     } catch (error) {
       fs.rmSync(destination, { recursive: true, force: true });

@@ -50,7 +50,7 @@ export class StudioService implements StudioUseCases {
   ): Promise<UploadPreview> {
     let images;
     try {
-      images = analyzeArchive(buffer);
+      images = await analyzeArchive(buffer);
     } catch (error) {
       if (error instanceof ArchiveValidationError) {
         throw new StudioServiceError(error.code, error.message, 400);

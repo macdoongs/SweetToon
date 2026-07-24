@@ -95,9 +95,9 @@ export function SeriesDetailPage({
             <Image
               alt={`${series.title} 표지`}
               height={840}
-              priority
+              preload
+              sizes="(max-width: 700px) min(300px, 82vw), 360px"
               src={series.coverUrl}
-              unoptimized
               width={600}
             />
           ) : (

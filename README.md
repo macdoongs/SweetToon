@@ -57,6 +57,7 @@ API-first 경계를 보여주고, 이미지·압축 파일 처리와 웹 렌더�
 ## 개발 규약과 검증 하네스
 
 - [`AGENTS.md`](./AGENTS.md) — 사람·Codex·Claude가 공유하는 아키텍처와 안전 규약
+- [`docs/ROADMAP.md`](./docs/ROADMAP.md) — 남은 사용자 흐름과 비대상 범위
 - [`docs/REVIEW_CHECKLIST.md`](./docs/REVIEW_CHECKLIST.md) — 과제 기준과 PR 리뷰 체크리스트
 - `scripts/verify-web.ps1` — 의존성, audit, lint, Next.js production build
 - `scripts/verify-server.ps1` — 의존성, audit, Prisma 검증, TypeScript build, Jest

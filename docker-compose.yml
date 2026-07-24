@@ -51,6 +51,8 @@ services:
     environment:
       HOSTNAME: 0.0.0.0
       PORT: 3000
+      API_INTERNAL_URL: http://server:4000
+      SITE_URL: ${SITE_URL:-https://sweettoon.katsuranbo.com}
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:

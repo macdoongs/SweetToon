@@ -34,8 +34,12 @@ function SeriesCover({
   );
 }
 
-export function HomePage() {
-  const [data, setData] = useState<SeriesListResponse | null>(null);
+export function HomePage({
+  initialData = null,
+}: {
+  initialData?: SeriesListResponse | null;
+}) {
+  const [data, setData] = useState<SeriesListResponse | null>(initialData);
   const [error, setError] = useState<string | null>(null);
   const [requestKey, setRequestKey] = useState(0);
 
@@ -45,6 +49,10 @@ export function HomePage() {
   }, []);
 
   useEffect(() => {
+    if (initialData && requestKey === 0) {
+      return;
+    }
+
     const controller = new AbortController();
     getJson<SeriesListResponse>("/api/series", controller.signal)
       .then(setData)
@@ -58,7 +66,7 @@ export function HomePage() {
         }
       });
     return () => controller.abort();
-  }, [requestKey]);
+  }, [initialData, requestKey]);
 
   if (error) {
     return <ErrorState message={error} onRetry={retry} />;
@@ -68,7 +76,7 @@ export function HomePage() {
 
   return (
     <main>
-      <section className="hero">
+      <header className="hero">
         <div className="hero__copy">
           <p className="eyebrow">웹툰의 마지막 장면, 그다음</p>
           <h1>
@@ -109,7 +117,7 @@ export function HomePage() {
             <div className="skeleton skeleton--hero" />
           </div>
         )}
-      </section>
+      </header>
 
       <section className="discover-section" id="discover">
         <div className="section-heading">

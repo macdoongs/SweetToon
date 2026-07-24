@@ -524,6 +524,30 @@ button {
   padding-bottom: 100px;
 }
 
+.page-breadcrumb {
+  width: var(--content);
+  margin: 0 auto;
+  padding-top: 30px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.page-breadcrumb a {
+  transition: color 150ms ease;
+}
+
+.page-breadcrumb a:hover {
+  color: var(--coral-dark);
+}
+
+.page-breadcrumb strong {
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .series-hero,
 .episode-library,
 .edition-card {
@@ -892,8 +916,19 @@ body:has(.reader-page) .site-header {
   }
 
   .series-hero {
-    padding: 42px 0 56px;
+    padding: 34px 0 56px;
     grid-template-columns: 1fr;
+  }
+
+  .page-breadcrumb {
+    padding-top: 22px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .page-breadcrumb strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .series-hero__cover {

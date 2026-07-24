@@ -4,11 +4,18 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, getJson } from "@/lib/api";
+import { episodeLabel } from "@/lib/episode-label";
 import type { EpisodeReader } from "@/lib/reader-types";
 import { ErrorState, PageLoading } from "./reader-states";
 
-export function EpisodeReaderPage({ episodeId }: { episodeId: string }) {
-  const [episode, setEpisode] = useState<EpisodeReader | null>(null);
+export function EpisodeReaderPage({
+  episodeId,
+  initialData = null,
+}: {
+  episodeId: string;
+  initialData?: EpisodeReader | null;
+}) {
+  const [episode, setEpisode] = useState<EpisodeReader | null>(initialData);
   const [error, setError] = useState<{ message: string; status?: number } | null>(
     null,
   );
@@ -21,6 +28,10 @@ export function EpisodeReaderPage({ episodeId }: { episodeId: string }) {
   }, []);
 
   useEffect(() => {
+    if (initialData && requestKey === 0) {
+      return;
+    }
+
     const controller = new AbortController();
     getJson<EpisodeReader>(`/api/episodes/${episodeId}`, controller.signal)
       .then(setEpisode)
@@ -36,7 +47,7 @@ export function EpisodeReaderPage({ episodeId }: { episodeId: string }) {
         }
       });
     return () => controller.abort();
-  }, [episodeId, requestKey]);
+  }, [episodeId, initialData, requestKey]);
 
   useEffect(() => {
     const updateProgress = () => {
@@ -89,9 +100,7 @@ export function EpisodeReaderPage({ episodeId }: { episodeId: string }) {
           <span>
             {episode.series.title} · 시즌 {episode.season.number}
           </span>
-          <strong>
-            {episode.number}화 {episode.title}
-          </strong>
+          <strong>{episodeLabel(episode.number, episode.title)}</strong>
         </div>
         <span className="reader-toolbar__progress">{progress}%</span>
       </header>

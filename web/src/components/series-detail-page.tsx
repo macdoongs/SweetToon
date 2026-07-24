@@ -14,8 +14,14 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-export function SeriesDetailPage({ slug }: { slug: string }) {
-  const [series, setSeries] = useState<SeriesDetail | null>(null);
+export function SeriesDetailPage({
+  slug,
+  initialData = null,
+}: {
+  slug: string;
+  initialData?: SeriesDetail | null;
+}) {
+  const [series, setSeries] = useState<SeriesDetail | null>(initialData);
   const [error, setError] = useState<{ message: string; status?: number } | null>(
     null,
   );
@@ -27,6 +33,10 @@ export function SeriesDetailPage({ slug }: { slug: string }) {
   }, []);
 
   useEffect(() => {
+    if (initialData && requestKey === 0) {
+      return;
+    }
+
     const controller = new AbortController();
     getJson<SeriesDetail>(`/api/series/${slug}`, controller.signal)
       .then(setSeries)
@@ -42,7 +52,7 @@ export function SeriesDetailPage({ slug }: { slug: string }) {
         }
       });
     return () => controller.abort();
-  }, [requestKey, slug]);
+  }, [initialData, requestKey, slug]);
 
   const firstEpisode = useMemo(
     () => series?.seasons.flatMap((season) => season.episodes)[0],
@@ -69,7 +79,14 @@ export function SeriesDetailPage({ slug }: { slug: string }) {
 
   return (
     <main className="series-page">
-      <div className="series-hero">
+      <nav className="page-breadcrumb" aria-label="현재 위치">
+        <Link href="/">홈</Link>
+        <span aria-hidden="true">/</span>
+        <Link href="/#discover">작품</Link>
+        <span aria-hidden="true">/</span>
+        <strong aria-current="page">{series.title}</strong>
+      </nav>
+      <header className="series-hero">
         <div className="series-hero__cover">
           {series.coverUrl ? (
             <Image
@@ -119,7 +136,7 @@ export function SeriesDetailPage({ slug }: { slug: string }) {
             </a>
           </div>
         </div>
-      </div>
+      </header>
 
       <section className="episode-library">
         <div className="section-heading section-heading--compact">

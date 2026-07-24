@@ -4,20 +4,25 @@ import path from "node:path";
 import fs from "node:fs";
 import type { ReaderRepository } from "./repositories/reader-repository";
 import { createReaderRouter } from "./routes/reader";
-import {
-  createPrintProvider,
-} from "./printing/mock-print-provider";
+import { createPrintProvider } from "./printing/mock-print-provider";
 import type { PrintProvider } from "./printing/print-provider";
+import { createOrderRouter } from "./routes/order";
+import {
+  OrderServiceError,
+  type OrderUseCases,
+} from "./services/order-service";
 
 export type AppOptions = {
   readerRepository: ReaderRepository;
   printProvider?: PrintProvider;
+  orderService?: OrderUseCases;
   uploadDir?: string;
 };
 
 export function createApp({
   readerRepository,
   printProvider = createPrintProvider(),
+  orderService,
   uploadDir = path.join(process.cwd(), "data", "uploads"),
 }: AppOptions): Express {
   const app = express();
@@ -40,6 +45,9 @@ export function createApp({
     }),
   );
   app.use("/api", createReaderRouter(readerRepository));
+  if (orderService) {
+    app.use("/api", createOrderRouter(orderService));
+  }
 
   app.use(
     (
@@ -48,6 +56,13 @@ export function createApp({
       res: express.Response,
       _next: express.NextFunction,
     ) => {
+      if (error instanceof OrderServiceError) {
+        res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
       console.error(error);
       res.status(500).json({
         code: "INTERNAL_ERROR",

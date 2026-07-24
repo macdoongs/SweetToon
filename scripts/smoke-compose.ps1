@@ -98,6 +98,79 @@ try {
 
     Invoke-Checked {
         docker compose exec -T web node -e "
+          const base = 'http://localhost:3000'
+          async function json(path, options) {
+            const response = await fetch(base + path, options)
+            if (!response.ok) {
+              throw new Error(path + ' returned ' + response.status)
+            }
+            return response.json()
+          }
+          async function verifyOrderFlow() {
+            const list = await json('/api/series')
+            let selected
+            for (const item of list.items) {
+              const detail = await json(
+                '/api/series/' + encodeURIComponent(item.slug)
+              )
+              const season = detail.seasons.find(
+                candidate => candidate.status === 'completed'
+              )
+              if (season) {
+                selected = { detail, season }
+                break
+              }
+            }
+            if (!selected) throw new Error('completed season not found')
+
+            const specification = {
+              seasonId: selected.season.id,
+              bookSize: 'A5',
+              coverType: 'softcover',
+              quantity: 1
+            }
+            const headers = {
+              'Content-Type': 'application/json',
+              Accept: 'application/json'
+            }
+            const quote = await json('/api/print-quotes', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(specification)
+            })
+            if (quote.pageCount < 1 || quote.totalPrice < 1) {
+              throw new Error('invalid print quote')
+            }
+            const order = await json('/api/orders', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                ...specification,
+                requestKey: crypto.randomUUID(),
+                ordererName: '스모크검증'
+              })
+            })
+            const persisted = await json(
+              '/api/orders/' + encodeURIComponent(order.id)
+            )
+            if (
+              persisted.status !== 'pending' ||
+              persisted.events.length < 1 ||
+              !persisted.providerOrderId
+            ) {
+              throw new Error('persistent order verification failed')
+            }
+            console.log('order=' + persisted.id)
+          }
+          verifyOrderFlow().catch(error => {
+            console.error(error)
+            process.exit(1)
+          })
+        "
+    } "mock quote and persistent order flow"
+
+    Invoke-Checked {
+        docker compose exec -T web node -e "
           fetch('http://localhost:3000')
             .then(r => r.ok ? r.text() : Promise.reject(new Error(r.status)))
             .then(html => {

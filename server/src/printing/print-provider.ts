@@ -1,9 +1,11 @@
 export type BookBinding = "perfect";
 export type BookSize = "A5" | "B5";
+export type CoverType = "softcover" | "hardcover";
 
 export interface PrintSpecification {
   size: BookSize;
   binding: BookBinding;
+  coverType: CoverType;
   pageCount: number;
   quantity: number;
 }

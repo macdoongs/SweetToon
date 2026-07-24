@@ -4,6 +4,7 @@ import type {
   SeriesDetail,
   SeriesListResponse,
 } from "./reader-types";
+import type { OrderDetail, OrderListResponse } from "./order-types";
 
 const API_INTERNAL_URL =
   process.env.API_INTERNAL_URL ?? "http://localhost:4000";
@@ -18,10 +19,15 @@ export class ServerApiError extends Error {
   }
 }
 
-async function serverGetJson<T>(path: string): Promise<T> {
+async function serverGetJson<T>(
+  path: string,
+  options: { fresh?: boolean } = {},
+): Promise<T> {
   const response = await fetch(`${API_INTERNAL_URL}${path}`, {
     headers: { Accept: "application/json" },
-    next: { revalidate: 300 },
+    ...(options.fresh
+      ? { cache: "no-store" as const }
+      : { next: { revalidate: 300 } }),
   });
 
   if (!response.ok) {
@@ -47,4 +53,14 @@ export function getSeriesDetail(slug: string): Promise<SeriesDetail> {
 
 export function getEpisode(episodeId: string): Promise<EpisodeReader> {
   return serverGetJson(`/api/episodes/${encodeURIComponent(episodeId)}`);
+}
+
+export function getOrders(): Promise<OrderListResponse> {
+  return serverGetJson("/api/orders", { fresh: true });
+}
+
+export function getOrder(orderId: string): Promise<OrderDetail> {
+  return serverGetJson(`/api/orders/${encodeURIComponent(orderId)}`, {
+    fresh: true,
+  });
 }

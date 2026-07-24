@@ -5,6 +5,7 @@ test("mock 견적은 외부 요청 없이 재현 가능한 금액을 계산한�
   const quote = await provider.quote({
     size: "A5",
     binding: "perfect",
+    coverType: "softcover",
     pageCount: 100,
     quantity: 2,
   });
@@ -32,6 +33,7 @@ test("mock 주문은 외부 전송 없이 메모리에서 상태를 조회한다
     specification: {
       size: "B5",
       binding: "perfect",
+      coverType: "hardcover",
       pageCount: 160,
       quantity: 1,
     },

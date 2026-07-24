@@ -13,8 +13,9 @@ export class MockPrintProvider implements PrintProvider {
 
   async quote(specification: PrintSpecification): Promise<PrintQuote> {
     const basePrice = specification.size === "B5" ? 4_800 : 4_200;
+    const coverPrice = specification.coverType === "hardcover" ? 3_500 : 0;
     const pagePrice = specification.pageCount * 35;
-    const unitPrice = basePrice + pagePrice;
+    const unitPrice = basePrice + coverPrice + pagePrice;
 
     return {
       provider: "mock",

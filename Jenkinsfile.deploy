@@ -73,7 +73,8 @@ pipeline {
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web \
                       node -e "fetch('http://localhost:3000').then(r => { if (!r.ok) process.exit(1); console.log('web ok') }).catch(() => process.exit(1))"
                     curl --fail --silent --show-error \
-                      https://sweettoon.katsuranbo.com/ >/dev/null
+                      -H 'Host: sweettoon.katsuranbo.com' \
+                      http://127.0.0.1/ >/dev/null
                 '''
             }
         }

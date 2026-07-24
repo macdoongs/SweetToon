@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { HomePage } from "@/components/home-page";
 import { JsonLd } from "@/components/json-ld";
 import { getSeriesList } from "@/lib/server-api";
+import { parseSeriesFilter } from "@/lib/series-filter";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +13,13 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export default async function Home() {
-  const data = await getSeriesList();
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ filter?: string | string[] }>;
+}) {
+  const filter = parseSeriesFilter((await searchParams).filter);
+  const data = await getSeriesList(filter);
 
   return (
     <>
@@ -28,7 +34,7 @@ export default async function Home() {
           inLanguage: "ko-KR",
         }}
       />
-      <HomePage initialData={data} />
+      <HomePage activeFilter={filter} initialData={data} key={filter} />
     </>
   );
 }

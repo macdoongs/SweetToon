@@ -3,6 +3,7 @@ import {
   EpisodeReaderSchema,
   IdParamSchema,
   SeriesDetailSchema,
+  SeriesFilterSchema,
   SeriesListResponseSchema,
   SlugParamSchema,
 } from "../contracts/reader";
@@ -11,9 +12,18 @@ import type { ReaderRepository } from "../repositories/reader-repository";
 export function createReaderRouter(repository: ReaderRepository): Router {
   const router = Router();
 
-  router.get("/series", async (_req, res) => {
+  router.get("/series", async (req, res) => {
+    const parsedFilter = SeriesFilterSchema.safeParse(req.query.filter ?? "all");
+    if (!parsedFilter.success) {
+      res.status(400).json({
+        code: "INVALID_SERIES_FILTER",
+        message: "작품 필터가 올바르지 않습니다.",
+      });
+      return;
+    }
+
     const result = SeriesListResponseSchema.parse(
-      await repository.listSeries(),
+      await repository.listSeries(parsedFilter.data),
     );
     res.json(result);
   });

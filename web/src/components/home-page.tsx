@@ -5,12 +5,37 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { getJson } from "@/lib/api";
 import type { SeriesListResponse, SeriesSummary } from "@/lib/reader-types";
+import {
+  seriesFilterQuery,
+  type SeriesFilter,
+} from "@/lib/series-filter";
 import { ErrorState, LoadingCards } from "./reader-states";
 
 const statusLabel = {
   ongoing: "연재 중",
   completed: "완결",
 } as const;
+
+const filterOptions: Array<{
+  value: SeriesFilter;
+  label: string;
+  description: string;
+}> = [
+  { value: "all", label: "전체", description: "모든 작품" },
+  { value: "ongoing", label: "연재 중", description: "새 화가 이어지는 작품" },
+  {
+    value: "collectible",
+    label: "완결·소장 가능",
+    description: "완결 시즌을 책으로 만들 수 있는 작품",
+  },
+];
+
+function formatLatestDate(value: string) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(value));
+}
 
 function SeriesCover({
   series,
@@ -35,8 +60,10 @@ function SeriesCover({
 }
 
 export function HomePage({
+  activeFilter,
   initialData = null,
 }: {
+  activeFilter: SeriesFilter;
   initialData?: SeriesListResponse | null;
 }) {
   const [data, setData] = useState<SeriesListResponse | null>(initialData);
@@ -54,7 +81,10 @@ export function HomePage({
     }
 
     const controller = new AbortController();
-    getJson<SeriesListResponse>("/api/series", controller.signal)
+    getJson<SeriesListResponse>(
+      seriesFilterQuery(activeFilter),
+      controller.signal,
+    )
       .then(setData)
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
@@ -66,7 +96,7 @@ export function HomePage({
         }
       });
     return () => controller.abort();
-  }, [initialData, requestKey]);
+  }, [activeFilter, initialData, requestKey]);
 
   if (error) {
     return <ErrorState message={error} onRetry={retry} />;
@@ -120,75 +150,135 @@ export function HomePage({
       </header>
 
       <section className="discover-section" id="discover">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">지금 펼쳐볼 이야기</p>
-            <h2>당신의 다음 웹툰</h2>
+        <div className="discover-section__inner">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">지금 펼쳐볼 이야기</p>
+              <h2>당신의 다음 웹툰</h2>
+            </div>
+            <p>
+              완결작은 한 권으로 소장할 수 있고,
+              <br className="desktop-only" /> 연재작은 새 화를 이어서 볼 수
+              있어요.
+            </p>
           </div>
-          <p>
-            완결작은 한 권으로 소장할 수 있고,
-            <br className="desktop-only" /> 연재작은 새 화를 이어서 볼 수
-            있어요.
-          </p>
-        </div>
 
-        {!data ? (
-          <LoadingCards />
-        ) : data.items.length === 0 ? (
-          <div className="empty-library">
-            <span>첫 작품을 준비하고 있어요.</span>
-            <p>잠시 후 다시 찾아와 주세요.</p>
-          </div>
-        ) : (
-          <div className="card-grid">
-            {data.items.map((series) => (
-              <article className="series-card" key={series.id}>
-                <Link
-                  className="series-card__image"
-                  href={`/series/${series.slug}`}
-                >
-                  <SeriesCover series={series} />
-                  <span
-                    className={`status-badge status-badge--${series.status}`}
-                  >
-                    {statusLabel[series.status]}
-                  </span>
-                </Link>
-                <div className="series-card__body">
-                  <div className="series-card__meta">
-                    <span>{series.genre}</span>
-                    <span>{series.author.name}</span>
-                  </div>
-                  <h3>
-                    <Link href={`/series/${series.slug}`}>{series.title}</Link>
-                  </h3>
-                  <p>{series.synopsis}</p>
-                  <div className="series-card__footer">
-                    <span>{series.episodeCount}화</span>
-                    {series.completedSeasonCount > 0 ? (
-                      <span>소장 가능 {series.completedSeasonCount}시즌</span>
-                    ) : (
-                      <span>매주 이어지는 이야기</span>
-                    )}
-                  </div>
-                </div>
-              </article>
+          <nav className="discover-filters" aria-label="작품 상태 필터">
+            {filterOptions.map((option) => (
+              <Link
+                aria-current={
+                  option.value === activeFilter ? "page" : undefined
+                }
+                className="discover-filter"
+                href={
+                  option.value === "all"
+                    ? "/#discover"
+                    : `/?filter=${option.value}#discover`
+                }
+                key={option.value}
+                title={option.description}
+              >
+                {option.label}
+              </Link>
             ))}
-          </div>
-        )}
+            {data ? (
+              <span className="discover-filter__count">
+                {data.items.length}개 작품
+              </span>
+            ) : null}
+          </nav>
+
+          {!data ? (
+            <LoadingCards />
+          ) : data.items.length === 0 ? (
+            <div className="empty-library">
+              <span>
+                {activeFilter === "ongoing"
+                  ? "지금 연재 중인 작품이 없어요."
+                  : activeFilter === "collectible"
+                    ? "아직 소장 가능한 완결 시즌이 없어요."
+                    : "첫 작품을 준비하고 있어요."}
+              </span>
+              <p>다른 분류의 작품을 먼저 만나 보세요.</p>
+              {activeFilter !== "all" ? (
+                <Link className="text-link" href="/#discover">
+                  전체 작품 보기 →
+                </Link>
+              ) : null}
+            </div>
+          ) : (
+            <div className="card-grid">
+              {data.items.map((series) => (
+                <article className="series-card" key={series.id}>
+                  <Link
+                    className="series-card__image"
+                    href={`/series/${series.slug}`}
+                  >
+                    <SeriesCover series={series} />
+                    <span
+                      className={`status-badge status-badge--${series.status}`}
+                    >
+                      {statusLabel[series.status]}
+                    </span>
+                  </Link>
+                  <div className="series-card__body">
+                    <span className="series-card__genre">{series.genre}</span>
+                    <h3>
+                      <Link href={`/series/${series.slug}`}>
+                        {series.title}
+                      </Link>
+                    </h3>
+                    <p className="series-card__author">{series.author.name}</p>
+                    {series.latestEpisode ? (
+                      <Link
+                        className="series-card__latest"
+                        href={`/read/${series.latestEpisode.id}`}
+                        aria-label={`${series.title} 최신 ${series.latestEpisode.number}화 ${series.latestEpisode.title} 읽기`}
+                      >
+                        <span>최신 {series.latestEpisode.number}화</span>
+                        <strong>{series.latestEpisode.title}</strong>
+                        <time dateTime={series.latestEpisode.publishedAt}>
+                          {formatLatestDate(series.latestEpisode.publishedAt)}
+                        </time>
+                      </Link>
+                    ) : (
+                      <div className="series-card__latest series-card__latest--empty">
+                        첫 에피소드를 준비하고 있어요
+                      </div>
+                    )}
+                    <div className="series-card__footer">
+                      <span>총 {series.episodeCount}화</span>
+                      {series.completedSeasonCount > 0 ? (
+                        <span className="series-card__collectible">
+                          소장 가능 {series.completedSeasonCount}시즌
+                        </span>
+                      ) : (
+                        <span>새 화 연재 중</span>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="print-promise">
-        <p className="eyebrow">From scroll to shelf</p>
-        <h2>스크롤로 만난 이야기를, 종이 위에서 다시.</h2>
-        <p>
-          완결 시즌의 에피소드를 순서대로 묶어 표지와 판형을 고르면
-          나만의 소장본 주문으로 이어집니다.
-        </p>
-        <div className="print-promise__steps" aria-label="소장본 이용 순서">
-          <span>01 작품 감상</span>
-          <span>02 완결 시즌 선택</span>
-          <span>03 단행본 주문</span>
+        <div className="print-promise__inner">
+          <div className="print-promise__copy">
+            <p className="eyebrow">From scroll to shelf</p>
+            <h2>스크롤로 만난 이야기를, 종이 위에서 다시.</h2>
+            <p>
+              완결 시즌의 에피소드를 순서대로 묶어 표지와 판형을 고르면
+              나만의 소장본 주문으로 이어집니다.
+            </p>
+          </div>
+          <div className="print-promise__steps" aria-label="소장본 이용 순서">
+            <span>01 작품 감상</span>
+            <span>02 완결 시즌 선택</span>
+            <span>03 단행본 주문</span>
+          </div>
         </div>
       </section>
     </main>

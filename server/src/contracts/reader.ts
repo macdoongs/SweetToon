@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const PublicationStatusSchema = z.enum(["ongoing", "completed"]);
+export const SeriesFilterSchema = z.enum(["all", "ongoing", "collectible"]);
 
 export const EpisodeSummarySchema = z.object({
   id: z.string(),
@@ -89,3 +90,4 @@ export const IdParamSchema = z.string().min(1).max(80);
 export type SeriesListResponse = z.infer<typeof SeriesListResponseSchema>;
 export type SeriesDetail = z.infer<typeof SeriesDetailSchema>;
 export type EpisodeReader = z.infer<typeof EpisodeReaderSchema>;
+export type SeriesFilter = z.infer<typeof SeriesFilterSchema>;

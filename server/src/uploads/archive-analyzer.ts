@@ -153,6 +153,15 @@ export function analyzeArchive(buffer: Buffer): AnalyzedImage[] {
         "PNG, JPG, JPEG, WebP 이미지만 넣어 주세요.",
       );
     }
+    // adm-zip only applies zlib's maxOutputLength when the declared size is
+    // positive. Reject zero before getData() so every accepted entry has a
+    // decompression bound in place before memory is allocated.
+    if (entry.header.size === 0) {
+      throw new ArchiveValidationError(
+        "IMAGE_SIZE_INVALID",
+        "비어 있거나 크기를 확인할 수 없는 이미지가 포함되어 있습니다.",
+      );
+    }
     if (entry.header.size > ARCHIVE_LIMITS.maxImageBytes) {
       throw new ArchiveValidationError(
         "IMAGE_TOO_LARGE",

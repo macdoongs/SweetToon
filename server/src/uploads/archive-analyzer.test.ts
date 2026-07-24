@@ -16,6 +16,25 @@ function archive(entries: Array<[string, Buffer]>): Buffer {
   return zip.toBuffer();
 }
 
+function withDeclaredUncompressedSize(
+  source: Buffer,
+  uncompressedSize: number,
+): Buffer {
+  const buffer = Buffer.from(source);
+  const localHeader = buffer.indexOf(
+    Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+  );
+  const centralHeader = buffer.indexOf(
+    Buffer.from([0x50, 0x4b, 0x01, 0x02]),
+  );
+  if (localHeader < 0 || centralHeader < 0) {
+    throw new Error("ZIP headers missing from test archive");
+  }
+  buffer.writeUInt32LE(uncompressedSize, localHeader + 22);
+  buffer.writeUInt32LE(uncompressedSize, centralHeader + 24);
+  return buffer;
+}
+
 function expectCode(action: () => unknown, code: string) {
   try {
     action();
@@ -60,6 +79,19 @@ describe("analyzeArchive", () => {
     expectCode(
       () => analyzeArchive(archive([["1.jpg", png]])),
       "IMAGE_SIGNATURE_MISMATCH",
+    );
+  });
+
+  it("rejects a zero declared size before accepting an image entry", () => {
+    expectCode(
+      () =>
+        analyzeArchive(
+          withDeclaredUncompressedSize(
+            archive([["1.png", png]]),
+            0,
+          ),
+        ),
+      "IMAGE_SIZE_INVALID",
     );
   });
 

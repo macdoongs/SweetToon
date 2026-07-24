@@ -43,7 +43,6 @@ function orderFixture(overrides: Partial<OrderDetail> = {}): OrderDetail {
   return {
     id: "cmorder000000000000000001",
     providerOrderId: null,
-    ordererName: input.ordererName,
     ordererType: "reader",
     quantity: input.quantity,
     coverType: input.coverType,
@@ -53,7 +52,6 @@ function orderFixture(overrides: Partial<OrderDetail> = {}): OrderDetail {
     unitPrice: 9_940,
     totalPrice: 9_940,
     estimatedBusinessDays: 5,
-    memo: null,
     status: "pending",
     createdAt: "2026-07-24T00:00:00.000Z",
     updatedAt: "2026-07-24T00:00:00.000Z",

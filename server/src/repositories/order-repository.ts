@@ -52,7 +52,6 @@ function toOrderDetail(order: OrderWithRelations): OrderDetail {
   return {
     id: order.id,
     providerOrderId: order.providerOrderId,
-    ordererName: order.ordererName,
     ordererType: order.ordererType === "creator" ? "creator" : "reader",
     quantity: order.quantity,
     coverType: order.coverType,
@@ -62,7 +61,6 @@ function toOrderDetail(order: OrderWithRelations): OrderDetail {
     unitPrice: order.unitPrice,
     totalPrice: order.totalPrice,
     estimatedBusinessDays: order.estimatedBusinessDays,
-    memo: order.memo,
     status:
       order.status === "processing" ||
       order.status === "shipped" ||

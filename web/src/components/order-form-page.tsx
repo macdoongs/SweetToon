@@ -218,16 +218,19 @@ export function OrderFormPage({
             <span className="form-card__step">02</span>
             <div>
               <h2>주문자 정보</h2>
-              <p>과제 데모이므로 결제·배송지 정보는 수집하지 않습니다.</p>
+              <p>
+                공개 데모이므로 실명이나 개인정보 대신 닉네임만 입력해 주세요.
+                결제·배송지 정보는 수집하지 않습니다.
+              </p>
             </div>
             <label className="field">
-              <span>주문자 이름</span>
+              <span>주문자 닉네임</span>
               <input
-                autoComplete="name"
+                autoComplete="off"
                 maxLength={30}
                 minLength={2}
                 onChange={(event) => setOrdererName(event.target.value)}
-                placeholder="예: 김소장"
+                placeholder="예: 달빛독자"
                 required
                 value={ordererName}
               />
@@ -237,7 +240,7 @@ export function OrderFormPage({
               <textarea
                 maxLength={200}
                 onChange={(event) => setMemo(event.target.value)}
-                placeholder="책을 만들 때 참고할 내용을 남겨 주세요."
+                placeholder="개인정보 없이 제작 참고사항만 남겨 주세요."
                 rows={4}
                 value={memo}
               />

@@ -34,7 +34,6 @@ export type CreateOrderRequest = PrintQuoteRequest & {
 export type OrderDetail = {
   id: string;
   providerOrderId: string | null;
-  ordererName: string;
   ordererType: "reader" | "creator";
   quantity: number;
   coverType: string;
@@ -44,7 +43,6 @@ export type OrderDetail = {
   unitPrice: number | null;
   totalPrice: number | null;
   estimatedBusinessDays: number | null;
-  memo: string | null;
   status: OrderStatus;
   createdAt: string;
   updatedAt: string;

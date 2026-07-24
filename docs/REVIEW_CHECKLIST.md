@@ -68,5 +68,6 @@
 - [ ] `scripts/verify-web.ps1` 통과
 - [ ] `scripts/verify-server.ps1` 통과
 - [ ] `scripts/smoke-compose.ps1` 통과
+- [ ] `scripts/verify-e2e.ps1` 통과
 - [ ] UI 변경은 실제 브라우저에서 핵심 흐름을 확인
 - [ ] README의 실행법, 사용자, 구현 범위와 현재 동작이 일치

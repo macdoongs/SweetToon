@@ -12,7 +12,6 @@ import {
 const order: OrderDetail = {
   id: "cmorder000000000000000001",
   providerOrderId: "mock-order-1",
-  ordererName: "김소장",
   ordererType: "reader",
   quantity: 1,
   coverType: "hardcover",
@@ -22,7 +21,6 @@ const order: OrderDetail = {
   unitPrice: 9_940,
   totalPrice: 9_940,
   estimatedBusinessDays: 5,
-  memo: null,
   status: "pending",
   createdAt: "2026-07-24T00:00:00.000Z",
   updatedAt: "2026-07-24T00:00:00.000Z",
@@ -125,6 +123,10 @@ describe("order routes", () => {
 
     expect(created.body.id).toBe(order.id);
     expect(listed.body.items[0].id).toBe(order.id);
+    expect(created.body).not.toHaveProperty("ordererName");
+    expect(created.body).not.toHaveProperty("memo");
+    expect(listed.body.items[0]).not.toHaveProperty("ordererName");
+    expect(listed.body.items[0]).not.toHaveProperty("memo");
   });
 
   it("converts use case errors into user-facing API errors", async () => {

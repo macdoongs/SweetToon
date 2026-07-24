@@ -77,7 +77,6 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
           <h2>{order.series.title}</h2>
           <p>시즌 {order.season.number} · {order.season.title}</p>
           <dl>
-            <div><dt>주문자</dt><dd>{order.ordererName}</dd></div>
             <div><dt>판형</dt><dd>{order.bookSize}</dd></div>
             <div>
               <dt>표지</dt>
@@ -94,12 +93,6 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
               </div>
             ) : null}
           </dl>
-          {order.memo ? (
-            <div className="order-memo">
-              <strong>제작 메모</strong>
-              <p>{order.memo}</p>
-            </div>
-          ) : null}
           <small>주문 번호 {order.id}</small>
         </aside>
       </div>

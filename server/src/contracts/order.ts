@@ -54,7 +54,6 @@ export const OrderEventSchema = z.object({
 export const OrderDetailSchema = z.object({
   id: z.string(),
   providerOrderId: z.string().nullable(),
-  ordererName: z.string(),
   ordererType: z.enum(["reader", "creator"]),
   quantity: z.number().int().positive(),
   coverType: z.string(),
@@ -64,7 +63,6 @@ export const OrderDetailSchema = z.object({
   unitPrice: z.number().int().nonnegative().nullable(),
   totalPrice: z.number().int().nonnegative().nullable(),
   estimatedBusinessDays: z.number().int().positive().nullable(),
-  memo: z.string().nullable(),
   status: OrderStatusSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

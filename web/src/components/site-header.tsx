@@ -8,6 +8,7 @@ import {
   getCandyWalletToken,
   type CandyWallet,
 } from "@/lib/candy-wallet";
+import { ThemePicker } from "./theme-picker";
 
 export function SiteHeader() {
   const [balance, setBalance] = useState<number | null>(null);
@@ -46,6 +47,7 @@ export function SiteHeader() {
             <span aria-hidden="true">🍬</span>
             캔디 {balance ?? "—"}
           </Link>
+          <ThemePicker />
           <span className="site-nav__divider" aria-hidden="true" />
           <span className="site-nav__hint">읽고, 한 권으로 소장하세요</span>
         </nav>

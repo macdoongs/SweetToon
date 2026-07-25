@@ -138,6 +138,64 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   ).toBeTruthy();
 });
 
+test("라이트·다크·시스템 테마를 저장하고 즉시 적용한다", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/");
+
+  const root = page.locator("html");
+  const themePicker = page.getByLabel("화면 테마");
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  await expect(root).toHaveAttribute("data-theme-preference", "system");
+  await expect(themePicker).toHaveValue("system");
+  const themeColors = page.locator('meta[name="theme-color"]');
+  await expect(themeColors.first()).toHaveAttribute(
+    "content",
+    "#1b1817",
+  );
+  expect(
+    await themeColors.evaluateAll((metas) =>
+      metas.every((meta) => meta.getAttribute("content") === "#1b1817"),
+    ),
+  ).toBe(true);
+
+  await themePicker.selectOption("light");
+  await expect(root).toHaveAttribute("data-theme", "light");
+  await expect(root).toHaveAttribute("data-theme-preference", "light");
+  await expect
+    .poll(() =>
+      page.evaluate(() => getComputedStyle(document.body).backgroundColor),
+    )
+    .toBe("rgb(245, 240, 231)");
+
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme", "light");
+  await expect(themePicker).toHaveValue("light");
+
+  await themePicker.selectOption("dark");
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  await expect
+    .poll(() =>
+      page.evaluate(() => getComputedStyle(document.body).backgroundColor),
+    )
+    .toBe("rgb(27, 24, 23)");
+  await expect
+    .poll(() =>
+      page
+        .locator(".discover-section")
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
+    )
+    .toBe("rgb(33, 29, 27)");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
 test("설치 가능한 PWA 셸과 서비스 워커를 제공한다", async ({ page }) => {
   await page.goto("/");
 

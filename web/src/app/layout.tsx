@@ -7,6 +7,7 @@ import {
   SITE_NAME,
   SITE_URL,
 } from "@/lib/site";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -72,7 +73,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#f5f0e7",
-  colorScheme: "light",
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({
@@ -81,8 +82,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
+    <html
+      data-theme="light"
+      data-theme-preference="system"
+      lang="ko"
+      suppressHydrationWarning
+    >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <link
           href="/feed.xml"
           rel="alternate"

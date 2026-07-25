@@ -57,6 +57,9 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
         <span className={`order-status order-status--${liveOrder.status}`}>
           {statusLabel[liveOrder.status]}
         </span>
+        {liveOrder.isDemo ? (
+          <span className="demo-order-badge">봇 데모</span>
+        ) : null}
         <p className="eyebrow">Order received</p>
         <h1>
           {liveOrder.status === "canceled"

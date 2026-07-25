@@ -37,6 +37,7 @@ export type CreateOrderRequest = PrintQuoteRequest & {
 
 export type OrderDetail = {
   id: string;
+  isDemo: boolean;
   providerOrderId: string | null;
   candyBonus: number;
   ordererType: "reader" | "creator";

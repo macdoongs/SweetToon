@@ -65,6 +65,9 @@ export function OrderListPage({ orders }: { orders: OrderDetail[] }) {
                   <span className={`order-status order-status--${order.status}`}>
                     {statusLabel[order.status]}
                   </span>
+                  {order.isDemo ? (
+                    <span className="demo-order-badge">봇 데모</span>
+                  ) : null}
                   <time dateTime={order.createdAt}>
                     {formatKoreanDateTime(order.createdAt)}
                   </time>

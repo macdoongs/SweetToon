@@ -64,6 +64,7 @@ export const OrderEventSchema = z.object({
 
 export const OrderDetailSchema = z.object({
   id: z.string(),
+  isDemo: z.boolean(),
   providerOrderId: z.string().nullable(),
   candyBonus: z.number().int().nonnegative(),
   ordererType: z.enum(["reader", "creator"]),

@@ -9,7 +9,10 @@ export const openApiDocument = {
   servers: [{ url: "/", description: "현재 서버" }],
   tags: [
     { name: "Reader", description: "작품 탐색과 에피소드 감상" },
-    { name: "Realtime", description: "현재 독자와 실시간 인기 작품" },
+    {
+      name: "Realtime",
+      description: "현재 독자, 실시간 인기 작품과 데모 봇",
+    },
     { name: "Candy", description: "익명 데모 캔디 지갑과 회차 해금" },
     { name: "Orders", description: "Mock 견적과 소장본 주문" },
     { name: "Studio", description: "창작자 ZIP/CBZ 발행" },
@@ -149,6 +152,79 @@ export const openApiDocument = {
             content: {
               "application/json": {
                 schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/realtime/demo-bot": {
+      get: {
+        tags: ["Realtime"],
+        summary: "실시간 데모 봇의 실행 상태를 조회합니다.",
+        responses: {
+          "200": {
+            description: "봇 인원, 속도와 최근 실행 상태",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/DemoBotStatus" },
+              },
+            },
+          },
+        },
+      },
+      patch: {
+        tags: ["Realtime"],
+        summary: "실시간 데모 봇을 시작·중지하거나 속도를 변경합니다.",
+        security: [{ operationsApiKey: [] }, {}],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  running: { type: "boolean" },
+                  readerCount: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 30,
+                  },
+                  speed: {
+                    type: "string",
+                    enum: ["slow", "normal", "fast"],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "변경된 데모 봇 상태",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/DemoBotStatus" },
+              },
+            },
+          },
+          "409": {
+            description: "현재 환경에서 데모 봇이 비활성화됨",
+          },
+        },
+      },
+    },
+    "/api/realtime/demo-bot/reset": {
+      post: {
+        tags: ["Realtime"],
+        summary: "봇이 만든 presence와 주문만 초기화합니다.",
+        security: [{ operationsApiKey: [] }, {}],
+        responses: {
+          "200": {
+            description: "초기화 후 데모 봇 상태",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/DemoBotStatus" },
               },
             },
           },
@@ -569,6 +645,34 @@ export const openApiDocument = {
         properties: {
           balance: { type: "integer", minimum: 0 },
           unitPrice: { type: "integer", const: 100 },
+        },
+      },
+      DemoBotStatus: {
+        type: "object",
+        required: [
+          "available",
+          "running",
+          "leader",
+          "readerCount",
+          "activeBotCount",
+          "speed",
+          "tickIntervalSeconds",
+        ],
+        properties: {
+          available: { type: "boolean" },
+          running: { type: "boolean" },
+          leader: { type: "boolean" },
+          readerCount: { type: "integer", minimum: 0, maximum: 30 },
+          activeBotCount: { type: "integer", minimum: 0, maximum: 31 },
+          speed: {
+            type: "string",
+            enum: ["slow", "normal", "fast"],
+          },
+          tickIntervalSeconds: { type: "integer", minimum: 1 },
+          lastTickAt: { type: ["string", "null"], format: "date-time" },
+          nextTickAt: { type: ["string", "null"], format: "date-time" },
+          activeOrderId: { type: ["string", "null"] },
+          lastAction: { type: ["string", "null"] },
         },
       },
       AccessPolicy: {

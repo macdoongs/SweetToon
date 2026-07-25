@@ -1297,6 +1297,111 @@ button {
   padding: 14px 18px;
 }
 
+.demo-bot-panel {
+  width: var(--content);
+  margin: -18px auto 28px;
+  padding: 24px 26px;
+  border: 1px solid rgba(239, 104, 73, 0.24);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(239, 104, 73, 0.14), transparent 38%),
+    var(--paper);
+}
+
+.demo-bot-panel__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.demo-bot-panel h2 {
+  margin: 4px 0 8px;
+  font-family: Georgia, "Noto Serif KR", serif;
+  font-size: 1.65rem;
+  letter-spacing: -0.04em;
+}
+
+.demo-bot-panel__heading p:last-child,
+.demo-bot-panel__activity {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.demo-bot-status {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(106, 101, 91, 0.12);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.demo-bot-status--running {
+  background: rgba(53, 150, 108, 0.13);
+  color: #237653;
+}
+
+.demo-bot-status--running::before {
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  background: currentColor;
+  content: "";
+}
+
+.demo-bot-metrics {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.demo-bot-metrics strong {
+  color: var(--coral-dark);
+  font-size: 1.25rem;
+}
+
+.demo-bot-metrics span {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.demo-bot-controls {
+  margin-top: 18px;
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.demo-bot-controls label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.demo-bot-controls select {
+  min-width: 116px;
+  padding: 10px 34px 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--cream);
+  color: var(--ink);
+  font: inherit;
+}
+
+.demo-bot-panel__activity {
+  margin-top: 14px;
+}
+
 .studio-security-access {
   margin-top: 18px;
   padding: 12px 14px;
@@ -2265,6 +2370,17 @@ body:has(.reader-page) .site-footer {
   font-size: 0.7rem;
 }
 
+.demo-order-badge {
+  margin-left: 6px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(239, 104, 73, 0.12);
+  color: var(--coral-dark);
+  font-size: 0.62rem;
+  font-weight: 850;
+  vertical-align: middle;
+}
+
 .reader-toolbar__live {
   margin-top: 2px;
   color: rgba(255, 255, 255, 0.72);
@@ -3010,6 +3126,28 @@ body:has(.reader-page) .site-footer {
 
   .operations-card__actions {
     justify-content: space-between;
+  }
+
+  .demo-bot-panel {
+    padding: 20px;
+  }
+
+  .demo-bot-panel__heading {
+    gap: 12px;
+  }
+
+  .demo-bot-metrics {
+    grid-template-columns: auto 1fr;
+  }
+
+  .demo-bot-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .demo-bot-controls .button,
+  .demo-bot-controls select {
+    width: 100%;
   }
 
   .reader-toolbar {

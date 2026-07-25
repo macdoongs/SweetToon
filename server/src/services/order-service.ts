@@ -32,6 +32,12 @@ export interface OrderUseCases {
   transition(id: string, input: OrderTransitionRequest): Promise<OrderDetail>;
 }
 
+export interface DemoOrderUseCases extends OrderUseCases {
+  createDemo(input: CreateOrderRequest): Promise<OrderDetail>;
+  pruneCompletedDemos(keep: number): Promise<void>;
+  clearDemos(): Promise<void>;
+}
+
 const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = {
   pending: "processing",
   processing: "shipped",
@@ -44,7 +50,7 @@ const transitionMessage: Record<"processing" | "shipped" | "completed", string> 
   completed: "소장본 배송이 완료되었어요.",
 };
 
-export class OrderService implements OrderUseCases {
+export class OrderService implements DemoOrderUseCases {
   constructor(
     private readonly repository: OrderRepository,
     private readonly printProvider: PrintProvider,
@@ -120,6 +126,25 @@ export class OrderService implements OrderUseCases {
   }
 
   async create(input: CreateOrderRequest): Promise<OrderDetail> {
+    return this.createOrder(input, false);
+  }
+
+  async createDemo(input: CreateOrderRequest): Promise<OrderDetail> {
+    return this.createOrder(input, true);
+  }
+
+  pruneCompletedDemos(keep: number): Promise<void> {
+    return this.repository.pruneCompletedDemoOrders(keep);
+  }
+
+  clearDemos(): Promise<void> {
+    return this.repository.deleteDemoOrders();
+  }
+
+  private async createOrder(
+    input: CreateOrderRequest,
+    isDemo: boolean,
+  ): Promise<OrderDetail> {
     const existing = await this.repository.findByRequestKey(input.requestKey);
     if (existing) {
       return existing;
@@ -136,6 +161,7 @@ export class OrderService implements OrderUseCases {
         ...input,
         season,
         quote,
+        isDemo,
       });
     } catch (error) {
       // Concurrent requests can pass the first lookup together. The database

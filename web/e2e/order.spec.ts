@@ -62,6 +62,17 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
   await expect(
     page.getByRole("heading", { level: 1, name: "소장본 제작 관리" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "실시간 데모 봇" }),
+  ).toBeVisible();
+  await page.getByLabel("변경 속도").selectOption("fast");
+  await page.getByRole("button", { name: "봇 일시정지" }).click();
+  await expect(page.locator(".demo-bot-status")).toHaveText("정지");
+  await page.getByRole("button", { name: "봇 시작" }).click();
+  await expect(page.locator(".demo-bot-status")).toHaveText("실행 중");
+  await expect(page.locator(".demo-order-badge").first()).toBeVisible({
+    timeout: 12_000,
+  });
   const operation = page
     .locator(".operations-card")
     .filter({ hasText: orderId ?? "" });

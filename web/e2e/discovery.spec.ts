@@ -130,6 +130,22 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
     "순환형 캐러셀",
   );
   await expect(discoveryRail).toHaveCSS("scrollbar-width", "none");
+  const duplicateImages = discoveryRail.locator(
+    '.recommendation-card[data-preloaded="true"] img',
+  );
+  expect(await duplicateImages.count()).toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      duplicateImages.evaluateAll((images) =>
+        images.every(
+          (image) =>
+            (image as HTMLImageElement).loading === "eager" &&
+            (image as HTMLImageElement).complete &&
+            (image as HTMLImageElement).naturalWidth > 0,
+        ),
+      ),
+    )
+    .toBe(true);
   await expect
     .poll(() =>
       discoveryRail.evaluate(
@@ -150,8 +166,8 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   await page.waitForTimeout(600);
   const seamlessBoundary = await discoveryRail.evaluate((element) => {
     const rail = element as HTMLElement;
-    const itemCount = rail.children.length / 3;
-    const trailingCopy = rail.children.item(itemCount * 2) as HTMLElement;
+    const itemCount = rail.children.length / 5;
+    const trailingCopy = rail.children.item(itemCount * 4) as HTMLElement;
     const snapshot = () => {
       const railRect = rail.getBoundingClientRect();
       return Array.from(rail.children)
@@ -184,9 +200,9 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
     .poll(() =>
       discoveryRail.evaluate((element) => {
         const rail = element as HTMLElement;
-        const itemCount = rail.children.length / 3;
-        const firstOriginal = rail.children.item(itemCount) as HTMLElement;
-        const trailingCopy = rail.children.item(itemCount * 2) as HTMLElement;
+        const itemCount = rail.children.length / 5;
+        const firstOriginal = rail.children.item(itemCount * 2) as HTMLElement;
+        const trailingCopy = rail.children.item(itemCount * 4) as HTMLElement;
         return rail.scrollLeft >= firstOriginal.offsetLeft &&
           rail.scrollLeft < trailingCopy.offsetLeft;
       }),

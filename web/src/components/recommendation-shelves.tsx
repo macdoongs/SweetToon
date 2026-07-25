@@ -24,17 +24,26 @@ import {
 } from "@/lib/recommendations";
 import type { SeriesSummary } from "@/lib/reader-types";
 
+const LOOP_COPY_COUNT = 5;
+const CENTER_COPY_INDEX = 2;
+const LOWER_RESET_COPY_INDEX = 1;
+const UPPER_RESET_COPY_INDEX = 4;
+const RESET_SEGMENT_COUNT = 2;
+
 function RecommendationCard({
   duplicate = false,
+  eager = false,
   series,
 }: {
   duplicate?: boolean;
+  eager?: boolean;
   series: SeriesSummary;
 }) {
   return (
     <li
       aria-hidden={duplicate || undefined}
       className="recommendation-card"
+      data-preloaded={eager || undefined}
     >
       <Link
         href={`/series/${encodeURIComponent(series.slug)}`}
@@ -45,6 +54,7 @@ function RecommendationCard({
             <Image
               alt={`${series.title} 표지`}
               height={560}
+              loading={eager ? "eager" : undefined}
               sizes="(max-width: 700px) 42vw, 210px"
               src={series.coverUrl}
               width={400}
@@ -87,32 +97,47 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
   const normalizeCircularPosition = useCallback(() => {
     const rail = railRef.current;
     const itemCount = shelf.items.length;
-    const firstOriginal = rail?.children.item(itemCount) as HTMLElement | null;
-    const firstTrailingCopy = rail?.children.item(
-      itemCount * 2,
+    const firstCenterCopy = rail?.children.item(
+      itemCount * CENTER_COPY_INDEX,
     ) as HTMLElement | null;
-    if (!rail || !firstOriginal || !firstTrailingCopy) {
+    const firstNextCopy = rail?.children.item(
+      itemCount * (CENTER_COPY_INDEX + 1),
+    ) as HTMLElement | null;
+    const lowerResetBoundary = rail?.children.item(
+      itemCount * LOWER_RESET_COPY_INDEX,
+    ) as HTMLElement | null;
+    const upperResetBoundary = rail?.children.item(
+      itemCount * UPPER_RESET_COPY_INDEX,
+    ) as HTMLElement | null;
+    if (
+      !rail ||
+      !firstCenterCopy ||
+      !firstNextCopy ||
+      !lowerResetBoundary ||
+      !upperResetBoundary
+    ) {
       return;
     }
 
-    const segmentWidth = firstTrailingCopy.offsetLeft - firstOriginal.offsetLeft;
-    if (rail.scrollLeft < firstOriginal.offsetLeft) {
-      jumpWithoutAnimation(rail, rail.scrollLeft + segmentWidth);
-    } else if (rail.scrollLeft >= firstTrailingCopy.offsetLeft) {
-      jumpWithoutAnimation(rail, rail.scrollLeft - segmentWidth);
+    const segmentWidth = firstNextCopy.offsetLeft - firstCenterCopy.offsetLeft;
+    const resetDistance = segmentWidth * RESET_SEGMENT_COUNT;
+    if (rail.scrollLeft < lowerResetBoundary.offsetLeft) {
+      jumpWithoutAnimation(rail, rail.scrollLeft + resetDistance);
+    } else if (rail.scrollLeft >= upperResetBoundary.offsetLeft) {
+      jumpWithoutAnimation(rail, rail.scrollLeft - resetDistance);
     }
   }, [jumpWithoutAnimation, shelf.items.length]);
 
   useEffect(() => {
     const rail = railRef.current;
-    const firstOriginal = rail?.children.item(
-      shelf.items.length,
+    const firstCenterCopy = rail?.children.item(
+      shelf.items.length * CENTER_COPY_INDEX,
     ) as HTMLElement | null;
-    if (!rail || !firstOriginal) {
+    if (!rail || !firstCenterCopy) {
       return;
     }
 
-    jumpWithoutAnimation(rail, firstOriginal.offsetLeft);
+    jumpWithoutAnimation(rail, firstCenterCopy.offsetLeft);
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     const normalizeAfterSettling = () => {
       clearTimeout(settleTimer);
@@ -179,23 +204,16 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
         id={railId}
         ref={railRef}
       >
-        {shelf.items.map((series) => (
-          <RecommendationCard
-            duplicate
-            key={`leading-${series.id}`}
-            series={series}
-          />
-        ))}
-        {shelf.items.map((series) => (
-          <RecommendationCard key={series.id} series={series} />
-        ))}
-        {shelf.items.map((series) => (
-          <RecommendationCard
-            duplicate
-            key={`trailing-${series.id}`}
-            series={series}
-          />
-        ))}
+        {Array.from({ length: LOOP_COPY_COUNT }, (_, copyIndex) =>
+          shelf.items.map((series) => (
+            <RecommendationCard
+              duplicate={copyIndex !== CENTER_COPY_INDEX}
+              eager={copyIndex > CENTER_COPY_INDEX}
+              key={`${copyIndex}-${series.id}`}
+              series={series}
+            />
+          )),
+        )}
       </ul>
     </section>
   );

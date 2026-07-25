@@ -205,10 +205,12 @@ Set에 60초 동안만 보존하며, DB 주문 전이나 Redis 장애가 주문 
 - [`AGENTS.md`](./AGENTS.md) — 사람·Codex·Claude가 공유하는 아키텍처와 안전 규약
 - [`docs/ROADMAP.md`](./docs/ROADMAP.md) — 남은 사용자 흐름과 비대상 범위
 - [`docs/REVIEW_CHECKLIST.md`](./docs/REVIEW_CHECKLIST.md) — 과제 기준과 PR 리뷰 체크리스트
-- `scripts/verify-web.ps1` — 의존성, audit, lint, Next.js production build
+- `scripts/verify-web.ps1` — 의존성, audit, lint, Vitest 단위 테스트, Next.js production build
 - `scripts/verify-server.ps1` — 의존성, audit, Prisma 검증, TypeScript build, Jest
 - `scripts/smoke-compose.ps1` — 격리된 Compose 전체 기동과 Mock/API/SSR 스모크 검증
 - `scripts/verify-e2e.ps1` — 격리된 Compose 환경에서 Chromium 사용자 흐름 검증
+- `scripts/backup-database.sh` — 운영자가 지정한 보안 경로에 배포 전 DB 덤프 생성
+- [`docs/DEPLOYMENT_RUNBOOK.md`](./docs/DEPLOYMENT_RUNBOOK.md) — 백업·복구·롤백 판단 절차
 
 로컬 PowerShell 7 또는 Jenkins의 Windows PowerShell에서 전체 검증을 순서대로 실행합니다.
 
@@ -276,9 +278,9 @@ repository와 use case를 fake 구현으로 주입해 DB 없이 오류 계약을
 
 루트 `Jenkinsfile`은 다음 검증을 수행합니다.
 
-1. 웹 의존성 설치, lint, production build
+1. 웹 의존성 설치, lint, Vitest 단위 테스트, production build
 2. 서버 의존성 설치, Prisma schema 검증, TypeScript build, API·Mock provider 테스트
-3. 격리된 Docker Compose 프로젝트에서 전체 서비스 기동 및 health check
+3. 격리된 Docker Compose 프로젝트에서 migration 재실행, DB-schema drift와 전체 서비스 health check
 4. Chromium에서 작품 탐색·독자·주문·스튜디오 핵심 흐름 E2E
 
 CD는 CI가 검증한 동일 Git SHA만 개발 서버에 전달합니다.

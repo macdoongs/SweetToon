@@ -80,8 +80,15 @@ try {
     } "server health and mock provider check"
 
     Invoke-Checked {
-        docker compose exec -T server npm run db:seed
-    } "idempotent seed rerun over existing data"
+        docker compose run --rm migrate
+    } "migration and seed rerun over existing database"
+
+    Invoke-Checked {
+        docker compose exec -T server npx prisma migrate diff `
+            --from-schema-datasource prisma/schema.prisma `
+            --to-schema-datamodel prisma/schema.prisma `
+            --exit-code
+    } "migrated database and Prisma schema drift check"
 
     Invoke-Checked {
         docker compose exec -T web node -e "
@@ -99,6 +106,21 @@ try {
             const catalog = await json('/api/series/catalog-01')
             if (catalog.seasons[0]?.episodes.length !== 30) {
               throw new Error('catalog-01 expected 30 episodes')
+            }
+            if (!catalog.coverUrl) {
+              throw new Error('catalog-01 cover URL is missing')
+            }
+            const coverResponse = await fetch(
+              new URL(catalog.coverUrl, base)
+            )
+            if (
+              !coverResponse.ok ||
+              !coverResponse.headers.get('content-type')?.startsWith('image/')
+            ) {
+              throw new Error('catalog-01 cover image is unavailable')
+            }
+            if ((await coverResponse.arrayBuffer()).byteLength === 0) {
+              throw new Error('catalog-01 cover image is empty')
             }
             const longCatalog = await json('/api/series/catalog-12')
             if (longCatalog.seasons[0]?.episodes.length !== 120) {

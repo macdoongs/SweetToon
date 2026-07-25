@@ -1,6 +1,6 @@
 services:
   clamav:
-    image: clamav/clamav:stable_base
+    image: clamav/clamav:stable_base@sha256:b2be682d7514281f20117fb8fe15a7f8da9e4f6ea0b4b819f6c74c84ce84d1d7
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "/usr/local/bin/clamdcheck.sh"]

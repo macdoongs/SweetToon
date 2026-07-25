@@ -37,13 +37,15 @@ export function SiteHeader() {
           <Link href="/#discover">작품 둘러보기</Link>
           <Link href="/orders">주문 현황</Link>
           <Link href="/studio">작가 스튜디오</Link>
-          <span
+          <Link href="/favorites">찜 목록</Link>
+          <Link
             className="site-nav__candy"
+            href="/candy"
             title="캔디 1개로 유료 회차 1편을 볼 수 있어요"
           >
             <span aria-hidden="true">🍬</span>
             캔디 {balance ?? "—"}
-          </span>
+          </Link>
           <span className="site-nav__divider" aria-hidden="true" />
           <span className="site-nav__hint">읽고, 한 권으로 소장하세요</span>
         </nav>

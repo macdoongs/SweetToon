@@ -13,6 +13,16 @@ export type CandyUnlockResponse = CandyWallet & {
   spent: boolean;
 };
 
+export type CandyChargeAmount = 10 | 30 | 50;
+
+export type CandyChargeResponse = CandyWallet & {
+  chargedCandy: CandyChargeAmount;
+  price: number;
+  currency: "KRW";
+  mock: true;
+  charged: boolean;
+};
+
 export function getCandyWalletToken(): string {
   const existing = localStorage.getItem(TOKEN_KEY);
   if (existing) return existing;

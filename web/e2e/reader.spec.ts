@@ -133,10 +133,51 @@ test("Swagger UI와 OpenAPI 계약을 같은 웹 주소에서 확인한다", asy
   const contract = await contractResponse.json();
   expect(contract.openapi).toBe("3.1.0");
   expect(contract.paths).toHaveProperty("/api/studio/uploads");
+  expect(contract.paths).toHaveProperty("/api/candy-wallets/{token}");
 
   const docsResponse = await page.request.get("/api-docs/");
   expect(docsResponse.ok()).toBeTruthy();
   expect(await docsResponse.text()).toContain("SweetToon API");
+});
+
+test("작품을 찜하고 목록에서 확인한 뒤 해제한다", async ({ page }) => {
+  await page.goto("/series/moonlight-laundry");
+
+  await page.getByRole("button", { name: "찜하기" }).click();
+  await expect(
+    page.getByRole("button", { name: "찜 해제" }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await page.goto("/favorites");
+  await expect(page.getByRole("heading", { name: "찜 목록" })).toBeVisible();
+  const card = page.locator(".favorite-card");
+  await expect(card.getByRole("heading", { name: "달빛 세탁소" })).toBeVisible();
+  await expect(card.locator("img")).toBeVisible();
+
+  await card.getByRole("button", { name: "찜 해제" }).click();
+  await expect(
+    page.getByRole("heading", { name: "아직 찜한 작품이 없어요" }),
+  ).toBeVisible();
+});
+
+test("실제 결제 없이 고정 패키지로 캔디를 충전한다", async ({ page }) => {
+  await page.goto("/candy");
+
+  await expect(
+    page.getByRole("heading", { name: "캔디 충전" }),
+  ).toBeVisible();
+  await expect(page.getByText("결제 없는 Mock 충전")).toBeVisible();
+  await expect(page.locator(".candy-balance")).toContainText("0");
+
+  const tenCandy = page.locator(".candy-package").filter({ hasText: "10개" });
+  await expect(tenCandy).toContainText("1,000원");
+  await tenCandy.getByRole("button", { name: "데모로 충전" }).click();
+
+  await expect(page.locator(".candy-balance")).toContainText("10");
+  await expect(page.locator(".site-nav__candy")).toContainText("캔디 10");
+  await expect(page.getByRole("status")).toContainText(
+    "데모 캔디 10개를 충전했습니다",
+  );
 });
 
 test("1권 주문 보너스 캔디로 유료 회차를 한 번만 차감해 해금한다", async ({

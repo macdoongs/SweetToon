@@ -255,6 +255,81 @@ export const openApiDocument = {
           "400": { $ref: "#/components/responses/BadRequest" },
         },
       },
+      post: {
+        tags: ["Candy"],
+        summary: "고정 패키지의 데모 캔디를 Mock 충전합니다.",
+        description:
+          "실제 결제를 수행하지 않으며 요청 키를 기준으로 멱등하게 캔디 원장에 반영합니다.",
+        parameters: [
+          {
+            name: "token",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["requestKey", "candyAmount"],
+                properties: {
+                  requestKey: { type: "string", format: "uuid" },
+                  candyAmount: {
+                    type: "integer",
+                    enum: [10, 30, 50],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Mock 충전 결과와 현재 잔액",
+            content: {
+              "application/json": {
+                schema: {
+                  allOf: [
+                    { $ref: "#/components/schemas/CandyWallet" },
+                    {
+                      type: "object",
+                      required: [
+                        "chargedCandy",
+                        "price",
+                        "currency",
+                        "mock",
+                        "charged",
+                      ],
+                      properties: {
+                        chargedCandy: {
+                          type: "integer",
+                          enum: [10, 30, 50],
+                        },
+                        price: { type: "integer", minimum: 1 },
+                        currency: { type: "string", const: "KRW" },
+                        mock: { type: "boolean", const: true },
+                        charged: { type: "boolean" },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "409": {
+            description: "다른 충전에 이미 사용된 요청 키",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
+              },
+            },
+          },
+        },
+      },
     },
     "/api/episodes/{id}/candy-unlock": {
       post: {

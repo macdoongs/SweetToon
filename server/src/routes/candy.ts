@@ -1,5 +1,7 @@
 import { Router } from "express";
 import {
+  CandyChargeRequestSchema,
+  CandyChargeResponseSchema,
   CandyUnlockRequestSchema,
   CandyUnlockResponseSchema,
   CandyWalletSchema,
@@ -21,6 +23,23 @@ export function createCandyRouter(service: CandyUseCases): Router {
       return;
     }
     res.json(CandyWalletSchema.parse(await service.getWallet(token.data)));
+  });
+
+  router.post("/candy-wallets/:token/charges", async (req, res) => {
+    const token = CandyWalletTokenSchema.safeParse(req.params.token);
+    const input = CandyChargeRequestSchema.safeParse(req.body);
+    if (!token.success || !input.success) {
+      res.status(400).json({
+        code: "INVALID_CANDY_CHARGE",
+        message: "캔디 충전 요청이 올바르지 않습니다.",
+      });
+      return;
+    }
+    res.json(
+      CandyChargeResponseSchema.parse(
+        await service.charge(token.data, input.data),
+      ),
+    );
   });
 
   router.post("/episodes/:id/candy-unlock", async (req, res) => {

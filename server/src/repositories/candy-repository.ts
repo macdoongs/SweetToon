@@ -7,8 +7,18 @@ export type CandyUnlockResult =
   | { kind: "insufficient"; balance: number }
   | { kind: "unlocked"; balance: number };
 
+export type CandyChargeResult =
+  | { kind: "charged"; balance: number }
+  | { kind: "already_charged"; balance: number }
+  | { kind: "request_conflict"; balance: number };
+
 export interface CandyRepository {
   getBalance(walletToken: string): Promise<number>;
+  charge(
+    walletToken: string,
+    amount: number,
+    requestKey: string,
+  ): Promise<CandyChargeResult>;
   unlockEpisode(
     walletToken: string,
     episodeId: string,
@@ -25,6 +35,75 @@ export class PrismaCandyRepository implements CandyRepository {
       select: { balance: true },
     });
     return wallet?.balance ?? 0;
+  }
+
+  async charge(
+    walletToken: string,
+    amount: number,
+    requestKey: string,
+  ): Promise<CandyChargeResult> {
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const wallet = await transaction.candyWallet.upsert({
+          where: { token: walletToken },
+          update: {},
+          create: { token: walletToken },
+        });
+        const repeatedRequest = await transaction.candyTransaction.findUnique({
+          where: { requestKey },
+        });
+        if (repeatedRequest) {
+          return {
+            kind:
+              repeatedRequest.walletToken === walletToken &&
+              repeatedRequest.type === "mock_charge" &&
+              repeatedRequest.amount === amount
+                ? "already_charged"
+                : "request_conflict",
+            balance: wallet.balance,
+          };
+        }
+        const updatedWallet = await transaction.candyWallet.update({
+          where: { token: walletToken },
+          data: { balance: { increment: amount } },
+        });
+        await transaction.candyTransaction.create({
+          data: {
+            walletToken,
+            type: "mock_charge",
+            amount,
+            balanceAfter: updatedWallet.balance,
+            requestKey,
+          },
+        });
+        return { kind: "charged", balance: updatedWallet.balance };
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const repeatedRequest =
+          await this.prisma.candyTransaction.findUnique({
+            where: { requestKey },
+          });
+        if (
+          repeatedRequest?.walletToken === walletToken &&
+          repeatedRequest.type === "mock_charge" &&
+          repeatedRequest.amount === amount
+        ) {
+          return {
+            kind: "already_charged",
+            balance: await this.getBalance(walletToken),
+          };
+        }
+        return {
+          kind: "request_conflict",
+          balance: await this.getBalance(walletToken),
+        };
+      }
+      throw error;
+    }
   }
 
   async unlockEpisode(

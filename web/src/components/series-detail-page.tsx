@@ -10,6 +10,7 @@ import {
   type ReadingProgress,
 } from "@/lib/reading-progress";
 import { ErrorState, PageLoading } from "./reader-states";
+import { FavoriteButton } from "./favorite-button";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -184,6 +185,16 @@ export function SeriesDetailPage({
             <a className="button button--ghost" href="#edition">
               소장본 알아보기
             </a>
+            <FavoriteButton
+              series={{
+                slug: series.slug,
+                title: series.title,
+                synopsis: series.synopsis,
+                genre: series.genre,
+                coverUrl: series.coverUrl,
+                authorName: series.author.name,
+              }}
+            />
           </div>
         </div>
       </header>

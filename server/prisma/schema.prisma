@@ -132,7 +132,7 @@ model CandyWallet {
 model CandyTransaction {
   id           String       @id @default(cuid())
   walletToken  String
-  type         String // order_bonus | episode_unlock
+  type         String // order_bonus | episode_unlock | mock_charge
   amount       Int
   balanceAfter Int
   requestKey   String?      @unique

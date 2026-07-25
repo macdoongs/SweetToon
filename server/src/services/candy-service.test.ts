@@ -7,6 +7,7 @@ const requestKey = "f371de0c-01cd-4214-99f7-7cd8e1df82a0";
 function makeRepository(): jest.Mocked<CandyRepository> {
   return {
     getBalance: jest.fn().mockResolvedValue(5),
+    charge: jest.fn(),
     unlockEpisode: jest.fn(),
   };
 }
@@ -20,6 +21,37 @@ describe("CandyService", () => {
       balance: 5,
       unitPrice: 100,
     });
+  });
+
+  it("adds a fixed mock charge package at 100 won per candy", async () => {
+    const repository = makeRepository();
+    repository.charge.mockResolvedValue({ kind: "charged", balance: 15 });
+    const service = new CandyService(repository);
+
+    await expect(
+      service.charge(walletToken, { requestKey, candyAmount: 10 }),
+    ).resolves.toEqual({
+      balance: 15,
+      unitPrice: 100,
+      chargedCandy: 10,
+      price: 1_000,
+      currency: "KRW",
+      mock: true,
+      charged: true,
+    });
+  });
+
+  it("returns the same balance without a second credit for a repeated charge", async () => {
+    const repository = makeRepository();
+    repository.charge.mockResolvedValue({
+      kind: "already_charged",
+      balance: 15,
+    });
+    const service = new CandyService(repository);
+
+    await expect(
+      service.charge(walletToken, { requestKey, candyAmount: 10 }),
+    ).resolves.toMatchObject({ balance: 15, charged: false, mock: true });
   });
 
   it("spends one candy exactly when the repository creates an entitlement", async () => {

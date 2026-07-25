@@ -1,4 +1,6 @@
 import type {
+  CandyChargeRequest,
+  CandyChargeResponse,
   CandyUnlockRequest,
   CandyUnlockResponse,
   CandyWallet,
@@ -18,6 +20,10 @@ export class CandyServiceError extends Error {
 
 export interface CandyUseCases {
   getWallet(walletToken: string): Promise<CandyWallet>;
+  charge(
+    walletToken: string,
+    input: CandyChargeRequest,
+  ): Promise<CandyChargeResponse>;
   unlockEpisode(
     episodeId: string,
     input: CandyUnlockRequest,
@@ -31,6 +37,33 @@ export class CandyService implements CandyUseCases {
     return {
       balance: await this.repository.getBalance(walletToken),
       unitPrice: 100,
+    };
+  }
+
+  async charge(
+    walletToken: string,
+    input: CandyChargeRequest,
+  ): Promise<CandyChargeResponse> {
+    const result = await this.repository.charge(
+      walletToken,
+      input.candyAmount,
+      input.requestKey,
+    );
+    if (result.kind === "request_conflict") {
+      throw new CandyServiceError(
+        "CANDY_CHARGE_REQUEST_CONFLICT",
+        "이미 다른 충전에 사용된 요청입니다.",
+        409,
+      );
+    }
+    return {
+      balance: result.balance,
+      unitPrice: 100,
+      chargedCandy: input.candyAmount,
+      price: input.candyAmount * 100,
+      currency: "KRW",
+      mock: true,
+      charged: result.kind === "charged",
     };
   }
 
@@ -53,7 +86,7 @@ export class CandyService implements CandyUseCases {
     if (result.kind === "insufficient") {
       throw new CandyServiceError(
         "INSUFFICIENT_CANDY",
-        "캔디가 부족합니다. 1권 소장본을 주문하면 캔디 5개를 받을 수 있어요.",
+        "캔디가 부족합니다. 데모 충전하거나 1권 소장본을 주문해 캔디 5개를 받을 수 있어요.",
         409,
       );
     }

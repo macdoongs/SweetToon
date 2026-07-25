@@ -197,7 +197,9 @@ export class DemoBotService implements DemoBotController {
           pageSize: 24,
         })
       : null;
-    return [...first.items, ...(second?.items ?? [])].map((item) => item.slug);
+    return [...first.items, ...(second?.items ?? [])]
+      .filter((item) => Boolean(item.coverUrl))
+      .map((item) => item.slug);
   }
 
   private async tickReaders(slugs: string[]): Promise<void> {

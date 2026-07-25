@@ -14,7 +14,7 @@ const summary: SeriesListResponse["items"][number] = {
   weekday: "mon",
   freeVolumeCount: 1,
   previewEpisodeCount: 0,
-  coverUrl: null,
+  coverUrl: "/api/images/moonlight-laundry/cover.webp",
   status: "completed",
   author: { name: "이수달" },
   episodeCount: 5,
@@ -134,6 +134,10 @@ describe("DemoBotService", () => {
     expect(status.running).toBe(true);
     expect(status.leader).toBe(true);
     expect(realtime.heartbeatSeries).toHaveBeenCalled();
+    expect(realtime.heartbeatSeries).toHaveBeenCalledWith(
+      summary.slug,
+      expect.any(String),
+    );
     expect(orderService.createDemo).toHaveBeenCalledWith(
       expect.objectContaining({
         seasonId: detail.seasons[0].id,
@@ -142,6 +146,37 @@ describe("DemoBotService", () => {
     );
     expect(realtime.publishOrder).toHaveBeenCalledWith(demoOrder);
 
+    await bot.close();
+  });
+
+  it("only assigns virtual readers to series that have a thumbnail", async () => {
+    const { readerRepository, orderService, realtime } = dependencies();
+    readerRepository.listSeries.mockResolvedValue({
+      items: [
+        { ...summary, slug: "without-cover", coverUrl: null },
+        summary,
+      ],
+      page: 1,
+      nextPage: null,
+      total: 2,
+      facets: { genres: ["힐링"], weekdays: ["mon"] },
+    });
+    const bot = new DemoBotService(
+      readerRepository,
+      orderService,
+      realtime,
+      { available: true, autoStart: false, readerCount: 2, speed: "slow" },
+    );
+
+    await bot.update({ running: true });
+
+    expect(realtime.heartbeatSeries).toHaveBeenCalled();
+    expect(
+      realtime.heartbeatSeries.mock.calls.map(([slug]) => slug),
+    ).toEqual(expect.not.arrayContaining(["without-cover"]));
+    expect(
+      realtime.heartbeatSeries.mock.calls.map(([slug]) => slug),
+    ).toEqual(expect.arrayContaining([summary.slug]));
     await bot.close();
   });
 

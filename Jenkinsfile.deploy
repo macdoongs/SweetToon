@@ -81,10 +81,9 @@ pipeline {
                         --header='Host: sweettoon.katsuranbo.com' http://traefik/
                     order_id="$(docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web \
                       node -e "fetch('http://localhost:3000/api/orders').then(r => r.json()).then(body => { if (!body.items?.[0]?.id) process.exit(1); process.stdout.write(body.items[0].id) }).catch(() => process.exit(1))")"
-                    docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T \
-                      -e ORDER_ID="${order_id}" web sh -c \
+                    docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web sh -c \
                       "timeout 10 wget -qO- --header='Host: sweettoon.katsuranbo.com' \
-                        'http://traefik/api/orders/'\${ORDER_ID}'/events' | \
+                        'http://traefik/api/orders/${order_id}/events' | \
                         grep -m1 '^event: order'"
                 '''
             }

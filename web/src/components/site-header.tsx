@@ -9,6 +9,7 @@ import {
   type CandyWallet,
 } from "@/lib/candy-wallet";
 import { ThemePicker } from "./theme-picker";
+import { DiscoverLink } from "./discover-link";
 
 export function SiteHeader() {
   const [balance, setBalance] = useState<number | null>(null);
@@ -35,7 +36,7 @@ export function SiteHeader() {
           <span className="brand__word">SweetToon</span>
         </Link>
         <nav className="site-nav" aria-label="주요 메뉴">
-          <Link href="/#discover">작품 둘러보기</Link>
+          <DiscoverLink>작품 둘러보기</DiscoverLink>
           <Link href="/orders">주문 현황</Link>
           <Link href="/studio">작가 스튜디오</Link>
           <Link href="/favorites">찜 목록</Link>

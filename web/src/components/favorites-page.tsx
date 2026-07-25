@@ -9,6 +9,7 @@ import {
   removeFavorite,
   type FavoriteSeries,
 } from "@/lib/favorites";
+import { DiscoverLink } from "./discover-link";
 
 export function FavoritesPage() {
   const [favorites, setFavorites] = useState<FavoriteSeries[] | null>(null);
@@ -34,9 +35,9 @@ export function FavoritesPage() {
           <span aria-hidden="true">♡</span>
           <h2>아직 찜한 작품이 없어요</h2>
           <p>관심 있는 작품 상세에서 찜하기를 눌러보세요.</p>
-          <Link className="button button--primary" href="/#discover">
+          <DiscoverLink className="button button--primary">
             작품 둘러보기
-          </Link>
+          </DiscoverLink>
         </section>
       ) : (
         <ul className="favorites-grid">

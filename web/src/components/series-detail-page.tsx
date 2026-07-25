@@ -11,6 +11,7 @@ import {
 } from "@/lib/reading-progress";
 import { ErrorState, PageLoading } from "./reader-states";
 import { FavoriteButton } from "./favorite-button";
+import { DiscoverLink } from "./discover-link";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -143,7 +144,7 @@ export function SeriesDetailPage({
       <nav className="page-breadcrumb" aria-label="현재 위치">
         <Link href="/">홈</Link>
         <span aria-hidden="true">/</span>
-        <Link href="/#discover">작품</Link>
+        <DiscoverLink>작품</DiscoverLink>
         <span aria-hidden="true">/</span>
         <strong aria-current="page">{series.title}</strong>
       </nav>

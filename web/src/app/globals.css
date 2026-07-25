@@ -742,9 +742,13 @@ button {
   padding: 0 0 14px;
   scroll-behavior: smooth;
   scroll-snap-type: x mandatory;
-  scrollbar-color: rgba(255, 154, 175, 0.62) rgba(255, 255, 255, 0.08);
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   list-style: none;
+}
+
+.recommendation-rail::-webkit-scrollbar {
+  display: none;
 }
 
 .recommendation-card {

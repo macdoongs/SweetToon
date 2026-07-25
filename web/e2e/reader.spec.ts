@@ -141,6 +141,39 @@ test("Swagger UI와 OpenAPI 계약을 같은 웹 주소에서 확인한다", asy
   expect(await docsResponse.text()).toContain("SweetToon API");
 });
 
+test("최신화 정렬은 최신 시즌의 최신 권부터 보여준다", async ({ page }) => {
+  await page.goto("/series/moonlight-laundry");
+
+  await page.getByRole("link", { name: "최신화부터" }).click();
+  await expect(page).toHaveURL(/sort=latest/);
+  const panels = page.locator(".season-panel");
+  await expect(panels.first().locator(".season-panel__header")).toContainText(
+    "시즌 2",
+  );
+  await expect(
+    panels.first().getByRole("heading", { level: 3 }),
+  ).toHaveText("9권");
+  await expect(
+    panels.first().locator(".episode-list__number").first(),
+  ).toHaveText("45");
+
+  const volumeFilters = page
+    .getByRole("navigation", { name: "권별 에피소드 필터" })
+    .getByRole("link");
+  await expect(volumeFilters.nth(1)).toHaveText("시즌 2 · 9권");
+
+  await page.getByRole("link", { name: "처음부터" }).click();
+  await expect(panels.first().locator(".season-panel__header")).toContainText(
+    "시즌 1",
+  );
+  await expect(
+    panels.first().getByRole("heading", { level: 3 }),
+  ).toHaveText("1권");
+  await expect(
+    panels.first().locator(".episode-list__number").first(),
+  ).toHaveText("01");
+});
+
 test("작품을 찜하고 목록에서 확인한 뒤 해제한다", async ({ page }) => {
   await page.goto("/series/moonlight-laundry");
 

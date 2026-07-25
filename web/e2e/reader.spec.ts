@@ -239,7 +239,7 @@ test("1권 주문 보너스 캔디로 유료 회차를 한 번만 차감해 해�
   ).toBeDisabled();
 
   await page.goto("/series/moonlight-laundry#edition");
-  await page.getByRole("link", { name: /시즌 1 · 1권 주문/ }).click();
+  await page.getByRole("link", { name: /선택한 1권 주문하기/ }).click();
   await expect(page.getByText("1권 혜택 · 보너스 캔디 5개")).toBeVisible();
   await page.getByLabel("주문자 닉네임").fill("해금독자");
   await page.getByRole("button", { name: "견적 확인하기" }).click();

@@ -212,6 +212,21 @@ test("라이트·다크·시스템 테마를 저장하고 즉시 적용한다", 
     "rgb(229, 216, 204)",
   );
   await expect(selectedEpisodeSort).toHaveCSS("color", "rgb(27, 24, 23)");
+  const editionCard = page.locator(".edition-card");
+  await expect(editionCard).toHaveCSS(
+    "background-color",
+    "rgb(43, 37, 34)",
+  );
+  await expect(editionCard).toHaveCSS("color", "rgb(246, 238, 229)");
+  const editionPicker = page.getByLabel("주문할 소장본");
+  expect(await editionPicker.locator("option").count()).toBeGreaterThan(1);
+  await expect(editionCard.getByRole("link")).toHaveCount(1);
+  await editionPicker.selectOption({
+    label: "시즌 1 · 2권 · 6~10화",
+  });
+  await expect(
+    editionCard.getByRole("link", { name: /선택한 2권 주문하기/ }),
+  ).toHaveAttribute("href", /volume=2$/);
 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(

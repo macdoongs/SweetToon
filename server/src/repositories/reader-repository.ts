@@ -35,7 +35,12 @@ export class PrismaReaderRepository implements ReaderRepository {
       where,
       skip,
       take: query.pageSize,
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }, { id: "desc" }],
+      orderBy: [
+        { coverUrl: { sort: "asc", nulls: "last" } },
+        { status: "asc" },
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
       include: {
         author: true,
         seasons: {

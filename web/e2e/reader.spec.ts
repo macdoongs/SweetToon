@@ -24,10 +24,20 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(episodeHeading).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
   const currentEpisode = await episodeHeading.innerText();
+  await expect(page.locator(".reader-page")).toHaveClass(
+    /reader-page--chrome-hidden/,
+    { timeout: 5_000 },
+  );
+  await page.mouse.move(100, 100);
+  await page.mouse.move(120, 120);
+  await expect(page.locator(".reader-page")).not.toHaveClass(
+    /reader-page--chrome-hidden/,
+  );
 
   await page.getByRole("button", { name: "양면 보기" }).click();
   await expect(page.locator(".reader-paged")).toBeVisible();
   await expect(page.getByText(/1 \//)).toBeVisible();
+  await expect(page.locator(".reader-finish")).toHaveCount(0);
   await page.getByRole("button", { name: "화면 설정" }).click();
   await page.getByLabel("오른쪽에서 왼쪽").check();
   await page.getByRole("button", { name: "화면 설정" }).click();
@@ -36,9 +46,17 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
     page.getByRole("button", { name: "다음 양면" }),
   ).toHaveClass(/reader-paged__turn--previous/);
   await page.getByRole("button", { name: "페이지", exact: true }).click();
-  await expect(page.getByRole("complementary", { name: "페이지 탐색기" }))
-    .toBeVisible();
-  await page.getByRole("button", { name: "닫기" }).click();
+  const pageNavigator = page.getByRole("complementary", {
+    name: "페이지 탐색기",
+  });
+  await expect(pageNavigator).toBeVisible();
+  await pageNavigator.locator(":scope > div button").last().click();
+  await expect(page.locator(".reader-finish--double")).toContainText(
+    "마지막 페이지예요",
+  );
+  await expect(page.locator(".reader-finish--double")).toContainText(
+    "모두 읽었습니다",
+  );
   await page.getByRole("button", { name: "세로 스크롤" }).click();
 
   const firstCut = page.locator(".webtoon-strip__cut img").first();
@@ -75,6 +93,12 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
     )
     .toBe(true);
 
+  await page.evaluate(() =>
+    window.scrollTo(0, document.documentElement.scrollHeight),
+  );
+  await expect(page.locator(".reader-finish")).toContainText(
+    "모두 읽었습니다",
+  );
   await page.getByRole("link", { name: /다음 화 이어보기/ }).click();
 
   await expect(page).toHaveURL(/\/read\/[^/]+$/);

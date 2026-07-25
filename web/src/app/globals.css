@@ -732,9 +732,23 @@ button {
   background: rgba(239, 104, 73, 0.22);
 }
 
+.horizontal-scroll-surface {
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.horizontal-scroll-surface::-webkit-scrollbar {
+  display: none;
+}
+
 .recommendation-rail {
   display: grid;
-  grid-auto-columns: clamp(156px, 17vw, 210px);
+  grid-auto-columns: var(
+    --recommendation-card-width,
+    clamp(156px, 17vw, 210px)
+  );
   grid-auto-flow: column;
   gap: 16px;
   overflow-x: auto;
@@ -742,13 +756,7 @@ button {
   padding: 0 0 14px;
   scroll-behavior: smooth;
   scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
   list-style: none;
-}
-
-.recommendation-rail::-webkit-scrollbar {
-  display: none;
 }
 
 .recommendation-card {
@@ -3601,7 +3609,10 @@ body:has(.reader-page) .site-footer {
   }
 
   .recommendation-rail {
-    grid-auto-columns: min(44vw, 180px);
+    grid-auto-columns: var(
+      --recommendation-card-width,
+      min(44vw, 180px)
+    );
   }
 
   .discover-section,

@@ -623,7 +623,10 @@ export function EpisodeReaderPage({
         <span className="reader-toolbar__progress">{readerProgress}%</span>
       </header>
 
-      <nav className="reader-controls" aria-label="뷰어 도구">
+      <nav
+        className="horizontal-scroll-surface reader-controls"
+        aria-label="뷰어 도구"
+      >
         <div role="group" aria-label="읽기 모드">
           <button
             aria-pressed={mode === "webtoon"}
@@ -835,7 +838,7 @@ export function EpisodeReaderPage({
           >
             ←
           </button>
-          <div className="reader-paged__spread">
+          <div className="horizontal-scroll-surface reader-paged__spread">
             {(spreads[spreadIndex] ?? []).map((page) => (
               <Image
                 alt={`${episode.title} ${page.order}번째 페이지`}

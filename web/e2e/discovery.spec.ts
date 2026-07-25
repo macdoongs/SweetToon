@@ -187,6 +187,31 @@ test("라이트·다크·시스템 테마를 저장하고 즉시 적용한다", 
         .evaluate((element) => getComputedStyle(element).backgroundColor),
     )
     .toBe("rgb(33, 29, 27)");
+  const selectedFilter = page.locator(
+    '.discover-filter[aria-current="page"]',
+  );
+  await expect
+    .poll(() =>
+      selectedFilter.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+    )
+    .toBe("rgb(229, 216, 204)");
+  await expect
+    .poll(() =>
+      selectedFilter.evaluate((element) => getComputedStyle(element).color),
+    )
+    .toBe("rgb(27, 24, 23)");
+
+  await page.goto("/series/moonlight-laundry");
+  const selectedEpisodeSort = page
+    .getByRole("navigation", { name: "에피소드 정렬" })
+    .locator('[aria-current="page"]');
+  await expect(selectedEpisodeSort).toHaveCSS(
+    "background-color",
+    "rgb(229, 216, 204)",
+  );
+  await expect(selectedEpisodeSort).toHaveCSS("color", "rgb(27, 24, 23)");
 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(

@@ -47,10 +47,12 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh '''
-                    set -eu
-                    docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" build
-                '''
+                retry(3) {
+                    sh '''
+                        set -eu
+                        docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" build
+                    '''
+                }
             }
         }
 

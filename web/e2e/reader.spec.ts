@@ -7,7 +7,9 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
     page.getByRole("heading", { level: 1 }),
   ).toContainText("좋아한 이야기를");
 
-  const seriesLink = page.locator(".series-card h3 a").first();
+  const seriesLink = page.locator(
+    '.series-card h3 a[href="/series/moonlight-laundry"]',
+  );
   const seriesTitle = (await seriesLink.textContent())?.trim();
   expect(seriesTitle).toBeTruthy();
   await seriesLink.click();

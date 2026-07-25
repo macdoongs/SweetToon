@@ -1,6 +1,15 @@
 services:
+  redis:
+    image: redis:7.4-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
   db:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sweettoon}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sweettoon}
@@ -15,6 +24,19 @@ services:
       timeout: 3s
       retries: 15
 
+  migrate:
+    build:
+      context: ./server
+    command: sh -c "npx prisma migrate deploy && npm run db:seed"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sweettoon}:${POSTGRES_PASSWORD:-sweettoon}@db:5432/${POSTGRES_DB:-sweettoon}
+      UPLOAD_DIR: /app/data/uploads
+    volumes:
+      - uploads:/app/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
   server:
     build:
       context: ./server
@@ -23,12 +45,36 @@ services:
       PORT: 4000
       UPLOAD_DIR: /app/data/uploads
       PRINT_PROVIDER: ${PRINT_PROVIDER:-mock}
+      ASSET_STORAGE_PROVIDER: ${ASSET_STORAGE_PROVIDER:-filesystem}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PRIVATE_BUCKET: ${R2_PRIVATE_BUCKET:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      R2_FORCE_PATH_STYLE: ${R2_FORCE_PATH_STYLE:-false}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      REDIS_URL: redis://redis:6379
+      REALTIME_BOT_ENABLED: ${REALTIME_BOT_ENABLED:-true}
+      REALTIME_BOT_AUTO_START: ${REALTIME_BOT_AUTO_START:-true}
+      REALTIME_BOT_READER_COUNT: ${REALTIME_BOT_READER_COUNT:-8}
+      REALTIME_BOT_SPEED: ${REALTIME_BOT_SPEED:-normal}
+      API_SECURITY_MODE: ${API_SECURITY_MODE:-demo}
+      STUDIO_API_KEY: ${STUDIO_API_KEY:-}
+      OPERATIONS_API_KEY: ${OPERATIONS_API_KEY:-}
+      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET:-sweettoon-local-audit-hash-secret}
+      MALWARE_SCANNER: ${MALWARE_SCANNER:-none}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
     ports:
       - "${SERVER_PORT:-4000}:4000"
     volumes:
       - uploads:/app/data/uploads
     depends_on:
-      db:
+      migrate:
+        condition: service_completed_successfully
+      redis:
         condition: service_healthy
     healthcheck:
       test:

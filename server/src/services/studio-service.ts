@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 import type {
+  AccessPolicy,
+  AccessPolicyResponse,
   CreatedEpisode,
   CreateEpisodeRequest,
   UploadPreview,
@@ -13,6 +15,12 @@ import {
   ArchiveValidationError,
 } from "../uploads/archive-analyzer";
 import type { StudioStorage } from "../uploads/upload-session-storage";
+import {
+  MalwareDetectedError,
+  MalwareScannerUnavailableError,
+  NoopMalwareScanner,
+  type MalwareScanner,
+} from "../security/malware-scanner";
 
 export class StudioServiceError extends Error {
   constructor(
@@ -36,18 +44,42 @@ export interface StudioUseCases {
   ): Promise<string>;
   createEpisode(input: CreateEpisodeRequest): Promise<CreatedEpisode>;
   cancelUpload(sessionId: string): Promise<void>;
+  updateAccessPolicy(
+    seriesId: string,
+    input: AccessPolicy,
+  ): Promise<AccessPolicyResponse>;
 }
 
 export class StudioService implements StudioUseCases {
   constructor(
     private readonly repository: StudioRepository,
     private readonly storage: StudioStorage,
+    private readonly malwareScanner: MalwareScanner = new NoopMalwareScanner(),
   ) {}
 
   async previewArchive(
     originalName: string,
     buffer: Buffer,
   ): Promise<UploadPreview> {
+    try {
+      await this.malwareScanner.scan(buffer);
+    } catch (error) {
+      if (error instanceof MalwareDetectedError) {
+        throw new StudioServiceError(
+          "ARCHIVE_MALWARE_DETECTED",
+          "안전하지 않은 원고 파일이 감지되어 업로드를 중단했습니다.",
+          422,
+        );
+      }
+      if (error instanceof MalwareScannerUnavailableError) {
+        throw new StudioServiceError(
+          "MALWARE_SCANNER_UNAVAILABLE",
+          "파일 안전 검사를 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요.",
+          503,
+        );
+      }
+      throw error;
+    }
     let images;
     try {
       images = await analyzeArchive(buffer);
@@ -174,5 +206,24 @@ export class StudioService implements StudioUseCases {
 
   async cancelUpload(sessionId: string): Promise<void> {
     await this.storage.removeSession(sessionId);
+  }
+
+  async updateAccessPolicy(
+    seriesId: string,
+    input: AccessPolicy,
+  ): Promise<AccessPolicyResponse> {
+    const updated = await this.repository.updateAccessPolicy(
+      seriesId,
+      input.freeVolumeCount,
+      input.previewEpisodeCount,
+    );
+    if (!updated) {
+      throw new StudioServiceError(
+        "SERIES_NOT_FOUND",
+        "공개 정책을 바꿀 작품을 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return updated;
   }
 }

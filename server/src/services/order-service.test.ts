@@ -21,6 +21,8 @@ const season: OrderableSeason = {
   title: "얼룩의 계절",
   status: "completed",
   pageCount: 64,
+  volumeNumber: 1,
+  episodeRange: { from: 1, to: 5 },
   series: {
     id: "series-1",
     slug: "moonlight-laundry",
@@ -31,7 +33,9 @@ const season: OrderableSeason = {
 
 const input: CreateOrderRequest = {
   requestKey: "f371de0c-01cd-4214-99f7-7cd8e1df82a0",
+  candyWalletToken: "e4a40518-b468-4a0a-b51d-309cd07e630c",
   seasonId: season.id,
+  volumeNumber: 1,
   bookSize: "A5",
   coverType: "hardcover",
   quantity: 1,
@@ -42,8 +46,11 @@ const input: CreateOrderRequest = {
 function orderFixture(overrides: Partial<OrderDetail> = {}): OrderDetail {
   return {
     id: "cmorder000000000000000001",
+    isDemo: false,
     providerOrderId: null,
+    candyBonus: 0,
     ordererType: "reader",
+    volumeNumber: input.volumeNumber,
     quantity: input.quantity,
     coverType: input.coverType,
     bookSize: input.bookSize,
@@ -94,6 +101,8 @@ function makeDependencies() {
     markCanceled: jest.fn().mockResolvedValue(undefined),
     findById: jest.fn().mockResolvedValue(null),
     listOrders: jest.fn().mockResolvedValue({ items: [] }),
+    pruneCompletedDemoOrders: jest.fn().mockResolvedValue(undefined),
+    deleteDemoOrders: jest.fn().mockResolvedValue(undefined),
   };
   const provider: jest.Mocked<PrintProvider> = {
     name: "mock",
@@ -168,6 +177,16 @@ describe("OrderService", () => {
       "mock-order-1",
     );
     expect(created.providerOrderId).toBe("mock-order-1");
+  });
+
+  it("marks internally generated demo orders without exposing a client flag", async () => {
+    const { service, repository } = makeDependencies();
+
+    await service.createDemo(input);
+
+    expect(repository.createPendingOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ isDemo: true }),
+    );
   });
 
   it("returns the existing order for a repeated request key", async () => {

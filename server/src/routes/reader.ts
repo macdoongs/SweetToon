@@ -3,7 +3,7 @@ import {
   EpisodeReaderSchema,
   IdParamSchema,
   SeriesDetailSchema,
-  SeriesFilterSchema,
+  SeriesListQuerySchema,
   SeriesListResponseSchema,
   SlugParamSchema,
 } from "../contracts/reader";
@@ -13,8 +13,8 @@ export function createReaderRouter(repository: ReaderRepository): Router {
   const router = Router();
 
   router.get("/series", async (req, res) => {
-    const parsedFilter = SeriesFilterSchema.safeParse(req.query.filter ?? "all");
-    if (!parsedFilter.success) {
+    const query = SeriesListQuerySchema.safeParse(req.query);
+    if (!query.success) {
       res.status(400).json({
         code: "INVALID_SERIES_FILTER",
         message: "작품 필터가 올바르지 않습니다.",
@@ -23,7 +23,7 @@ export function createReaderRouter(repository: ReaderRepository): Router {
     }
 
     const result = SeriesListResponseSchema.parse(
-      await repository.listSeries(parsedFilter.data),
+      await repository.listSeries(query.data),
     );
     res.json(result);
   });
@@ -60,7 +60,14 @@ export function createReaderRouter(repository: ReaderRepository): Router {
       return;
     }
 
-    const result = await repository.findEpisodeById(parsedId.data);
+    const authorization = req.header("authorization");
+    const accessToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length)
+      : undefined;
+    const result = await repository.findEpisodeById(
+      parsedId.data,
+      accessToken,
+    );
     if (!result) {
       res.status(404).json({
         code: "EPISODE_NOT_FOUND",

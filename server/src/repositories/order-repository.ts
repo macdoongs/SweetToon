@@ -13,6 +13,8 @@ export type OrderableSeason = {
   title: string | null;
   status: string;
   pageCount: number;
+  volumeNumber: number;
+  episodeRange: { from: number; to: number };
   series: {
     id: string;
     slug: string;
@@ -24,10 +26,14 @@ export type OrderableSeason = {
 export type CreatePendingOrderInput = CreateOrderRequest & {
   season: OrderableSeason;
   quote: PrintQuote;
+  isDemo?: boolean;
 };
 
 export interface OrderRepository {
-  findOrderableSeason(id: string): Promise<OrderableSeason | null>;
+  findOrderableSeason(
+    id: string,
+    volumeNumber: number,
+  ): Promise<OrderableSeason | null>;
   findByRequestKey(requestKey: string): Promise<OrderDetail | null>;
   createPendingOrder(input: CreatePendingOrderInput): Promise<OrderDetail>;
   attachProviderOrder(
@@ -43,6 +49,8 @@ export interface OrderRepository {
   markCanceled(orderId: string, message: string): Promise<void>;
   findById(id: string): Promise<OrderDetail | null>;
   listOrders(): Promise<OrderListResponse>;
+  pruneCompletedDemoOrders(keep: number): Promise<void>;
+  deleteDemoOrders(): Promise<void>;
 }
 
 const orderInclude = {
@@ -58,8 +66,11 @@ type OrderWithRelations = Prisma.OrderGetPayload<{
 function toOrderDetail(order: OrderWithRelations): OrderDetail {
   return {
     id: order.id,
+    isDemo: order.isDemo,
     providerOrderId: order.providerOrderId,
+    candyBonus: order.candyBonus,
     ordererType: order.ordererType === "creator" ? "creator" : "reader",
+    volumeNumber: order.volumeNumber,
     quantity: order.quantity,
     coverType: order.coverType,
     bookSize: order.bookSize,
@@ -106,12 +117,20 @@ function toOrderDetail(order: OrderWithRelations): OrderDetail {
 export class PrismaOrderRepository implements OrderRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findOrderableSeason(id: string): Promise<OrderableSeason | null> {
+  async findOrderableSeason(
+    id: string,
+    volumeNumber: number,
+  ): Promise<OrderableSeason | null> {
+    const episodeFrom = (volumeNumber - 1) * 5 + 1;
+    const episodeTo = volumeNumber * 5;
     const season = await this.prisma.season.findUnique({
       where: { id },
       include: {
         series: true,
         episodes: {
+          where: {
+            number: { gte: episodeFrom, lte: episodeTo },
+          },
           select: {
             _count: { select: { pages: true } },
           },
@@ -132,6 +151,14 @@ export class PrismaOrderRepository implements OrderRepository {
         (total, episode) => total + episode._count.pages,
         0,
       ),
+      volumeNumber,
+      episodeRange: {
+        from: episodeFrom,
+        to: Math.min(
+          episodeTo,
+          episodeFrom + season.episodes.length - 1,
+        ),
+      },
       series: {
         id: season.series.id,
         slug: season.series.slug,
@@ -153,11 +180,18 @@ export class PrismaOrderRepository implements OrderRepository {
     input: CreatePendingOrderInput,
   ): Promise<OrderDetail> {
     const order = await this.prisma.$transaction(async (transaction) => {
+      await transaction.candyWallet.upsert({
+        where: { token: input.candyWalletToken },
+        update: {},
+        create: { token: input.candyWalletToken },
+      });
       const created = await transaction.order.create({
         data: {
           requestKey: input.requestKey,
+          candyWalletToken: input.candyWalletToken,
           seriesId: input.season.series.id,
           seasonId: input.season.id,
+          volumeNumber: input.season.volumeNumber,
           ordererName: input.ordererName,
           ordererType: "reader",
           quantity: input.quantity,
@@ -169,6 +203,7 @@ export class PrismaOrderRepository implements OrderRepository {
           totalPrice: input.quote.totalPrice,
           estimatedBusinessDays: input.quote.estimatedBusinessDays,
           memo: input.memo || null,
+          isDemo: input.isDemo ?? false,
           status: "pending",
         },
       });
@@ -193,10 +228,34 @@ export class PrismaOrderRepository implements OrderRepository {
     providerOrderId: string,
   ): Promise<OrderDetail> {
     const order = await this.prisma.$transaction(async (transaction) => {
+      const current = await transaction.order.findUniqueOrThrow({
+        where: { id: orderId },
+      });
+      const candyBonus =
+        !current.isDemo && current.volumeNumber === 1 ? 5 : 0;
       await transaction.order.update({
         where: { id: orderId },
-        data: { providerOrderId, status: "processing" },
+        data: { providerOrderId, status: "processing", candyBonus },
       });
+      if (
+        candyBonus > 0 &&
+        current.candyWalletToken &&
+        current.candyBonus === 0
+      ) {
+        const wallet = await transaction.candyWallet.update({
+          where: { token: current.candyWalletToken },
+          data: { balance: { increment: candyBonus } },
+        });
+        await transaction.candyTransaction.create({
+          data: {
+            walletToken: current.candyWalletToken,
+            type: "order_bonus",
+            amount: candyBonus,
+            balanceAfter: wallet.balance,
+            orderId,
+          },
+        });
+      }
       await transaction.orderEvent.create({
         data: {
           orderId,
@@ -265,5 +324,22 @@ export class PrismaOrderRepository implements OrderRepository {
     return {
       items: orders.map(toOrderDetail),
     };
+  }
+
+  async pruneCompletedDemoOrders(keep: number): Promise<void> {
+    const stale = await this.prisma.order.findMany({
+      where: { isDemo: true, status: { in: ["completed", "canceled"] } },
+      orderBy: { updatedAt: "desc" },
+      skip: keep,
+      select: { id: true },
+    });
+    if (stale.length === 0) return;
+    await this.prisma.order.deleteMany({
+      where: { id: { in: stale.map((order) => order.id) }, isDemo: true },
+    });
+  }
+
+  async deleteDemoOrders(): Promise<void> {
+    await this.prisma.order.deleteMany({ where: { isDemo: true } });
   }
 }

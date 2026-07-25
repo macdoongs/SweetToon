@@ -5,6 +5,8 @@ export type EpisodeSummary = {
   number: number;
   title: string;
   publishedAt: string;
+  volumeNumber: number;
+  access: "free" | "locked";
 };
 
 export type SeriesSummary = {
@@ -13,6 +15,9 @@ export type SeriesSummary = {
   title: string;
   synopsis: string;
   genre: string;
+  weekday: Weekday;
+  freeVolumeCount: number;
+  previewEpisodeCount: number;
   coverUrl: string | null;
   status: PublicationStatus;
   author: { name: string };
@@ -21,7 +26,25 @@ export type SeriesSummary = {
   latestEpisode: EpisodeSummary | null;
 };
 
-export type SeriesListResponse = { items: SeriesSummary[] };
+export type Weekday =
+  | "mon"
+  | "tue"
+  | "wed"
+  | "thu"
+  | "fri"
+  | "sat"
+  | "sun";
+
+export type SeriesListResponse = {
+  items: SeriesSummary[];
+  page: number;
+  nextPage: number | null;
+  total: number;
+  facets: {
+    genres: string[];
+    weekdays: Weekday[];
+  };
+};
 
 export type SeriesDetail = Omit<
   SeriesSummary,
@@ -53,6 +76,12 @@ export type EpisodeReader = {
     order: number;
     imageUrl: string;
   }>;
+  access: {
+    state: "free" | "entitled" | "locked";
+    volumeNumber: number;
+    freeVolumeCount: number;
+    previewEpisodeCount: number;
+  };
   navigation: {
     previousEpisodeId: string | null;
     nextEpisodeId: string | null;

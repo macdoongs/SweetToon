@@ -32,6 +32,12 @@ export interface OrderUseCases {
   transition(id: string, input: OrderTransitionRequest): Promise<OrderDetail>;
 }
 
+export interface DemoOrderUseCases extends OrderUseCases {
+  createDemo(input: CreateOrderRequest): Promise<OrderDetail>;
+  pruneCompletedDemos(keep: number): Promise<void>;
+  clearDemos(): Promise<void>;
+}
+
 const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = {
   pending: "processing",
   processing: "shipped",
@@ -44,7 +50,7 @@ const transitionMessage: Record<"processing" | "shipped" | "completed", string> 
   completed: "소장본 배송이 완료되었어요.",
 };
 
-export class OrderService implements OrderUseCases {
+export class OrderService implements DemoOrderUseCases {
   constructor(
     private readonly repository: OrderRepository,
     private readonly printProvider: PrintProvider,
@@ -52,8 +58,12 @@ export class OrderService implements OrderUseCases {
 
   private async requireOrderableSeason(
     seasonId: string,
+    volumeNumber: number,
   ): Promise<OrderableSeason> {
-    const season = await this.repository.findOrderableSeason(seasonId);
+    const season = await this.repository.findOrderableSeason(
+      seasonId,
+      volumeNumber,
+    );
     if (!season) {
       throw new OrderServiceError(
         "SEASON_NOT_FOUND",
@@ -92,6 +102,8 @@ export class OrderService implements OrderUseCases {
     return {
       ...quote,
       pageCount: season.pageCount,
+      volumeNumber: season.volumeNumber,
+      episodeRange: season.episodeRange,
       series: {
         id: season.series.id,
         slug: season.series.slug,
@@ -106,17 +118,42 @@ export class OrderService implements OrderUseCases {
   }
 
   async quote(input: PrintQuoteRequest): Promise<PrintQuoteResponse> {
-    const season = await this.requireOrderableSeason(input.seasonId);
+    const season = await this.requireOrderableSeason(
+      input.seasonId,
+      input.volumeNumber,
+    );
     return this.buildQuote(input, season);
   }
 
   async create(input: CreateOrderRequest): Promise<OrderDetail> {
+    return this.createOrder(input, false);
+  }
+
+  async createDemo(input: CreateOrderRequest): Promise<OrderDetail> {
+    return this.createOrder(input, true);
+  }
+
+  pruneCompletedDemos(keep: number): Promise<void> {
+    return this.repository.pruneCompletedDemoOrders(keep);
+  }
+
+  clearDemos(): Promise<void> {
+    return this.repository.deleteDemoOrders();
+  }
+
+  private async createOrder(
+    input: CreateOrderRequest,
+    isDemo: boolean,
+  ): Promise<OrderDetail> {
     const existing = await this.repository.findByRequestKey(input.requestKey);
     if (existing) {
       return existing;
     }
 
-    const season = await this.requireOrderableSeason(input.seasonId);
+    const season = await this.requireOrderableSeason(
+      input.seasonId,
+      input.volumeNumber,
+    );
     const quote = await this.buildQuote(input, season);
     let order: OrderDetail;
     try {
@@ -124,6 +161,7 @@ export class OrderService implements OrderUseCases {
         ...input,
         season,
         quote,
+        isDemo,
       });
     } catch (error) {
       // Concurrent requests can pass the first lookup together. The database

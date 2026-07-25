@@ -1,0 +1,24 @@
+services:
+  clamav:
+    image: clamav/clamav:stable_base@sha256:b2be682d7514281f20117fb8fe15a7f8da9e4f6ea0b4b819f6c74c84ce84d1d7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    volumes:
+      - clamav-db:/var/lib/clamav
+
+  server:
+    environment:
+      MALWARE_SCANNER: clamav
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+    depends_on:
+      clamav:
+        condition: service_healthy
+
+volumes:
+  clamav-db:

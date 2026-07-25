@@ -1,6 +1,8 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import multer from "multer";
+import swaggerUi from "swagger-ui-express";
 import path from "node:path";
 import fs from "node:fs";
 import type { ReaderRepository } from "./repositories/reader-repository";
@@ -17,31 +19,90 @@ import {
   StudioServiceError,
   type StudioUseCases,
 } from "./services/studio-service";
+import { openApiDocument } from "./openapi";
+import type { RequestHandler } from "express";
+import type { Store } from "express-rate-limit";
+import type { SecurityAuditLogger } from "./security/audit-logger";
+import { createCandyRouter } from "./routes/candy";
+import {
+  CandyServiceError,
+  type CandyUseCases,
+} from "./services/candy-service";
+import type { RealtimeService } from "./realtime/realtime-service";
+import { createRealtimeRouter } from "./routes/realtime";
+import type { DemoBotController } from "./realtime/demo-bot-service";
+import { DemoBotUnavailableError } from "./realtime/demo-bot-service";
+import { createDemoBotRouter } from "./routes/demo-bot";
 
 export type AppOptions = {
   readerRepository: ReaderRepository;
   printProvider?: PrintProvider;
   orderService?: OrderUseCases;
+  candyService?: CandyUseCases;
   studioService?: StudioUseCases;
   uploadDir?: string;
+  allowedOrigins?: string[];
+  studioMutationGuard?: RequestHandler;
+  operationsGuard?: RequestHandler;
+  uploadRateLimitStore?: Store;
+  auditLogger?: SecurityAuditLogger;
+  realtime?: RealtimeService;
+  demoBot?: DemoBotController;
 };
 
 export function createApp({
   readerRepository,
   printProvider = createPrintProvider(),
   orderService,
+  candyService,
   studioService,
   uploadDir = path.join(process.cwd(), "data", "uploads"),
+  allowedOrigins = [],
+  studioMutationGuard,
+  operationsGuard,
+  uploadRateLimitStore,
+  auditLogger,
+  realtime,
+  demoBot,
 }: AppOptions): Express {
   const app = express();
   fs.mkdirSync(uploadDir, { recursive: true });
 
-  app.use(cors());
+  app.set("trust proxy", 1);
+  app.use(
+    helmet({
+      // Swagger UI uses an inline bootstrap script. The public web app keeps
+      // its own CSP; API responses still receive the remaining Helmet headers.
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+    }),
+  );
+  app.use(
+    cors({
+      credentials: false,
+      origin(origin, callback) {
+        callback(
+          null,
+          !origin || allowedOrigins.includes(origin),
+        );
+      },
+    }),
+  );
   app.use(express.json());
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, printProvider: printProvider.name });
   });
+  app.get("/openapi.json", (_req, res) => {
+    res.json(openApiDocument);
+  });
+  const swaggerHtml = swaggerUi.generateHTML(openApiDocument, {
+    customSiteTitle: "SweetToon API",
+  });
+  app.get(["/api-docs", "/api-docs/"], (_req, res) => {
+    res.type("html").send(swaggerHtml);
+  });
+  app.use("/api-docs", swaggerUi.serve);
 
   app.use(
     "/api/images/studio",
@@ -66,11 +127,37 @@ export function createApp({
     }),
   );
   app.use("/api", createReaderRouter(readerRepository));
+  if (realtime) {
+    app.use("/api", createRealtimeRouter(readerRepository, realtime));
+  }
+  if (demoBot) {
+    app.use(
+      "/api",
+      createDemoBotRouter(demoBot, operationsGuard, auditLogger),
+    );
+  }
   if (orderService) {
-    app.use("/api", createOrderRouter(orderService));
+    app.use(
+      "/api",
+      createOrderRouter(orderService, {
+        operationsGuard,
+        auditLogger,
+        realtime,
+      }),
+    );
+  }
+  if (candyService) {
+    app.use("/api", createCandyRouter(candyService));
   }
   if (studioService) {
-    app.use("/api", createStudioRouter(studioService));
+    app.use(
+      "/api",
+      createStudioRouter(studioService, {
+        mutationGuard: studioMutationGuard,
+        rateLimitStore: uploadRateLimitStore,
+        auditLogger,
+      }),
+    );
   }
 
   app.use(
@@ -81,6 +168,20 @@ export function createApp({
       _next: express.NextFunction,
     ) => {
       if (error instanceof OrderServiceError) {
+        res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      if (error instanceof CandyServiceError) {
+        res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      if (error instanceof DemoBotUnavailableError) {
         res.status(error.status).json({
           code: error.code,
           message: error.message,

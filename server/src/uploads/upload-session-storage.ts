@@ -8,8 +8,8 @@ import {
 } from "./archive-analyzer";
 
 const SESSION_TTL_MS = 60 * 60 * 1000;
-const READER_IMAGE_WIDTH = 1_600;
-const READER_IMAGE_QUALITY = 82;
+export const READER_IMAGE_WIDTH = 1_600;
+export const READER_IMAGE_QUALITY = 82;
 
 export type StoredPage = {
   id: string;
@@ -148,6 +148,13 @@ export class FileStudioStorage implements StudioStorage {
     return candidate.startsWith(root) && fs.existsSync(candidate)
       ? candidate
       : null;
+  }
+
+  async getSourcePath(
+    sessionId: string,
+    pageId: string,
+  ): Promise<string | null> {
+    return this.getPreviewPath(sessionId, pageId);
   }
 
   async publish(

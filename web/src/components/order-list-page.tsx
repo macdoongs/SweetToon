@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { formatKoreanDateTime } from "@/lib/date-time";
 import type { OrderDetail } from "@/lib/order-types";
 
 const statusLabel: Record<OrderDetail["status"], string> = {
@@ -64,10 +65,11 @@ export function OrderListPage({ orders }: { orders: OrderDetail[] }) {
                   <span className={`order-status order-status--${order.status}`}>
                     {statusLabel[order.status]}
                   </span>
+                  {order.isDemo ? (
+                    <span className="demo-order-badge">봇 데모</span>
+                  ) : null}
                   <time dateTime={order.createdAt}>
-                    {new Intl.DateTimeFormat("ko-KR", {
-                      dateStyle: "medium",
-                    }).format(new Date(order.createdAt))}
+                    {formatKoreanDateTime(order.createdAt)}
                   </time>
                 </div>
                 <h2>{order.series.title}</h2>

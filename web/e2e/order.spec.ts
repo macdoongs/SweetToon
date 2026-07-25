@@ -10,7 +10,9 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
     .filter({ hasText: "소장 가능" })
     .first();
   await orderableSeries.locator("h3 a").click();
-  await page.getByRole("link", { name: /시즌 \d+ 주문하기/ }).first().click();
+  await page
+    .getByRole("link", { name: /선택한 \d+권 주문하기/ })
+    .click();
 
   await expect(
     page.getByRole("heading", { level: 1 }),
@@ -40,16 +42,42 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
   const body = await response.json();
   expect(body).not.toHaveProperty("ordererName");
   expect(body).not.toHaveProperty("memo");
+  const firstEvent = page.locator("time").first();
+  await expect(firstEvent).toHaveAttribute(
+    "datetime",
+    body.events[0].createdAt,
+  );
+  await expect(firstEvent).toContainText("KST");
+
+  const transition = await page.request.patch(
+    `/api/orders/${encodeURIComponent(orderId ?? "")}/status`,
+    { data: { status: "shipped" } },
+  );
+  expect(transition.ok()).toBeTruthy();
+  await expect(page.getByText("배송 중", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText("소장본 제작을 마치고 배송을 시작했어요."),
+  ).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("실시간 연결됨");
 
   await page.goto("/operations/orders");
   await expect(
     page.getByRole("heading", { level: 1, name: "소장본 제작 관리" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "실시간 데모 봇" }),
+  ).toBeVisible();
+  await page.getByLabel("변경 속도").selectOption("fast");
+  await page.getByRole("button", { name: "봇 일시정지" }).click();
+  await expect(page.locator(".demo-bot-status")).toHaveText("정지");
+  await page.getByRole("button", { name: "봇 시작" }).click();
+  await expect(page.locator(".demo-bot-status")).toHaveText("실행 중");
+  await expect(page.locator(".demo-order-badge").first()).toBeVisible({
+    timeout: 12_000,
+  });
   const operation = page
     .locator(".operations-card")
     .filter({ hasText: orderId ?? "" });
-  await expect(operation.getByText("제작 중", { exact: true })).toBeVisible();
-  await operation.getByRole("button", { name: "배송 시작" }).click();
   await expect(operation.getByText("배송 중", { exact: true })).toBeVisible();
   await operation.getByRole("button", { name: "완료 처리" }).click();
   await expect(operation.getByText("완료", { exact: true })).toBeVisible();

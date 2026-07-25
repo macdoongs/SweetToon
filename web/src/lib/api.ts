@@ -14,10 +14,11 @@ export class ApiError extends Error {
 export async function getJson<T>(
   path: string,
   signal?: AbortSignal,
+  headers: HeadersInit = {},
 ): Promise<T> {
   const response = await fetch(path, {
     signal,
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...headers },
   });
 
   if (!response.ok) {
@@ -39,6 +40,7 @@ export async function postJson<TInput, TResponse>(
   path: string,
   body: TInput,
   signal?: AbortSignal,
+  headers: HeadersInit = {},
 ): Promise<TResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -46,6 +48,7 @@ export async function postJson<TInput, TResponse>(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...headers,
     },
     body: JSON.stringify(body),
   });
@@ -68,12 +71,14 @@ export async function postJson<TInput, TResponse>(
 export async function patchJson<TInput, TResponse>(
   path: string,
   body: TInput,
+  headers: HeadersInit = {},
 ): Promise<TResponse> {
   const response = await fetch(path, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...headers,
     },
     body: JSON.stringify(body),
   });
@@ -94,10 +99,11 @@ export async function patchJson<TInput, TResponse>(
 export async function postFormData<TResponse>(
   path: string,
   formData: FormData,
+  headers: HeadersInit = {},
 ): Promise<TResponse> {
   const response = await fetch(path, {
     method: "POST",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...headers },
     body: formData,
   });
   if (!response.ok) {
@@ -114,8 +120,11 @@ export async function postFormData<TResponse>(
   return (await response.json()) as TResponse;
 }
 
-export async function deleteRequest(path: string): Promise<void> {
-  const response = await fetch(path, { method: "DELETE" });
+export async function deleteRequest(
+  path: string,
+  headers: HeadersInit = {},
+): Promise<void> {
+  const response = await fetch(path, { method: "DELETE", headers });
   if (!response.ok && response.status !== 404) {
     throw new ApiError("임시 파일을 정리하지 못했습니다.", response.status);
   }

@@ -26,3 +26,12 @@ export type CreatedEpisode = {
   pageCount: number;
   readerUrl: string;
 };
+
+export type AccessPolicy = {
+  freeVolumeCount: number;
+  previewEpisodeCount: number;
+};
+
+export type AccessPolicyResponse = AccessPolicy & {
+  seriesId: string;
+};

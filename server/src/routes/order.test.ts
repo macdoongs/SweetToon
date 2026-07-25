@@ -8,11 +8,15 @@ import {
   OrderServiceError,
   type OrderUseCases,
 } from "../services/order-service";
+import type { RealtimeService } from "../realtime/realtime-service";
 
 const order: OrderDetail = {
   id: "cmorder000000000000000001",
+  isDemo: false,
   providerOrderId: "mock-order-1",
+  candyBonus: 5,
   ordererType: "reader",
+  volumeNumber: 1,
   quantity: 1,
   coverType: "hardcover",
   bookSize: "A5",
@@ -40,7 +44,13 @@ const order: OrderDetail = {
 
 function makeReaderRepository(): ReaderRepository {
   return {
-    listSeries: jest.fn().mockResolvedValue({ items: [] }),
+    listSeries: jest.fn().mockResolvedValue({
+      items: [],
+      page: 1,
+      nextPage: null,
+      total: 0,
+      facets: { genres: [], weekdays: [] },
+    }),
     findSeriesBySlug: jest.fn().mockResolvedValue(null),
     findEpisodeById: jest.fn().mockResolvedValue(null),
   };
@@ -55,6 +65,8 @@ function makeService(): jest.Mocked<OrderUseCases> {
       totalPrice: 9_940,
       estimatedBusinessDays: 5,
       pageCount: 64,
+      volumeNumber: 1,
+      episodeRange: { from: 1, to: 5 },
       series: {
         id: "series-1",
         slug: "moonlight-laundry",
@@ -76,10 +88,24 @@ function makeService(): jest.Mocked<OrderUseCases> {
   };
 }
 
-function makeApp(service = makeService()) {
+function makeRealtime(): jest.Mocked<RealtimeService> {
+  return {
+    publishOrder: jest.fn().mockResolvedValue(undefined),
+    subscribeOrder: jest.fn().mockResolvedValue(async () => undefined),
+    heartbeatSeries: jest.fn().mockResolvedValue(0),
+    getViewerCounts: jest.fn().mockResolvedValue({}),
+    removePresence: jest.fn().mockResolvedValue(undefined),
+    claimLease: jest.fn().mockResolvedValue(true),
+    releaseLease: jest.fn().mockResolvedValue(undefined),
+    close: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+function makeApp(service = makeService(), realtime = makeRealtime()) {
   return createApp({
     readerRepository: makeReaderRepository(),
     orderService: service,
+    realtime,
     uploadDir: path.join(os.tmpdir(), "sweettoon-order-tests"),
   });
 }
@@ -90,6 +116,7 @@ describe("order routes", () => {
       .post("/api/print-quotes")
       .send({
         seasonId: "cmseason00000000000000001",
+        volumeNumber: 1,
         bookSize: "A5",
         coverType: "hardcover",
         quantity: 1,
@@ -115,7 +142,9 @@ describe("order routes", () => {
       .post("/api/orders")
       .send({
         requestKey: "f371de0c-01cd-4214-99f7-7cd8e1df82a0",
+        candyWalletToken: "e4a40518-b468-4a0a-b51d-309cd07e630c",
         seasonId: "cmseason00000000000000001",
+        volumeNumber: 1,
         bookSize: "A5",
         coverType: "hardcover",
         quantity: 1,
@@ -155,7 +184,8 @@ describe("order routes", () => {
 
   it("validates and applies an operator status transition", async () => {
     const service = makeService();
-    const response = await request(makeApp(service))
+    const realtime = makeRealtime();
+    const response = await request(makeApp(service, realtime))
       .patch("/api/orders/cmorder000000000000000001/status")
       .send({ status: "shipped" })
       .expect(200);
@@ -165,6 +195,9 @@ describe("order routes", () => {
       { status: "shipped" },
     );
     expect(response.body.status).toBe("shipped");
+    expect(realtime.publishOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: order.id, status: "shipped" }),
+    );
   });
 
   it("rejects an unsupported operator status", async () => {

@@ -14,6 +14,7 @@ export const OrderStatusSchema = z.enum([
 
 export const PrintQuoteRequestSchema = z.object({
   seasonId: SeasonIdSchema,
+  volumeNumber: z.number().int().positive(),
   bookSize: BookSizeSchema,
   coverType: CoverTypeSchema,
   quantity: z.number().int().min(1).max(50),
@@ -26,6 +27,11 @@ export const PrintQuoteResponseSchema = z.object({
   totalPrice: z.number().int().nonnegative(),
   estimatedBusinessDays: z.number().int().positive(),
   pageCount: z.number().int().positive(),
+  volumeNumber: z.number().int().positive(),
+  episodeRange: z.object({
+    from: z.number().int().positive(),
+    to: z.number().int().positive(),
+  }),
   series: z.object({
     id: z.string(),
     slug: z.string(),
@@ -40,6 +46,7 @@ export const PrintQuoteResponseSchema = z.object({
 
 export const CreateOrderRequestSchema = PrintQuoteRequestSchema.extend({
   requestKey: z.string().uuid(),
+  candyWalletToken: z.string().uuid(),
   ordererName: z.string().trim().min(2).max(30),
   memo: z.string().trim().max(200).nullable().optional(),
 });
@@ -57,8 +64,11 @@ export const OrderEventSchema = z.object({
 
 export const OrderDetailSchema = z.object({
   id: z.string(),
+  isDemo: z.boolean(),
   providerOrderId: z.string().nullable(),
+  candyBonus: z.number().int().nonnegative(),
   ordererType: z.enum(["reader", "creator"]),
+  volumeNumber: z.number().int().positive(),
   quantity: z.number().int().positive(),
   coverType: z.string(),
   bookSize: z.string(),

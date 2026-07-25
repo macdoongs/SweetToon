@@ -1,40 +1,71 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Prisma } from "@prisma/client";
 import type {
   EpisodeReader,
-  SeriesFilter,
   SeriesDetail,
+  SeriesListQuery,
   SeriesListResponse,
 } from "../contracts/reader";
+import { WeekdaySchema } from "../contracts/reader";
 
 export interface ReaderRepository {
-  listSeries(filter?: SeriesFilter): Promise<SeriesListResponse>;
+  listSeries(query: SeriesListQuery): Promise<SeriesListResponse>;
   findSeriesBySlug(slug: string): Promise<SeriesDetail | null>;
-  findEpisodeById(id: string): Promise<EpisodeReader | null>;
+  findEpisodeById(
+    id: string,
+    accessToken?: string,
+  ): Promise<EpisodeReader | null>;
 }
 
 export class PrismaReaderRepository implements ReaderRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async listSeries(filter: SeriesFilter = "all"): Promise<SeriesListResponse> {
-    const series = await this.prisma.series.findMany({
-      where:
-        filter === "ongoing"
-          ? { status: "ongoing" }
-          : filter === "collectible"
-            ? { seasons: { some: { status: "completed" } } }
-            : undefined,
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+  async listSeries(query: SeriesListQuery): Promise<SeriesListResponse> {
+    const where: Prisma.SeriesWhereInput = {
+      ...(query.filter === "ongoing"
+        ? { status: "ongoing" }
+        : query.filter === "collectible"
+          ? { seasons: { some: { status: "completed" } } }
+          : {}),
+      ...(query.genre ? { genre: query.genre } : {}),
+      ...(query.weekday ? { weekday: query.weekday } : {}),
+    };
+    const skip = (query.page - 1) * query.pageSize;
+    const [series, total, genres, weekdays] = await this.prisma.$transaction([
+      this.prisma.series.findMany({
+      where,
+      skip,
+      take: query.pageSize,
+      orderBy: [
+        { coverUrl: { sort: "asc", nulls: "last" } },
+        { status: "asc" },
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
       include: {
         author: true,
         seasons: {
-          include: {
+          select: {
+            status: true,
+            _count: { select: { episodes: true } },
             episodes: {
-              orderBy: { number: "desc" },
+              orderBy: { publishedAt: "desc" },
+              take: 1,
             },
           },
         },
       },
-    });
+      }),
+      this.prisma.series.count({ where }),
+      this.prisma.series.findMany({
+        select: { genre: true },
+        distinct: ["genre"],
+        orderBy: { genre: "asc" },
+      }),
+      this.prisma.series.findMany({
+        select: { weekday: true },
+        distinct: ["weekday"],
+      }),
+    ]);
 
     return {
       items: series.map((item) => {
@@ -50,10 +81,16 @@ export class PrismaReaderRepository implements ReaderRepository {
           title: item.title,
           synopsis: item.synopsis,
           genre: item.genre,
+          weekday: WeekdaySchema.parse(item.weekday),
+          freeVolumeCount: item.freeVolumeCount,
+          previewEpisodeCount: item.previewEpisodeCount,
           coverUrl: item.coverUrl,
           status: item.status === "completed" ? "completed" : "ongoing",
           author: { name: item.author.name },
-          episodeCount: episodes.length,
+          episodeCount: item.seasons.reduce(
+            (count, season) => count + season._count.episodes,
+            0,
+          ),
           completedSeasonCount: item.seasons.filter(
             (season) => season.status === "completed",
           ).length,
@@ -63,10 +100,23 @@ export class PrismaReaderRepository implements ReaderRepository {
                 number: latestEpisode.number,
                 title: latestEpisode.title,
                 publishedAt: latestEpisode.publishedAt.toISOString(),
+                volumeNumber: Math.ceil(latestEpisode.number / 5),
+                access:
+                  latestEpisode.number <=
+                    item.freeVolumeCount * 5 + item.previewEpisodeCount
+                    ? "free"
+                    : "locked",
               }
             : null,
         };
       }),
+      page: query.page,
+      nextPage: skip + series.length < total ? query.page + 1 : null,
+      total,
+      facets: {
+        genres: genres.map((item) => item.genre),
+        weekdays: weekdays.map((item) => WeekdaySchema.parse(item.weekday)),
+      },
     };
   }
 
@@ -96,6 +146,9 @@ export class PrismaReaderRepository implements ReaderRepository {
       title: series.title,
       synopsis: series.synopsis,
       genre: series.genre,
+      weekday: WeekdaySchema.parse(series.weekday),
+      freeVolumeCount: series.freeVolumeCount,
+      previewEpisodeCount: series.previewEpisodeCount,
       coverUrl: series.coverUrl,
       status: series.status === "completed" ? "completed" : "ongoing",
       author: {
@@ -113,12 +166,21 @@ export class PrismaReaderRepository implements ReaderRepository {
           number: episode.number,
           title: episode.title,
           publishedAt: episode.publishedAt.toISOString(),
+          volumeNumber: Math.ceil(episode.number / 5),
+          access:
+            episode.number <=
+            series.freeVolumeCount * 5 + series.previewEpisodeCount
+              ? "free"
+              : "locked",
         })),
       })),
     };
   }
 
-  async findEpisodeById(id: string): Promise<EpisodeReader | null> {
+  async findEpisodeById(
+    id: string,
+    accessToken?: string,
+  ): Promise<EpisodeReader | null> {
     const episode = await this.prisma.episode.findUnique({
       where: { id },
       include: {
@@ -144,6 +206,34 @@ export class PrismaReaderRepository implements ReaderRepository {
     const episodeIndex = episode.season.episodes.findIndex(
       (candidate) => candidate.id === episode.id,
     );
+    const volumeNumber = Math.ceil(episode.number / 5);
+    const isFree =
+      episode.number <=
+      episode.season.series.freeVolumeCount * 5 +
+        episode.season.series.previewEpisodeCount;
+    const hasEntitlement =
+      !isFree &&
+      Boolean(accessToken) &&
+      accessToken!.length <= 100 &&
+      ((await this.prisma.order.count({
+          where: {
+            requestKey: accessToken,
+            seasonId: episode.season.id,
+            volumeNumber,
+            status: { not: "canceled" },
+          },
+        })) > 0 ||
+        (await this.prisma.candyEpisodeEntitlement.count({
+          where: {
+            walletToken: accessToken,
+            episodeId: episode.id,
+          },
+        })) > 0);
+    const accessState = isFree
+      ? "free"
+      : hasEntitlement
+        ? "entitled"
+        : "locked";
 
     return {
       id: episode.id,
@@ -160,11 +250,20 @@ export class PrismaReaderRepository implements ReaderRepository {
         number: episode.season.number,
         title: episode.season.title,
       },
-      pages: episode.pages.map((page) => ({
-        id: page.id,
-        order: page.order,
-        imageUrl: page.imageUrl,
-      })),
+      pages:
+        accessState === "locked"
+          ? []
+          : episode.pages.map((page) => ({
+              id: page.id,
+              order: page.order,
+              imageUrl: page.imageUrl,
+            })),
+      access: {
+        state: accessState,
+        volumeNumber,
+        freeVolumeCount: episode.season.series.freeVolumeCount,
+        previewEpisodeCount: episode.season.series.previewEpisodeCount,
+      },
       navigation: {
         previousEpisodeId:
           episodeIndex > 0

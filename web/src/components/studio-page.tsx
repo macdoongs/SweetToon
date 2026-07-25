@@ -12,21 +12,34 @@ import {
 import {
   ApiError,
   deleteRequest,
+  patchJson,
   postFormData,
   postJson,
 } from "@/lib/api";
 import type { SeriesDetail } from "@/lib/reader-types";
 import type {
+  AccessPolicy,
+  AccessPolicyResponse,
   CreatedEpisode,
   CreateEpisodeRequest,
   UploadPreview,
 } from "@/lib/studio-types";
+import {
+  loadSecurityAccessKey,
+  saveSecurityAccessKey,
+} from "@/lib/security-access";
 
 function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
 export function StudioPage({ series }: { series: SeriesDetail[] }) {
+  const [accessKey, setAccessKey] = useState(() =>
+    loadSecurityAccessKey("studio"),
+  );
+  const mutationHeaders: Record<string, string> = accessKey.trim()
+    ? { "x-sweettoon-studio-key": accessKey.trim() }
+    : {};
   const availableSeries = useMemo(
     () =>
       series.filter((item) =>
@@ -35,9 +48,25 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     [series],
   );
   const [seriesId, setSeriesId] = useState(availableSeries[0]?.id ?? "");
+  const [policies, setPolicies] = useState<Record<string, AccessPolicy>>(() =>
+    Object.fromEntries(
+      series.map((item) => [
+        item.id,
+        {
+          freeVolumeCount: item.freeVolumeCount,
+          previewEpisodeCount: item.previewEpisodeCount,
+        },
+      ]),
+    ),
+  );
+  const [policyBusy, setPolicyBusy] = useState(false);
+  const [policyMessage, setPolicyMessage] = useState<string | null>(null);
   const selectedSeries =
     availableSeries.find((item) => item.id === seriesId) ??
     availableSeries[0];
+  const selectedPolicy = selectedSeries
+    ? policies[selectedSeries.id]
+    : undefined;
   const ongoingSeasons =
     selectedSeries?.seasons.filter((season) => season.status === "ongoing") ??
     [];
@@ -67,6 +96,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       (season) => season.status === "ongoing",
     );
     setSeriesId(nextSeriesId);
+    setPolicyMessage(null);
     setSeasonId(nextSeason?.id ?? "");
     setEpisodeNumber(
       nextSeason
@@ -76,6 +106,32 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           ) + 1
         : 1,
     );
+  }
+
+  async function saveAccessPolicy() {
+    if (!selectedSeries || !selectedPolicy) return;
+    setPolicyBusy(true);
+    setPolicyMessage(null);
+    try {
+      const updated = await patchJson<AccessPolicy, AccessPolicyResponse>(
+        `/api/studio/series/${encodeURIComponent(selectedSeries.id)}/access-policy`,
+        selectedPolicy,
+        mutationHeaders,
+      );
+      setPolicies((current) => ({
+        ...current,
+        [updated.seriesId]: updated,
+      }));
+      setPolicyMessage("독자 공개 범위를 저장했어요.");
+    } catch (reason) {
+      setPolicyMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "공개 범위를 저장하지 못했습니다.",
+      );
+    } finally {
+      setPolicyBusy(false);
+    }
   }
 
   function chooseSeason(nextSeasonId: string) {
@@ -108,6 +164,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     if (preview) {
       await deleteRequest(
         `/api/studio/uploads/${encodeURIComponent(preview.sessionId)}`,
+        mutationHeaders,
       ).catch(() => undefined);
     }
     setBusy("upload");
@@ -119,6 +176,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       const result = await postFormData<UploadPreview>(
         "/api/studio/uploads",
         formData,
+        mutationHeaders,
       );
       setPreview(result);
     } catch (reason) {
@@ -161,6 +219,8 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           title: title.trim(),
           pageIds: preview.pages.map((page) => page.id),
         },
+        undefined,
+        mutationHeaders,
       );
       setCreated(result);
       setPreview(null);
@@ -212,6 +272,23 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
         <div className="studio-layout">
           <aside className="studio-settings">
             <p className="eyebrow">Episode info</p>
+            <details className="studio-security-access">
+              <summary>운영 보안 설정</summary>
+              <label className="field">
+                <span>스튜디오 접근 키</span>
+                <input
+                  autoComplete="off"
+                  onChange={(event) => {
+                    setAccessKey(event.target.value);
+                    saveSecurityAccessKey("studio", event.target.value);
+                  }}
+                  placeholder="운영 strict 모드에서만 필요"
+                  type="password"
+                  value={accessKey}
+                />
+              </label>
+              <p>키는 현재 탭의 sessionStorage에만 보관됩니다.</p>
+            </details>
             <label className="field">
               <span>작품</span>
               <select
@@ -223,6 +300,64 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                 ))}
               </select>
             </label>
+            {selectedSeries && selectedPolicy ? (
+              <section className="studio-access-policy">
+                <div>
+                  <strong>독자 공개 범위</strong>
+                  <p>한 권은 5화이며, 무료 권 다음에 일부 화를 더 공개할 수 있어요.</p>
+                </div>
+                <label className="field">
+                  <span>무료 공개 권 수</span>
+                  <input
+                    max={20}
+                    min={0}
+                    onChange={(event) =>
+                      setPolicies((current) => ({
+                        ...current,
+                        [selectedSeries.id]: {
+                          ...selectedPolicy,
+                          freeVolumeCount: Number(event.target.value),
+                        },
+                      }))
+                    }
+                    type="number"
+                    value={selectedPolicy.freeVolumeCount}
+                  />
+                </label>
+                <label className="field">
+                  <span>다음 권 미리보기</span>
+                  <select
+                    onChange={(event) =>
+                      setPolicies((current) => ({
+                        ...current,
+                        [selectedSeries.id]: {
+                          ...selectedPolicy,
+                          previewEpisodeCount: Number(event.target.value),
+                        },
+                      }))
+                    }
+                    value={selectedPolicy.previewEpisodeCount}
+                  >
+                    {[0, 1, 2, 3, 4].map((count) => (
+                      <option key={count} value={count}>
+                        {count}화
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="button button--ghost button--wide"
+                  disabled={policyBusy}
+                  onClick={() => void saveAccessPolicy()}
+                  type="button"
+                >
+                  {policyBusy ? "저장 중…" : "공개 범위 저장"}
+                </button>
+                {policyMessage ? (
+                  <p aria-live="polite">{policyMessage}</p>
+                ) : null}
+              </section>
+            ) : null}
             <label className="field">
               <span>시즌</span>
               <select

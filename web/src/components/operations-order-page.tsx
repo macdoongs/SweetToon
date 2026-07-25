@@ -1,13 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ApiError, patchJson } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { ApiError, getJson, patchJson, postJson } from "@/lib/api";
+import type {
+  DemoBotSpeed,
+  DemoBotStatus,
+  DemoBotUpdate,
+} from "@/lib/demo-bot-types";
 import type {
   OrderDetail,
+  OrderListResponse,
   OrderStatus,
   OrderTransitionRequest,
 } from "@/lib/order-types";
+import {
+  loadSecurityAccessKey,
+  saveSecurityAccessKey,
+} from "@/lib/security-access";
 
 const statusLabel: Record<OrderStatus, string> = {
   pending: "접수",
@@ -35,7 +45,84 @@ export function OperationsOrderPage({
 }) {
   const [orders, setOrders] = useState(initialOrders);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [botBusy, setBotBusy] = useState(false);
+  const [botStatus, setBotStatus] = useState<DemoBotStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [accessKey, setAccessKey] = useState(() =>
+    loadSecurityAccessKey("operations"),
+  );
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const [orderResponse, nextBotStatus] = await Promise.all([
+          getJson<OrderListResponse>("/api/orders"),
+          getJson<DemoBotStatus>("/api/realtime/demo-bot"),
+        ]);
+        if (!active) return;
+        setOrders(orderResponse.items);
+        setBotStatus(nextBotStatus);
+      } catch {
+        // Keep the last successful snapshot visible during a transient poll.
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 3_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const operationHeaders: Record<string, string> = accessKey.trim()
+    ? { "x-sweettoon-operations-key": accessKey.trim() }
+    : {};
+
+  async function updateBot(input: DemoBotUpdate) {
+    setBotBusy(true);
+    setError(null);
+    try {
+      const updated = await patchJson<DemoBotUpdate, DemoBotStatus>(
+        "/api/realtime/demo-bot",
+        input,
+        operationHeaders,
+      );
+      setBotStatus(updated);
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "실시간 데모 봇을 변경하지 못했습니다.",
+      );
+    } finally {
+      setBotBusy(false);
+    }
+  }
+
+  async function resetBot() {
+    setBotBusy(true);
+    setError(null);
+    try {
+      const updated = await postJson<Record<string, never>, DemoBotStatus>(
+        "/api/realtime/demo-bot/reset",
+        {},
+        undefined,
+        operationHeaders,
+      );
+      setBotStatus(updated);
+      const orderResponse = await getJson<OrderListResponse>("/api/orders");
+      setOrders(orderResponse.items);
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "데모 봇 데이터를 초기화하지 못했습니다.",
+      );
+    } finally {
+      setBotBusy(false);
+    }
+  }
 
   async function advance(order: OrderDetail) {
     const action = nextAction[order.status];
@@ -46,6 +133,9 @@ export function OperationsOrderPage({
       const updated = await patchJson<OrderTransitionRequest, OrderDetail>(
         `/api/orders/${encodeURIComponent(order.id)}/status`,
         { status: action.status },
+        accessKey.trim()
+          ? operationHeaders
+          : {},
       );
       setOrders((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
@@ -80,6 +170,117 @@ export function OperationsOrderPage({
         </Link>
       </header>
 
+      <section className="demo-bot-panel" aria-label="실시간 데모 봇">
+        <div className="demo-bot-panel__heading">
+          <div>
+            <p className="eyebrow">Realtime simulator</p>
+            <h2>실시간 데모 봇</h2>
+            <p>
+              가상 독자가 작품을 옮겨 읽고, 데모 주문이 일정 시간마다 다음
+              단계로 이동합니다.
+            </p>
+          </div>
+          <span
+            className={`demo-bot-status ${
+              botStatus?.running ? "demo-bot-status--running" : ""
+            }`}
+          >
+            {botStatus?.running
+              ? botStatus.leader
+                ? "실행 중"
+                : "대기 중"
+              : "정지"}
+          </span>
+        </div>
+        {botStatus ? (
+          <>
+            <div className="demo-bot-metrics">
+              <strong>{botStatus.activeBotCount}명</strong>
+              <span>현재 가상 독자</span>
+              <strong>{botStatus.tickIntervalSeconds}초</strong>
+              <span>갱신 주기</span>
+            </div>
+            <div className="demo-bot-controls">
+              <button
+                className="button button--primary"
+                disabled={botBusy || !botStatus.available}
+                onClick={() =>
+                  void updateBot({ running: !botStatus.running })
+                }
+                type="button"
+              >
+                {botStatus.running ? "봇 일시정지" : "봇 시작"}
+              </button>
+              <label>
+                <span>목표 독자 수</span>
+                <select
+                  disabled={botBusy || !botStatus.available}
+                  onChange={(event) =>
+                    void updateBot({ readerCount: Number(event.target.value) })
+                  }
+                  value={botStatus.readerCount}
+                >
+                  {[0, 4, 8, 12, 20, 30].map((count) => (
+                    <option key={count} value={count}>
+                      {count}명
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>변경 속도</span>
+                <select
+                  disabled={botBusy || !botStatus.available}
+                  onChange={(event) =>
+                    void updateBot({
+                      speed: event.target.value as DemoBotSpeed,
+                    })
+                  }
+                  value={botStatus.speed}
+                >
+                  <option value="slow">천천히</option>
+                  <option value="normal">보통</option>
+                  <option value="fast">빠르게</option>
+                </select>
+              </label>
+              <button
+                className="button button--ghost"
+                disabled={botBusy || !botStatus.available}
+                onClick={() => void resetBot()}
+                type="button"
+              >
+                데모 데이터 초기화
+              </button>
+            </div>
+            <p className="demo-bot-panel__activity" aria-live="polite">
+              {botStatus.available
+                ? botStatus.lastAction ?? "첫 갱신을 준비하고 있습니다."
+                : "이 환경에서는 데모 봇이 비활성화되어 있습니다."}
+            </p>
+          </>
+        ) : (
+          <p className="demo-bot-panel__activity">봇 상태를 불러오는 중…</p>
+        )}
+      </section>
+
+      <details className="operations-security-access">
+        <summary>운영 보안 설정</summary>
+        <label className="field">
+          <span>운영자 접근 키</span>
+          <input
+            autoComplete="off"
+            onChange={(event) => {
+              setAccessKey(event.target.value);
+              saveSecurityAccessKey("operations", event.target.value);
+            }}
+            placeholder="운영 strict 모드에서만 필요"
+            type="password"
+            value={accessKey}
+          />
+        </label>
+        <p>키는 현재 탭의 sessionStorage에만 보관됩니다.</p>
+      </details>
+
       {error ? (
         <p className="operations-error" role="alert">{error}</p>
       ) : null}
@@ -93,6 +294,9 @@ export function OperationsOrderPage({
                 <span className={`order-status order-status--${order.status}`}>
                   {statusLabel[order.status]}
                 </span>
+                {order.isDemo ? (
+                  <span className="demo-order-badge">봇 데모</span>
+                ) : null}
                 <h2>{order.series.title}</h2>
                 <p>
                   시즌 {order.season.number} · {order.bookSize} ·{" "}

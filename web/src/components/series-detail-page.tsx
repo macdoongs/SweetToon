@@ -5,20 +5,30 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, getJson } from "@/lib/api";
 import type { SeriesDetail } from "@/lib/reader-types";
+import {
+  getAllReadingProgress,
+  type ReadingProgress,
+} from "@/lib/reading-progress";
 import { ErrorState, PageLoading } from "./reader-states";
+import { FavoriteButton } from "./favorite-button";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
     month: "short",
     day: "numeric",
+    timeZone: "Asia/Seoul",
   }).format(new Date(value));
 }
 
 export function SeriesDetailPage({
   slug,
+  activeSort,
+  activeVolume,
   initialData = null,
 }: {
   slug: string;
+  activeSort: "oldest" | "latest";
+  activeVolume?: string;
   initialData?: SeriesDetail | null;
 }) {
   const [series, setSeries] = useState<SeriesDetail | null>(initialData);
@@ -26,10 +36,24 @@ export function SeriesDetailPage({
     null,
   );
   const [requestKey, setRequestKey] = useState(0);
+  const [readingProgress, setReadingProgress] = useState<
+    Record<string, ReadingProgress>
+  >({});
+  const [selectedEditionKey, setSelectedEditionKey] = useState("");
 
   const retry = useCallback(() => {
     setError(null);
     setRequestKey((current) => current + 1);
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => setReadingProgress(getAllReadingProgress());
+    const frame = requestAnimationFrame(refresh);
+    window.addEventListener("sweettoon:progress", refresh);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("sweettoon:progress", refresh);
+    };
   }, []);
 
   useEffect(() => {
@@ -76,9 +100,43 @@ export function SeriesDetailPage({
     return <PageLoading label="작품의 페이지를 펼치고 있어요" />;
   }
 
-  const completedSeasons = series.seasons.filter(
-    (season) => season.status === "completed",
+  const volumeOptions = series.seasons.flatMap((season) =>
+    [...new Set(season.episodes.map((episode) => episode.volumeNumber))].map(
+      (volumeNumber) => ({
+        key: `${season.id}:${volumeNumber}`,
+        season,
+        volumeNumber,
+        episodes: season.episodes.filter(
+          (episode) => episode.volumeNumber === volumeNumber,
+        ),
+      }),
+    ),
   );
+  const completedVolumes = volumeOptions.filter(
+    (volume) => volume.season.status === "completed",
+  );
+  const selectedEdition =
+    completedVolumes.find((volume) => volume.key === selectedEditionKey) ??
+    completedVolumes[0];
+  const orderedVolumes = [...volumeOptions].sort((left, right) => {
+    const direction = activeSort === "latest" ? -1 : 1;
+    const seasonDifference = left.season.number - right.season.number;
+    if (seasonDifference !== 0) return seasonDifference * direction;
+    return (left.volumeNumber - right.volumeNumber) * direction;
+  });
+  const selectedVolumes = activeVolume
+    ? orderedVolumes.filter((volume) => volume.key === activeVolume)
+    : orderedVolumes;
+  const filterHref = (
+    sort: "oldest" | "latest",
+    volume?: string,
+  ) => {
+    const params = new URLSearchParams();
+    if (sort === "latest") params.set("sort", sort);
+    if (volume) params.set("volume", volume);
+    const query = params.toString();
+    return `/series/${encodeURIComponent(series.slug)}${query ? `?${query}` : ""}#episodes`;
+  };
 
   return (
     <main className="series-page">
@@ -137,26 +195,75 @@ export function SeriesDetailPage({
             <a className="button button--ghost" href="#edition">
               소장본 알아보기
             </a>
+            <FavoriteButton
+              series={{
+                slug: series.slug,
+                title: series.title,
+                synopsis: series.synopsis,
+                genre: series.genre,
+                coverUrl: series.coverUrl,
+                authorName: series.author.name,
+              }}
+            />
           </div>
         </div>
       </header>
 
-      <section className="episode-library">
+      <section className="episode-library" id="episodes">
         <div className="section-heading section-heading--compact">
           <div>
             <p className="eyebrow">Episodes</p>
             <h2>에피소드</h2>
           </div>
-          <p>시즌별로 차례대로 감상할 수 있어요.</p>
+          <p>다섯 화씩 한 권으로 묶어 차례대로 감상할 수 있어요.</p>
+        </div>
+
+        <div className="episode-controls">
+          <nav aria-label="에피소드 정렬">
+            <strong>정렬</strong>
+            <Link
+              aria-current={activeSort === "oldest" ? "page" : undefined}
+              href={filterHref("oldest", activeVolume)}
+            >
+              처음부터
+            </Link>
+            <Link
+              aria-current={activeSort === "latest" ? "page" : undefined}
+              href={filterHref("latest", activeVolume)}
+            >
+              최신화부터
+            </Link>
+          </nav>
+          <nav aria-label="권별 에피소드 필터">
+            <strong>소장본</strong>
+            <Link
+              aria-current={!activeVolume ? "page" : undefined}
+              href={filterHref(activeSort)}
+            >
+              전체
+            </Link>
+            {orderedVolumes.map((volume) => (
+              <Link
+                aria-current={
+                  activeVolume === volume.key ? "page" : undefined
+                }
+                href={filterHref(activeSort, volume.key)}
+                key={volume.key}
+              >
+                시즌 {volume.season.number} · {volume.volumeNumber}권
+              </Link>
+            ))}
+          </nav>
         </div>
 
         <div className="season-list">
-          {series.seasons.map((season) => (
-            <section className="season-panel" key={season.id}>
+          {selectedVolumes.map(
+            ({ key, season, volumeNumber, episodes }) => (
+            <section className="season-panel" key={key}>
               <header className="season-panel__header">
                 <div>
-                  <span>시즌 {season.number}</span>
-                  <h3>{season.title ?? `시즌 ${season.number}`}</h3>
+                  <span>시즌 {season.number} · 5화 단위</span>
+                  <h3>{volumeNumber}권</h3>
                 </div>
                 <span
                   className={`status-badge status-badge--${season.status}`}
@@ -164,15 +271,24 @@ export function SeriesDetailPage({
                   {season.status === "completed" ? "완결" : "연재 중"}
                 </span>
               </header>
-              {season.episodes.length === 0 ? (
+              {episodes.length === 0 ? (
                 <p className="season-panel__empty">
                   첫 에피소드를 준비하고 있어요.
                 </p>
               ) : (
                 <ol className="episode-list">
-                  {season.episodes.map((episode) => (
+                  {[...episodes]
+                    .sort((left, right) =>
+                      activeSort === "latest"
+                        ? right.number - left.number
+                        : left.number - right.number,
+                    )
+                    .map((episode) => (
                     <li key={episode.id}>
-                      <Link href={`/read/${episode.id}`}>
+                      <Link
+                        className="episode-list__item"
+                        href={`/read/${episode.id}`}
+                      >
                         <span className="episode-list__number">
                           {String(episode.number).padStart(2, "0")}
                         </span>
@@ -182,6 +298,15 @@ export function SeriesDetailPage({
                         <time dateTime={episode.publishedAt}>
                           {formatDate(episode.publishedAt)}
                         </time>
+                        <span className="episode-list__access">
+                          {readingProgress[episode.id]?.completed
+                            ? "읽음"
+                            : readingProgress[episode.id]
+                              ? `${readingProgress[episode.id].percent}% 읽음`
+                              : episode.access === "free"
+                                ? "무료"
+                                : "소장본 이용권"}
+                        </span>
                         <span className="episode-list__arrow">→</span>
                       </Link>
                     </li>
@@ -204,19 +329,41 @@ export function SeriesDetailPage({
           </p>
         </div>
         <div className="edition-card__status">
-          <strong>{completedSeasons.length}</strong>
-          <span>소장 가능한 시즌</span>
-          {completedSeasons.length > 0 ? (
-            <div className="edition-card__actions">
-              {completedSeasons.map((season) => (
-                <Link
-                  className="button button--light"
-                  href={`/series/${encodeURIComponent(series.slug)}/order?season=${encodeURIComponent(season.id)}`}
-                  key={season.id}
+          <div className="edition-card__metric">
+            <strong>{completedVolumes.length}</strong>
+            <span>소장 가능한 권</span>
+          </div>
+          {selectedEdition ? (
+            <div className="edition-card__picker">
+              <label>
+                <span>주문할 소장본</span>
+                <select
+                  onChange={(event) =>
+                    setSelectedEditionKey(event.target.value)
+                  }
+                  value={selectedEdition.key}
                 >
-                  시즌 {season.number} 주문하기
-                </Link>
-              ))}
+                  {completedVolumes.map(
+                    ({ key, season, volumeNumber, episodes }) => (
+                      <option key={key} value={key}>
+                        시즌 {season.number} · {volumeNumber}권 ·{" "}
+                        {episodes.at(0)?.number}~{episodes.at(-1)?.number}화
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <Link
+                className="button edition-card__order"
+                href={`/series/${encodeURIComponent(series.slug)}/order?season=${encodeURIComponent(selectedEdition.season.id)}&volume=${selectedEdition.volumeNumber}`}
+              >
+                선택한 {selectedEdition.volumeNumber}권 주문하기
+                <small>
+                  시즌 {selectedEdition.season.number} ·{" "}
+                  {selectedEdition.episodes.at(0)?.number}~
+                  {selectedEdition.episodes.at(-1)?.number}화
+                </small>
+              </Link>
             </div>
           ) : (
             <span className="edition-card__unavailable">

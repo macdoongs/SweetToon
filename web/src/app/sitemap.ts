@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import {
   getSeriesDetail,
-  getSeriesList,
+  getAllSeries,
 } from "@/lib/server-api";
 import { absoluteUrl } from "@/lib/site";
 
@@ -17,7 +17,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   try {
-    const list = await getSeriesList();
+    const list = await getAllSeries();
     const details = await Promise.all(
       list.items.map((series) => getSeriesDetail(series.slug)),
     );

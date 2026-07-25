@@ -80,21 +80,111 @@ try {
     } "server health and mock provider check"
 
     Invoke-Checked {
+        docker compose run --rm migrate
+    } "migration and seed rerun over existing database"
+
+    Invoke-Checked {
+        docker compose exec -T server npx prisma migrate diff `
+            --from-schema-datasource prisma/schema.prisma `
+            --to-schema-datamodel prisma/schema.prisma `
+            --exit-code
+    } "migrated database and Prisma schema drift check"
+
+    Invoke-Checked {
         docker compose exec -T web node -e "
-          fetch('http://localhost:3000/api/series')
-            .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
-            .then(body => {
-              if (!Array.isArray(body.items) || body.items.length === 0) {
-                process.exit(1)
+          const base = 'http://localhost:3000'
+          async function json(path, options) {
+            const response = await fetch(base + path, options)
+            if (!response.ok) throw new Error(path + ' returned ' + response.status)
+            return response.json()
+          }
+          async function verifySeed() {
+            const body = await json('/api/series')
+            if (!Array.isArray(body.items) || body.items.length === 0) {
+              throw new Error('seeded series not found')
+            }
+            const catalog = await json('/api/series/catalog-01')
+            if (catalog.seasons[0]?.episodes.length !== 30) {
+              throw new Error('catalog-01 expected 30 episodes')
+            }
+            if (!catalog.coverUrl) {
+              throw new Error('catalog-01 cover URL is missing')
+            }
+            const coverResponse = await fetch(
+              new URL(catalog.coverUrl, base)
+            )
+            if (
+              !coverResponse.ok ||
+              !coverResponse.headers.get('content-type')?.startsWith('image/')
+            ) {
+              throw new Error('catalog-01 cover image is unavailable')
+            }
+            if ((await coverResponse.arrayBuffer()).byteLength === 0) {
+              throw new Error('catalog-01 cover image is empty')
+            }
+            const longCatalog = await json('/api/series/catalog-12')
+            if (longCatalog.seasons[0]?.episodes.length !== 120) {
+              throw new Error('catalog-12 expected 120 episodes')
+            }
+            const firstEpisode = catalog.seasons[0]?.episodes[0]
+            if (!firstEpisode) throw new Error('catalog episode not found')
+            const reader = await json(
+              '/api/episodes/' + encodeURIComponent(firstEpisode.id)
+            )
+            if (reader.pages.length !== 4) {
+              throw new Error(
+                'catalog episode expected 4 pages, received ' +
+                  reader.pages.length
+              )
+            }
+            const paidEpisode = catalog.seasons[0]?.episodes[5]
+            if (!paidEpisode) throw new Error('paid catalog episode not found')
+            const paidReader = await json(
+              '/api/episodes/' + encodeURIComponent(paidEpisode.id)
+            )
+            if (
+              paidReader.access.state !== 'locked' ||
+              paidReader.pages.length !== 0
+            ) {
+              throw new Error('episode 6 should require candy or ownership')
+            }
+            const presence = await json(
+              '/api/series/' + encodeURIComponent(catalog.slug) + '/presence',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: crypto.randomUUID() })
               }
-              console.log('series=' + body.items.length)
-            })
-            .catch(error => {
+            )
+            const popular = await json('/api/realtime/popular')
+            const demoBot = await json('/api/realtime/demo-bot')
+            const catalogPopularity = popular.items.find(
+              item => item.series.slug === catalog.slug
+            )
+            if (
+              presence.viewerCount < 1 ||
+              !catalogPopularity ||
+              catalogPopularity.viewerCount < 1 ||
+              !demoBot.available ||
+              !demoBot.running ||
+              demoBot.activeBotCount < 1
+            ) {
+              throw new Error('realtime presence verification failed')
+            }
+            console.log(
+              'series=' + body.items.length +
+                ' episode-range=30..120' +
+                ' catalog-pages=' + reader.pages.length +
+                ' live-readers=' + presence.viewerCount +
+                ' demo-bots=' + demoBot.activeBotCount
+            )
+          }
+          verifySeed().catch(error => {
               console.error(error)
               process.exit(1)
             })
         "
-    } "web to API proxy and seed check"
+    } "web to API proxy and catalog seed check"
 
     Invoke-Checked {
         docker compose exec -T web node -e "
@@ -125,6 +215,7 @@ try {
 
             const specification = {
               seasonId: selected.season.id,
+              volumeNumber: 1,
               bookSize: 'A5',
               coverType: 'softcover',
               quantity: 1
@@ -141,23 +232,38 @@ try {
             if (quote.pageCount < 1 || quote.totalPrice < 1) {
               throw new Error('invalid print quote')
             }
+            const candyWalletToken = crypto.randomUUID()
+            const orderRequest = {
+              ...specification,
+              requestKey: crypto.randomUUID(),
+              candyWalletToken,
+              ordererName: 'SmokeTest'
+            }
             const order = await json('/api/orders', {
               method: 'POST',
               headers,
-              body: JSON.stringify({
-                ...specification,
-                requestKey: crypto.randomUUID(),
-                ordererName: 'SmokeTest'
-              })
+              body: JSON.stringify(orderRequest)
+            })
+            const repeatedOrder = await json('/api/orders', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(orderRequest)
             })
             const persisted = await json(
               '/api/orders/' + encodeURIComponent(order.id)
             )
+            const candyWallet = await json(
+              '/api/candy-wallets/' + encodeURIComponent(candyWalletToken)
+            )
             const eventStatuses = persisted.events.map(event => event.status)
             if (
+              repeatedOrder.id !== order.id ||
               persisted.status !== 'processing' ||
               eventStatuses.join(',') !== 'pending,processing' ||
-              !persisted.providerOrderId
+              !persisted.providerOrderId ||
+              persisted.candyBonus !== 5 ||
+              candyWallet.balance !== 5 ||
+              candyWallet.unitPrice !== 100
             ) {
               throw new Error('persistent order verification failed')
             }
@@ -169,6 +275,31 @@ try {
           })
         "
     } "mock quote and persistent order flow"
+
+    Invoke-Checked {
+        docker compose exec -T web node -e "
+          Promise.all([
+            fetch('http://localhost:3000/openapi.json'),
+            fetch('http://localhost:3000/api-docs/')
+          ])
+            .then(async ([contractResponse, docsResponse]) => {
+              if (!contractResponse.ok || !docsResponse.ok) process.exit(1)
+              const contract = await contractResponse.json()
+              const docs = await docsResponse.text()
+              if (
+                contract.openapi !== '3.1.0' ||
+                !docs.includes('SweetToon API')
+              ) {
+                process.exit(1)
+              }
+              console.log('openapi and swagger ok')
+            })
+            .catch(error => {
+              console.error(error)
+              process.exit(1)
+            })
+        "
+    } "OpenAPI and Swagger proxy check"
 
     Invoke-Checked {
         docker compose exec -T server node -e "
@@ -198,6 +329,25 @@ try {
               }
             }
             if (!selected) throw new Error('ongoing season not found')
+            const episodeNumber =
+              Math.max(0, ...selected.season.episodes.map(item => item.number)) +
+              1
+            await json(
+              '/api/studio/series/' +
+                encodeURIComponent(selected.detail.id) +
+                '/access-policy',
+              {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json'
+                },
+                body: JSON.stringify({
+                  freeVolumeCount: 20,
+                  previewEpisodeCount: 0
+                })
+              }
+            )
 
             const png = Buffer.from(
               'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -231,7 +381,7 @@ try {
               body: JSON.stringify({
                 sessionId: preview.sessionId,
                 seasonId: selected.season.id,
-                number: 9999,
+                number: episodeNumber,
                 title: 'Smoke Episode',
                 pageIds: preview.pages.map(page => page.id)
               })

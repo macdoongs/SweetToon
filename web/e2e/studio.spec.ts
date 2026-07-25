@@ -20,9 +20,22 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/studio");
   await expect(page.getByText("독자 공개 범위")).toBeVisible();
-  await page.getByLabel("무료 공개 권 수").fill("1");
-  await page.getByLabel("다음 권 미리보기").selectOption("2");
+  const freeVolumeInput = page.getByLabel("무료 공개 권 수");
+  const previewSelect = page.getByLabel("다음 권 미리보기");
+  const originalPolicy = {
+    freeVolumeCount: Number(await freeVolumeInput.inputValue()),
+    previewEpisodeCount: Number(await previewSelect.inputValue()),
+  };
+  await freeVolumeInput.fill("1");
+  await previewSelect.selectOption("2");
+  const policyResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/studio/series/") &&
+      response.url().endsWith("/access-policy") &&
+      response.request().method() === "PATCH",
+  );
   await page.getByRole("button", { name: "공개 범위 저장" }).click();
+  const updatedPolicy = await (await policyResponse).json();
   await expect(page.getByText("독자 공개 범위를 저장했어요.")).toBeVisible();
 
   await expect(
@@ -105,4 +118,10 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
     expect(optimizedResponse.ok()).toBeTruthy();
     expect(optimizedResponse.headers()["content-type"]).toContain("image/webp");
   }
+
+  const restoreResponse = await page.request.patch(
+    `/api/studio/series/${encodeURIComponent(updatedPolicy.seriesId)}/access-policy`,
+    { data: originalPolicy },
+  );
+  expect(restoreResponse.ok()).toBeTruthy();
 });

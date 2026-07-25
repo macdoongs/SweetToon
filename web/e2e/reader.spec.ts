@@ -30,8 +30,7 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
     /reader-page--chrome-hidden/,
     { timeout: 5_000 },
   );
-  await page.mouse.move(100, 100);
-  await page.mouse.move(120, 120);
+  await page.locator(".reader-page").dispatchEvent("pointermove");
   await expect(page.locator(".reader-page")).not.toHaveClass(
     /reader-page--chrome-hidden/,
   );
@@ -123,7 +122,7 @@ test("Swagger UI와 OpenAPI 계약을 같은 웹 주소에서 확인한다", asy
   expect(await docsResponse.text()).toContain("SweetToon API");
 });
 
-test("무료 미리보기 뒤 소장본 주문으로 해당 권을 해금한다", async ({
+test("1권 주문 보너스 캔디로 유료 회차를 한 번만 차감해 해금한다", async ({
   page,
 }) => {
   const detailResponse = await page.request.get(
@@ -135,22 +134,36 @@ test("무료 미리보기 뒤 소장본 주문으로 해당 권을 해금한다"
     (candidate: { number: number }) => candidate.number === 1,
   );
   const episode = season.episodes.find(
-    (candidate: { number: number }) => candidate.number === 4,
+    (candidate: { number: number }) => candidate.number === 6,
   );
 
   await page.goto(`/read/${episode.id}`);
   await expect(
-    page.getByRole("heading", { name: /첫 3화까지 무료/ }),
+    page.getByRole("heading", { name: /첫 1권\(5화\)까지 무료/ }),
   ).toBeVisible();
   await expect(page.locator(".webtoon-strip")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "캔디 1개로 이 화 보기" }),
+  ).toBeDisabled();
 
-  await page.getByRole("link", { name: /1권 소장하고 계속 읽기/ }).click();
+  await page.goto("/series/moonlight-laundry#edition");
+  await page.getByRole("link", { name: /시즌 1 · 1권 주문/ }).click();
+  await expect(page.getByText("1권 혜택 · 보너스 캔디 5개")).toBeVisible();
   await page.getByLabel("주문자 닉네임").fill("해금독자");
   await page.getByRole("button", { name: "견적 확인하기" }).click();
   await page.getByRole("button", { name: "이 사양으로 주문하기" }).click();
   await expect(page).toHaveURL(/\/orders\/[^/]+$/);
+  await expect(page.getByText("보너스 캔디 5개도")).toBeVisible();
+  await expect(page.locator(".site-nav__candy")).toContainText("캔디 5");
 
   await page.goto(`/read/${episode.id}`);
+  await expect(page.locator(".reader-paywall")).toBeVisible();
+  await page.getByRole("button", { name: "캔디 1개로 이 화 보기" }).click();
   await expect(page.locator(".webtoon-strip")).toBeVisible();
   await expect(page.locator(".reader-paywall")).toHaveCount(0);
+  await expect(page.locator(".site-nav__candy")).toContainText("캔디 4");
+
+  await page.reload();
+  await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await expect(page.locator(".site-nav__candy")).toContainText("캔디 4");
 });

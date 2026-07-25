@@ -12,6 +12,7 @@ import {
 const order: OrderDetail = {
   id: "cmorder000000000000000001",
   providerOrderId: "mock-order-1",
+  candyBonus: 5,
   ordererType: "reader",
   volumeNumber: 1,
   quantity: 1,
@@ -125,6 +126,7 @@ describe("order routes", () => {
       .post("/api/orders")
       .send({
         requestKey: "f371de0c-01cd-4214-99f7-7cd8e1df82a0",
+        candyWalletToken: "e4a40518-b468-4a0a-b51d-309cd07e630c",
         seasonId: "cmseason00000000000000001",
         volumeNumber: 1,
         bookSize: "A5",

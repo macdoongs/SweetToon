@@ -209,14 +209,20 @@ export class PrismaReaderRepository implements ReaderRepository {
       !isFree &&
       Boolean(accessToken) &&
       accessToken!.length <= 100 &&
-      (await this.prisma.order.count({
-        where: {
-          requestKey: accessToken,
-          seasonId: episode.season.id,
-          volumeNumber,
-          status: { not: "canceled" },
-        },
-      })) > 0;
+      ((await this.prisma.order.count({
+          where: {
+            requestKey: accessToken,
+            seasonId: episode.season.id,
+            volumeNumber,
+            status: { not: "canceled" },
+          },
+        })) > 0 ||
+        (await this.prisma.candyEpisodeEntitlement.count({
+          where: {
+            walletToken: accessToken,
+            episodeId: episode.id,
+          },
+        })) > 0);
     const accessState = isFree
       ? "free"
       : hasEntitlement

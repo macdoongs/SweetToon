@@ -46,6 +46,7 @@ export const PrintQuoteResponseSchema = z.object({
 
 export const CreateOrderRequestSchema = PrintQuoteRequestSchema.extend({
   requestKey: z.string().uuid(),
+  candyWalletToken: z.string().uuid(),
   ordererName: z.string().trim().min(2).max(30),
   memo: z.string().trim().max(200).nullable().optional(),
 });
@@ -64,6 +65,7 @@ export const OrderEventSchema = z.object({
 export const OrderDetailSchema = z.object({
   id: z.string(),
   providerOrderId: z.string().nullable(),
+  candyBonus: z.number().int().nonnegative(),
   ordererType: z.enum(["reader", "creator"]),
   volumeNumber: z.number().int().positive(),
   quantity: z.number().int().positive(),

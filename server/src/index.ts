@@ -15,6 +15,8 @@ import {
 import { createSharedRateLimitStore } from "./security/rate-limit-store";
 import { createMalwareScanner } from "./security/malware-scanner";
 import { PrismaSecurityAuditLogger } from "./security/audit-logger";
+import { PrismaCandyRepository } from "./repositories/candy-repository";
+import { CandyService } from "./services/candy-service";
 
 const PORT = Number(process.env.PORT ?? 4000);
 export const UPLOAD_DIR = process.env.UPLOAD_DIR
@@ -53,6 +55,7 @@ async function main() {
       new PrismaOrderRepository(prisma),
       printProvider,
     ),
+    candyService: new CandyService(new PrismaCandyRepository(prisma)),
     studioService: new StudioService(
       new PrismaStudioRepository(prisma),
       studioStorage,

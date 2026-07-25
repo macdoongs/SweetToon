@@ -115,6 +115,20 @@ button {
   color: var(--ink);
 }
 
+.site-nav__candy {
+  align-items: center;
+  background: #fff3f7;
+  border: 1px solid #f2c8d5;
+  border-radius: 999px;
+  color: #842b4c;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  padding: 0.45rem 0.7rem;
+  white-space: nowrap;
+}
+
 .site-footer {
   border-top: 1px solid var(--line);
   background: #ece4d8;
@@ -1436,6 +1450,22 @@ button {
   font-size: 0.67rem !important;
 }
 
+.order-benefit {
+  background: rgba(255, 243, 247, 0.1);
+  border: 1px solid rgba(242, 200, 213, 0.32);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.3rem;
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+}
+
+.order-benefit span {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
 .order-list {
   width: var(--content);
   margin: 0 auto;
@@ -1642,6 +1672,10 @@ button {
 .order-detail-card__total dd {
   color: var(--coral-dark);
   font-size: 1rem;
+}
+
+.order-detail-card__benefit dd {
+  color: #842b4c;
 }
 
 .order-memo {
@@ -2483,6 +2517,37 @@ body:has(.reader-page) .site-footer {
   line-height: 1.8;
 }
 
+.reader-paywall__candy {
+  align-items: center;
+  background: rgba(255, 243, 247, 0.96);
+  border: 1px solid #f2c8d5;
+  border-radius: 18px;
+  color: #4c172b;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin: 0 auto 0.75rem;
+  max-width: 620px;
+  padding: 1rem;
+  width: 100%;
+}
+
+.reader-paywall__candy > div {
+  display: grid;
+  gap: 0.2rem;
+  text-align: left;
+}
+
+.reader-paywall__candy span {
+  font-size: 0.8rem;
+}
+
+.reader-paywall__message {
+  color: #fff !important;
+  font-weight: 700;
+  margin: 0.5rem 0 1rem !important;
+}
+
 .reader-finish {
   padding: 82px 24px 90px;
   text-align: center;
@@ -2608,6 +2673,19 @@ body:has(.reader-page) .site-footer {
 
   .site-nav a:not(:last-child) {
     display: none;
+  }
+
+  .site-nav {
+    gap: 10px;
+  }
+
+  .site-nav__candy {
+    font-size: 0.75rem;
+  }
+
+  .reader-paywall__candy {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .site-footer__inner {

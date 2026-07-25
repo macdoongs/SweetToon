@@ -17,6 +17,7 @@ import {
   getAllReadingProgress,
   type ReadingProgress,
 } from "@/lib/reading-progress";
+import type { LivePopularResponse } from "@/lib/realtime";
 
 const statusLabel = {
   ongoing: "연재 중",
@@ -106,6 +107,9 @@ export function HomePage({
   const [readingProgress, setReadingProgress] = useState<
     Record<string, ReadingProgress>
   >({});
+  const [livePopular, setLivePopular] = useState<LivePopularResponse | null>(
+    null,
+  );
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const retry = useCallback(() => {
@@ -120,6 +124,26 @@ export function HomePage({
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("sweettoon:progress", refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await getJson<LivePopularResponse>(
+          "/api/realtime/popular",
+        );
+        if (active) setLivePopular(response);
+      } catch {
+        if (active) setLivePopular(null);
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 15_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
     };
   }, []);
 
@@ -237,6 +261,45 @@ export function HomePage({
           </div>
         )}
       </header>
+
+      {livePopular?.items.length ? (
+        <section className="live-popular" aria-labelledby="live-popular-title">
+          <div className="live-popular__inner">
+            <div className="section-heading section-heading--compact">
+              <div>
+                <p className="eyebrow">Live now</p>
+                <h2 id="live-popular-title">지금 인기 있는 작품</h2>
+              </div>
+              <p>최근 1분 동안 독자들이 읽고 있는 작품이에요.</p>
+            </div>
+            <div className="live-popular__grid">
+              {livePopular.items.map(({ series, viewerCount }, index) => (
+                <Link
+                  className="live-popular-card"
+                  href={`/series/${series.slug}`}
+                  key={series.id}
+                >
+                  <span className="live-popular-card__rank">{index + 1}</span>
+                  <div className="live-popular-card__cover">
+                    <SeriesCover
+                      series={series}
+                      sizes="(max-width: 700px) 72px, 84px"
+                    />
+                  </div>
+                  <div>
+                    <span>{series.genre}</span>
+                    <strong>{series.title}</strong>
+                    <small>
+                      <i aria-hidden="true" />
+                      지금 {viewerCount}명
+                    </small>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="discover-section" id="discover">
         <div className="discover-section__inner">

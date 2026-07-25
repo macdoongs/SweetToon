@@ -17,6 +17,7 @@ import { createMalwareScanner } from "./security/malware-scanner";
 import { PrismaSecurityAuditLogger } from "./security/audit-logger";
 import { PrismaCandyRepository } from "./repositories/candy-repository";
 import { CandyService } from "./services/candy-service";
+import { createRealtimeService } from "./realtime/realtime-service";
 
 const PORT = Number(process.env.PORT ?? 4000);
 export const UPLOAD_DIR = process.env.UPLOAD_DIR
@@ -43,6 +44,7 @@ async function main() {
   const rateLimitStore = await createSharedRateLimitStore(
     process.env.REDIS_URL,
   );
+  const realtime = await createRealtimeService(process.env.REDIS_URL);
   const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
     .split(",")
     .map((origin) => origin.trim())
@@ -65,6 +67,7 @@ async function main() {
     allowedOrigins,
     auditLogger,
     uploadRateLimitStore: rateLimitStore.store,
+    realtime,
     studioMutationGuard: createApiKeyGuard({
       mode: securityMode,
       expectedKey: process.env.STUDIO_API_KEY,
@@ -90,6 +93,7 @@ async function main() {
     server.close();
     await Promise.allSettled([
       rateLimitStore.close(),
+      realtime.close(),
       prisma.$disconnect(),
     ]);
   };

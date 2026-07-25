@@ -14,10 +14,12 @@ import {
   auditSecurityAction,
   type SecurityAuditLogger,
 } from "../security/audit-logger";
+import type { RealtimeService } from "../realtime/realtime-service";
 
 type OrderRouterOptions = {
   operationsGuard?: RequestHandler;
   auditLogger?: SecurityAuditLogger;
+  realtime?: RealtimeService;
 };
 
 const allowRequest: RequestHandler = (_req, _res, next) => next();
@@ -27,6 +29,7 @@ export function createOrderRouter(
   {
     operationsGuard = allowRequest,
     auditLogger = new NoopSecurityAuditLogger(),
+    realtime,
   }: OrderRouterOptions = {},
 ): Router {
   const router = Router();
@@ -71,6 +74,51 @@ export function createOrderRouter(
     res.json(OrderDetailSchema.parse(await service.get(id.data)));
   });
 
+  router.get("/orders/:id/events", async (req, res) => {
+    const id = OrderIdParamSchema.safeParse(req.params.id);
+    if (!id.success) {
+      res.status(400).json({
+        code: "INVALID_ORDER_ID",
+        message: "주문 주소가 올바르지 않습니다.",
+      });
+      return;
+    }
+    const initialOrder = OrderDetailSchema.parse(await service.get(id.data));
+    res.status(200);
+    res.set({
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+
+    const send = (order: typeof initialOrder) => {
+      res.write(`id: ${order.updatedAt}\n`);
+      res.write("event: order\n");
+      res.write(`data: ${JSON.stringify(order)}\n\n`);
+    };
+    send(initialOrder);
+
+    let unsubscribe: () => Promise<void> = async () => undefined;
+    try {
+      unsubscribe = realtime
+        ? await realtime.subscribeOrder(id.data, send)
+        : async () => undefined;
+    } catch (error) {
+      console.error("[sweettoon-order-stream]", error);
+      res.end();
+      return;
+    }
+    const keepAlive = setInterval(() => {
+      res.write(": keep-alive\n\n");
+    }, 15_000);
+    req.once("close", () => {
+      clearInterval(keepAlive);
+      void unsubscribe();
+    });
+  });
+
   router.patch(
     "/orders/:id/status",
     auditSecurityAction(auditLogger, "operations.order.transition"),
@@ -92,9 +140,17 @@ export function createOrderRouter(
         });
         return;
       }
-      res.json(
-        OrderDetailSchema.parse(await service.transition(id.data, input.data)),
+      const order = OrderDetailSchema.parse(
+        await service.transition(id.data, input.data),
       );
+      try {
+        await realtime?.publishOrder(order);
+      } catch (error) {
+        // The committed database transition remains authoritative. A failed
+        // live notification must not make the operator repeat the mutation.
+        console.error("[sweettoon-order-publish]", error);
+      }
+      res.json(order);
     },
   );
 

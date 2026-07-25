@@ -22,6 +22,11 @@ describe("OpenAPI documentation", () => {
       "/api/episodes/{id}/candy-unlock",
     );
     expect(response.body.paths).toHaveProperty("/api/candy-wallets/{token}");
+    expect(response.body.paths).toHaveProperty(
+      "/api/series/{slug}/presence",
+    );
+    expect(response.body.paths).toHaveProperty("/api/realtime/popular");
+    expect(response.body.paths).toHaveProperty("/api/orders/{id}/events");
   });
 
   it("serves the Swagger UI", async () => {

@@ -21,6 +21,10 @@ import {
 import { episodeLabel } from "@/lib/episode-label";
 import type { EpisodeReader } from "@/lib/reader-types";
 import {
+  getReaderSessionId,
+  type PresenceResponse,
+} from "@/lib/realtime";
+import {
   getEpisodeProgress,
   saveReadingProgress,
 } from "@/lib/reading-progress";
@@ -129,6 +133,7 @@ export function EpisodeReaderPage({
   const [candyBalance, setCandyBalance] = useState<number | null>(null);
   const [candyBusy, setCandyBusy] = useState(false);
   const [candyMessage, setCandyMessage] = useState<string | null>(null);
+  const [viewerCount, setViewerCount] = useState<number | null>(null);
   const chromeHideTimer = useRef<number | null>(null);
   const lastScrollY = useRef(0);
   const lastSavedPercent = useRef(-10);
@@ -138,6 +143,35 @@ export function EpisodeReaderPage({
     setError(null);
     setRequestKey((current) => current + 1);
   }, []);
+
+  useEffect(() => {
+    const seriesSlug = episode?.series.slug;
+    if (!seriesSlug) return;
+    let active = true;
+    const heartbeat = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const response = await postJson<
+          { sessionId: string },
+          PresenceResponse
+        >(`/api/series/${encodeURIComponent(seriesSlug)}/presence`, {
+          sessionId: getReaderSessionId(),
+        });
+        if (active) setViewerCount(response.viewerCount);
+      } catch {
+        if (active) setViewerCount(null);
+      }
+    };
+    void heartbeat();
+    const interval = window.setInterval(() => void heartbeat(), 20_000);
+    const onVisibilityChange = () => void heartbeat();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [episode?.series.slug]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -576,6 +610,12 @@ export function EpisodeReaderPage({
             {episode.access.volumeNumber}권
           </span>
           <h1>{episodeLabel(episode.number, episode.title)}</h1>
+          {viewerCount !== null ? (
+            <small className="reader-toolbar__live" role="status">
+              <i aria-hidden="true" />
+              지금 {viewerCount}명이 읽는 중
+            </small>
+          ) : null}
         </div>
         <span className="reader-toolbar__progress">{readerProgress}%</span>
       </header>

@@ -2,7 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { getJson } from "@/lib/api";
 import type { SeriesListResponse, SeriesSummary } from "@/lib/reader-types";
 import {
@@ -120,6 +126,32 @@ export function HomePage({
     setRequestKey((current) => current + 1);
   }, []);
 
+  const scrollToDiscover = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const target = document.getElementById("discover");
+      if (!target) {
+        return;
+      }
+
+      event.preventDefault();
+      if (window.location.hash !== "#discover") {
+        window.history.pushState(window.history.state, "", "#discover");
+      }
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    [],
+  );
+
   useEffect(() => {
     const refresh = () => setReadingProgress(getAllReadingProgress());
     const frame = requestAnimationFrame(refresh);
@@ -231,7 +263,11 @@ export function HomePage({
             소장하는 독자를 위한 공간입니다.
           </p>
           <div className="hero__actions">
-            <Link className="button button--primary" href="#discover">
+            <Link
+              className="button button--primary"
+              href="#discover"
+              onClick={scrollToDiscover}
+            >
               오늘의 작품 보기
             </Link>
             <span className="hero__note">

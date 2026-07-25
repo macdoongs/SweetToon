@@ -136,10 +136,9 @@ export function RecommendationShelves({
             <h2 id="recommendations-title">취향을 이어갈 다음 작품</h2>
           </div>
           <p>
-            찜과 최근 열람 기록을 바탕으로 추천해요.
             {!favorites.length && !Object.keys(progress).length
-              ? " 아직 기록이 없어 장르별 작품부터 준비했어요."
-              : ""}
+              ? "아직 기록이 없어도 괜찮아요. 서로 어울리는 장르를 세 가지 분류로 모았어요."
+              : "찜과 최근 열람 기록을 바탕으로 추천해요."}
           </p>
         </header>
         {shelves.map((shelf) => (

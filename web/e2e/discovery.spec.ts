@@ -54,6 +54,17 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
   ).toHaveAttribute("aria-current", "page");
 
   await page.goto("/#discover");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.getByRole("link", { name: "오늘의 작품 보기" }).click();
+  await expect(page).toHaveURL(/\/#discover$/);
+  await expect
+    .poll(() =>
+      page.locator("#discover").evaluate((element) => {
+        return Math.abs(element.getBoundingClientRect().top);
+      }),
+    )
+    .toBeLessThan(2);
+
   const initialPageCount = await cards.count();
   await page.evaluate(() =>
     window.scrollTo(0, document.documentElement.scrollHeight),
@@ -85,7 +96,7 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
 });
 
 test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
 
   const recommendations = page.getByRole("region", {
@@ -93,7 +104,7 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   });
   await expect(recommendations).toBeVisible();
   await expect(recommendations).toContainText(
-    "아직 기록이 없어 장르별 작품부터 준비했어요.",
+    "아직 기록이 없어도 괜찮아요.",
   );
   await expect(
     recommendations.locator(".recommendation-shelf"),
@@ -101,6 +112,23 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   await expect(
     recommendations.locator(".recommendation-card img").first(),
   ).toBeVisible();
+  const discoveryRail = recommendations
+    .locator(".recommendation-rail")
+    .first();
+  await expect
+    .poll(() =>
+      discoveryRail.evaluate(
+        (element) => element.scrollWidth > element.clientWidth,
+      ),
+    )
+    .toBe(true);
+  await recommendations
+    .getByRole("button", { name: /다음 작품 보기/ })
+    .first()
+    .click();
+  await expect
+    .poll(() => discoveryRail.evaluate((element) => element.scrollLeft))
+    .toBeGreaterThan(0);
 
   await page.goto("/series/moonlight-laundry");
   await page.getByRole("button", { name: "찜하기" }).click();

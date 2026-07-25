@@ -113,17 +113,25 @@ try {
               }
             )
             const popular = await json('/api/realtime/popular')
+            const demoBot = await json('/api/realtime/demo-bot')
+            const catalogPopularity = popular.items.find(
+              item => item.series.slug === catalog.slug
+            )
             if (
-              presence.viewerCount !== 1 ||
-              popular.items[0]?.series.slug !== catalog.slug ||
-              popular.items[0]?.viewerCount !== 1
+              presence.viewerCount < 1 ||
+              !catalogPopularity ||
+              catalogPopularity.viewerCount < 1 ||
+              !demoBot.available ||
+              !demoBot.running ||
+              demoBot.activeBotCount < 1
             ) {
               throw new Error('realtime presence verification failed')
             }
             console.log(
               'series=' + body.items.length +
                 ' catalog-pages=' + reader.pages.length +
-                ' live-readers=' + presence.viewerCount
+                ' live-readers=' + presence.viewerCount +
+                ' demo-bots=' + demoBot.activeBotCount
             )
           }
           verifySeed().catch(error => {

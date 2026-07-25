@@ -13,6 +13,9 @@ export interface RealtimeService {
   ): Promise<() => Promise<void>>;
   heartbeatSeries(seriesSlug: string, sessionId: string): Promise<number>;
   getViewerCounts(seriesSlugs: string[]): Promise<Record<string, number>>;
+  removePresence(sessionIds: string[]): Promise<void>;
+  claimLease(name: string, ownerId: string, ttlSeconds: number): Promise<boolean>;
+  releaseLease(name: string, ownerId: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -28,10 +31,18 @@ function presenceSessionKey(sessionId: string) {
   return `sweettoon:presence-session:${sessionId}`;
 }
 
+function leaseKey(name: string) {
+  return `sweettoon:lease:${name}`;
+}
+
 export class InMemoryRealtimeService implements RealtimeService {
   private readonly listeners = new Map<string, Set<OrderListener>>();
   private readonly presence = new Map<string, Map<string, number>>();
   private readonly sessionSeries = new Map<string, string>();
+  private readonly leases = new Map<
+    string,
+    { ownerId: string; expiresAt: number }
+  >();
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -77,10 +88,43 @@ export class InMemoryRealtimeService implements RealtimeService {
     );
   }
 
+  async removePresence(sessionIds: string[]): Promise<void> {
+    for (const sessionId of sessionIds) {
+      const seriesSlug = this.sessionSeries.get(sessionId);
+      if (seriesSlug) this.presence.get(seriesSlug)?.delete(sessionId);
+      this.sessionSeries.delete(sessionId);
+    }
+  }
+
+  async claimLease(
+    name: string,
+    ownerId: string,
+    ttlSeconds: number,
+  ): Promise<boolean> {
+    const existing = this.leases.get(name);
+    if (
+      existing &&
+      existing.ownerId !== ownerId &&
+      existing.expiresAt > this.now()
+    ) {
+      return false;
+    }
+    this.leases.set(name, {
+      ownerId,
+      expiresAt: this.now() + ttlSeconds * 1_000,
+    });
+    return true;
+  }
+
+  async releaseLease(name: string, ownerId: string): Promise<void> {
+    if (this.leases.get(name)?.ownerId === ownerId) this.leases.delete(name);
+  }
+
   async close(): Promise<void> {
     this.listeners.clear();
     this.presence.clear();
     this.sessionSeries.clear();
+    this.leases.clear();
   }
 
   private prune(seriesSlug: string): Map<string, number> {
@@ -176,6 +220,50 @@ export class RedisRealtimeService implements RealtimeService {
       }),
     );
     return Object.fromEntries(entries);
+  }
+
+  async removePresence(sessionIds: string[]): Promise<void> {
+    for (const sessionId of sessionIds) {
+      const sessionKey = presenceSessionKey(sessionId);
+      const seriesSlug = await this.command.get(sessionKey);
+      const transaction = this.command.multi().del(sessionKey);
+      if (seriesSlug) transaction.zRem(presenceKey(seriesSlug), sessionId);
+      await transaction.exec();
+    }
+  }
+
+  async claimLease(
+    name: string,
+    ownerId: string,
+    ttlSeconds: number,
+  ): Promise<boolean> {
+    const result = await this.command.eval(
+      `
+        local current = redis.call("GET", KEYS[1])
+        if not current or current == ARGV[1] then
+          redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2])
+          return 1
+        end
+        return 0
+      `,
+      {
+        keys: [leaseKey(name)],
+        arguments: [ownerId, String(ttlSeconds)],
+      },
+    );
+    return Number(result) === 1;
+  }
+
+  async releaseLease(name: string, ownerId: string): Promise<void> {
+    await this.command.eval(
+      `
+        if redis.call("GET", KEYS[1]) == ARGV[1] then
+          return redis.call("DEL", KEYS[1])
+        end
+        return 0
+      `,
+      { keys: [leaseKey(name)], arguments: [ownerId] },
+    );
   }
 
   async close(): Promise<void> {

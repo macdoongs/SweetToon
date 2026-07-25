@@ -26,6 +26,10 @@ describe("OpenAPI documentation", () => {
       "/api/series/{slug}/presence",
     );
     expect(response.body.paths).toHaveProperty("/api/realtime/popular");
+    expect(response.body.paths).toHaveProperty("/api/realtime/demo-bot");
+    expect(response.body.paths).toHaveProperty(
+      "/api/realtime/demo-bot/reset",
+    );
     expect(response.body.paths).toHaveProperty("/api/orders/{id}/events");
   });
 

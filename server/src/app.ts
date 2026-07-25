@@ -30,6 +30,9 @@ import {
 } from "./services/candy-service";
 import type { RealtimeService } from "./realtime/realtime-service";
 import { createRealtimeRouter } from "./routes/realtime";
+import type { DemoBotController } from "./realtime/demo-bot-service";
+import { DemoBotUnavailableError } from "./realtime/demo-bot-service";
+import { createDemoBotRouter } from "./routes/demo-bot";
 
 export type AppOptions = {
   readerRepository: ReaderRepository;
@@ -44,6 +47,7 @@ export type AppOptions = {
   uploadRateLimitStore?: Store;
   auditLogger?: SecurityAuditLogger;
   realtime?: RealtimeService;
+  demoBot?: DemoBotController;
 };
 
 export function createApp({
@@ -59,6 +63,7 @@ export function createApp({
   uploadRateLimitStore,
   auditLogger,
   realtime,
+  demoBot,
 }: AppOptions): Express {
   const app = express();
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -125,6 +130,12 @@ export function createApp({
   if (realtime) {
     app.use("/api", createRealtimeRouter(readerRepository, realtime));
   }
+  if (demoBot) {
+    app.use(
+      "/api",
+      createDemoBotRouter(demoBot, operationsGuard, auditLogger),
+    );
+  }
   if (orderService) {
     app.use(
       "/api",
@@ -164,6 +175,13 @@ export function createApp({
         return;
       }
       if (error instanceof CandyServiceError) {
+        res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      if (error instanceof DemoBotUnavailableError) {
         res.status(error.status).json({
           code: error.code,
           message: error.message,

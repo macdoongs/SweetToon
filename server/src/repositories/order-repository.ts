@@ -26,6 +26,7 @@ export type OrderableSeason = {
 export type CreatePendingOrderInput = CreateOrderRequest & {
   season: OrderableSeason;
   quote: PrintQuote;
+  isDemo?: boolean;
 };
 
 export interface OrderRepository {
@@ -48,6 +49,8 @@ export interface OrderRepository {
   markCanceled(orderId: string, message: string): Promise<void>;
   findById(id: string): Promise<OrderDetail | null>;
   listOrders(): Promise<OrderListResponse>;
+  pruneCompletedDemoOrders(keep: number): Promise<void>;
+  deleteDemoOrders(): Promise<void>;
 }
 
 const orderInclude = {
@@ -63,6 +66,7 @@ type OrderWithRelations = Prisma.OrderGetPayload<{
 function toOrderDetail(order: OrderWithRelations): OrderDetail {
   return {
     id: order.id,
+    isDemo: order.isDemo,
     providerOrderId: order.providerOrderId,
     candyBonus: order.candyBonus,
     ordererType: order.ordererType === "creator" ? "creator" : "reader",
@@ -199,6 +203,7 @@ export class PrismaOrderRepository implements OrderRepository {
           totalPrice: input.quote.totalPrice,
           estimatedBusinessDays: input.quote.estimatedBusinessDays,
           memo: input.memo || null,
+          isDemo: input.isDemo ?? false,
           status: "pending",
         },
       });
@@ -226,7 +231,8 @@ export class PrismaOrderRepository implements OrderRepository {
       const current = await transaction.order.findUniqueOrThrow({
         where: { id: orderId },
       });
-      const candyBonus = current.volumeNumber === 1 ? 5 : 0;
+      const candyBonus =
+        !current.isDemo && current.volumeNumber === 1 ? 5 : 0;
       await transaction.order.update({
         where: { id: orderId },
         data: { providerOrderId, status: "processing", candyBonus },
@@ -318,5 +324,22 @@ export class PrismaOrderRepository implements OrderRepository {
     return {
       items: orders.map(toOrderDetail),
     };
+  }
+
+  async pruneCompletedDemoOrders(keep: number): Promise<void> {
+    const stale = await this.prisma.order.findMany({
+      where: { isDemo: true, status: { in: ["completed", "canceled"] } },
+      orderBy: { updatedAt: "desc" },
+      skip: keep,
+      select: { id: true },
+    });
+    if (stale.length === 0) return;
+    await this.prisma.order.deleteMany({
+      where: { id: { in: stale.map((order) => order.id) }, isDemo: true },
+    });
+  }
+
+  async deleteDemoOrders(): Promise<void> {
+    await this.prisma.order.deleteMany({ where: { isDemo: true } });
   }
 }

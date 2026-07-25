@@ -18,6 +18,8 @@ import { PrismaSecurityAuditLogger } from "./security/audit-logger";
 import { PrismaCandyRepository } from "./repositories/candy-repository";
 import { CandyService } from "./services/candy-service";
 import { createRealtimeService } from "./realtime/realtime-service";
+import { DemoBotService } from "./realtime/demo-bot-service";
+import type { DemoBotSpeed } from "./contracts/demo-bot";
 
 const PORT = Number(process.env.PORT ?? 4000);
 export const UPLOAD_DIR = process.env.UPLOAD_DIR
@@ -45,18 +47,41 @@ async function main() {
     process.env.REDIS_URL,
   );
   const realtime = await createRealtimeService(process.env.REDIS_URL);
+  const readerRepository = new PrismaReaderRepository(prisma);
+  const orderService = new OrderService(
+    new PrismaOrderRepository(prisma),
+    printProvider,
+  );
+  const configuredBotCount = Number(process.env.REALTIME_BOT_READER_COUNT ?? 8);
+  const botSpeed = ["slow", "normal", "fast"].includes(
+    process.env.REALTIME_BOT_SPEED ?? "",
+  )
+    ? (process.env.REALTIME_BOT_SPEED as DemoBotSpeed)
+    : "normal";
+  const demoBot = new DemoBotService(
+    readerRepository,
+    orderService,
+    realtime,
+    {
+      available:
+        securityMode === "demo" &&
+        process.env.REALTIME_BOT_ENABLED === "true",
+      autoStart: process.env.REALTIME_BOT_AUTO_START !== "false",
+      readerCount: Number.isInteger(configuredBotCount)
+        ? Math.max(0, Math.min(30, configuredBotCount))
+        : 8,
+      speed: botSpeed,
+    },
+  );
   const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
   const auditLogger = new PrismaSecurityAuditLogger(prisma, auditHashSecret);
   const app = createApp({
-    readerRepository: new PrismaReaderRepository(prisma),
+    readerRepository,
     printProvider,
-    orderService: new OrderService(
-      new PrismaOrderRepository(prisma),
-      printProvider,
-    ),
+    orderService,
     candyService: new CandyService(new PrismaCandyRepository(prisma)),
     studioService: new StudioService(
       new PrismaStudioRepository(prisma),
@@ -68,6 +93,7 @@ async function main() {
     auditLogger,
     uploadRateLimitStore: rateLimitStore.store,
     realtime,
+    demoBot,
     studioMutationGuard: createApiKeyGuard({
       mode: securityMode,
       expectedKey: process.env.STUDIO_API_KEY,
@@ -88,11 +114,13 @@ async function main() {
     console.log(
       `[sweettoon-server] listening on :${PORT} security=${securityMode} malware=${malwareScanner.name}`,
     );
+    demoBot.start();
   });
   const shutdown = async () => {
     server.close();
     await Promise.allSettled([
       rateLimitStore.close(),
+      demoBot.close(),
       realtime.close(),
       prisma.$disconnect(),
     ]);

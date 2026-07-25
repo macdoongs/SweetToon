@@ -53,4 +53,19 @@ describe("InMemoryRealtimeService", () => {
       "night-store": 0,
     });
   });
+
+  it("removes bot presence immediately and keeps a lease single-owner", async () => {
+    const realtime = new InMemoryRealtimeService();
+    await realtime.heartbeatSeries("moonlight-laundry", "bot-a");
+
+    expect(await realtime.claimLease("demo", "server-a", 30)).toBe(true);
+    expect(await realtime.claimLease("demo", "server-b", 30)).toBe(false);
+    await realtime.removePresence(["bot-a"]);
+    await realtime.releaseLease("demo", "server-a");
+
+    expect(await realtime.getViewerCounts(["moonlight-laundry"])).toEqual({
+      "moonlight-laundry": 0,
+    });
+    expect(await realtime.claimLease("demo", "server-b", 30)).toBe(true);
+  });
 });

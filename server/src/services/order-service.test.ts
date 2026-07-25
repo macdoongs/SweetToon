@@ -46,6 +46,7 @@ const input: CreateOrderRequest = {
 function orderFixture(overrides: Partial<OrderDetail> = {}): OrderDetail {
   return {
     id: "cmorder000000000000000001",
+    isDemo: false,
     providerOrderId: null,
     candyBonus: 0,
     ordererType: "reader",
@@ -100,6 +101,8 @@ function makeDependencies() {
     markCanceled: jest.fn().mockResolvedValue(undefined),
     findById: jest.fn().mockResolvedValue(null),
     listOrders: jest.fn().mockResolvedValue({ items: [] }),
+    pruneCompletedDemoOrders: jest.fn().mockResolvedValue(undefined),
+    deleteDemoOrders: jest.fn().mockResolvedValue(undefined),
   };
   const provider: jest.Mocked<PrintProvider> = {
     name: "mock",
@@ -174,6 +177,16 @@ describe("OrderService", () => {
       "mock-order-1",
     );
     expect(created.providerOrderId).toBe("mock-order-1");
+  });
+
+  it("marks internally generated demo orders without exposing a client flag", async () => {
+    const { service, repository } = makeDependencies();
+
+    await service.createDemo(input);
+
+    expect(repository.createPendingOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ isDemo: true }),
+    );
   });
 
   it("returns the existing order for a repeated request key", async () => {

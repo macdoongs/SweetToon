@@ -12,6 +12,7 @@ import type { RealtimeService } from "../realtime/realtime-service";
 
 const order: OrderDetail = {
   id: "cmorder000000000000000001",
+  isDemo: false,
   providerOrderId: "mock-order-1",
   candyBonus: 5,
   ordererType: "reader",
@@ -93,6 +94,9 @@ function makeRealtime(): jest.Mocked<RealtimeService> {
     subscribeOrder: jest.fn().mockResolvedValue(async () => undefined),
     heartbeatSeries: jest.fn().mockResolvedValue(0),
     getViewerCounts: jest.fn().mockResolvedValue({}),
+    removePresence: jest.fn().mockResolvedValue(undefined),
+    claimLease: jest.fn().mockResolvedValue(true),
+    releaseLease: jest.fn().mockResolvedValue(undefined),
     close: jest.fn().mockResolvedValue(undefined),
   };
 }

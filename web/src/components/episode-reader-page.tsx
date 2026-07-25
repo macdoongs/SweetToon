@@ -399,7 +399,10 @@ export function EpisodeReaderPage({
   }, [chromePinned, episodeId, mode, revealChrome]);
 
   useEffect(() => {
-    const onPointerActivity = () => revealChrome();
+    const onPointerActivity = () => {
+      lastScrollY.current = window.scrollY;
+      revealChrome();
+    };
     const onFocus = () => revealChrome();
     const onScroll = () => {
       const nextScrollY = window.scrollY;

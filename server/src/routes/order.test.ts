@@ -8,6 +8,7 @@ import {
   OrderServiceError,
   type OrderUseCases,
 } from "../services/order-service";
+import type { RealtimeService } from "../realtime/realtime-service";
 
 const order: OrderDetail = {
   id: "cmorder000000000000000001",
@@ -86,10 +87,21 @@ function makeService(): jest.Mocked<OrderUseCases> {
   };
 }
 
-function makeApp(service = makeService()) {
+function makeRealtime(): jest.Mocked<RealtimeService> {
+  return {
+    publishOrder: jest.fn().mockResolvedValue(undefined),
+    subscribeOrder: jest.fn().mockResolvedValue(async () => undefined),
+    heartbeatSeries: jest.fn().mockResolvedValue(0),
+    getViewerCounts: jest.fn().mockResolvedValue({}),
+    close: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+function makeApp(service = makeService(), realtime = makeRealtime()) {
   return createApp({
     readerRepository: makeReaderRepository(),
     orderService: service,
+    realtime,
     uploadDir: path.join(os.tmpdir(), "sweettoon-order-tests"),
   });
 }
@@ -168,7 +180,8 @@ describe("order routes", () => {
 
   it("validates and applies an operator status transition", async () => {
     const service = makeService();
-    const response = await request(makeApp(service))
+    const realtime = makeRealtime();
+    const response = await request(makeApp(service, realtime))
       .patch("/api/orders/cmorder000000000000000001/status")
       .send({ status: "shipped" })
       .expect(200);
@@ -178,6 +191,9 @@ describe("order routes", () => {
       { status: "shipped" },
     );
     expect(response.body.status).toBe("shipped");
+    expect(realtime.publishOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: order.id, status: "shipped" }),
+    );
   });
 
   it("rejects an unsupported operator status", async () => {

@@ -9,6 +9,7 @@ export const openApiDocument = {
   servers: [{ url: "/", description: "현재 서버" }],
   tags: [
     { name: "Reader", description: "작품 탐색과 에피소드 감상" },
+    { name: "Realtime", description: "현재 독자와 실시간 인기 작품" },
     { name: "Candy", description: "익명 데모 캔디 지갑과 회차 해금" },
     { name: "Orders", description: "Mock 견적과 소장본 주문" },
     { name: "Studio", description: "창작자 ZIP/CBZ 발행" },
@@ -102,6 +103,55 @@ export const openApiDocument = {
             },
           },
           "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/series/{slug}/presence": {
+      post: {
+        tags: ["Realtime"],
+        summary: "익명 독자의 작품 열람 presence를 갱신합니다.",
+        parameters: [{ $ref: "#/components/parameters/Slug" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["sessionId"],
+                properties: {
+                  sessionId: { type: "string", format: "uuid" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "최근 1분 동안의 현재 독자 수",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/realtime/popular": {
+      get: {
+        tags: ["Realtime"],
+        summary: "현재 독자가 있는 작품을 실시간 순위로 조회합니다.",
+        responses: {
+          "200": {
+            description: "현재 독자 수가 높은 작품 목록",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
         },
       },
     },
@@ -327,6 +377,24 @@ export const openApiDocument = {
               },
             },
           },
+        },
+      },
+    },
+    "/api/orders/{id}/events": {
+      get: {
+        tags: ["Orders"],
+        summary: "주문 상태와 타임라인 변경을 SSE로 구독합니다.",
+        parameters: [{ $ref: "#/components/parameters/Id" }],
+        responses: {
+          "200": {
+            description: "order 이벤트로 전달되는 주문 상세 스트림",
+            content: {
+              "text/event-stream": {
+                schema: { type: "string" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },

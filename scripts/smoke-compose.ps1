@@ -82,8 +82,8 @@ try {
     Invoke-Checked {
         docker compose exec -T web node -e "
           const base = 'http://localhost:3000'
-          async function json(path) {
-            const response = await fetch(base + path)
+          async function json(path, options) {
+            const response = await fetch(base + path, options)
             if (!response.ok) throw new Error(path + ' returned ' + response.status)
             return response.json()
           }
@@ -104,8 +104,26 @@ try {
                   reader.pages.length
               )
             }
+            const presence = await json(
+              '/api/series/' + encodeURIComponent(catalog.slug) + '/presence',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: crypto.randomUUID() })
+              }
+            )
+            const popular = await json('/api/realtime/popular')
+            if (
+              presence.viewerCount !== 1 ||
+              popular.items[0]?.series.slug !== catalog.slug ||
+              popular.items[0]?.viewerCount !== 1
+            ) {
+              throw new Error('realtime presence verification failed')
+            }
             console.log(
-              'series=' + body.items.length + ' catalog-pages=' + reader.pages.length
+              'series=' + body.items.length +
+                ' catalog-pages=' + reader.pages.length +
+                ' live-readers=' + presence.viewerCount
             )
           }
           verifySeed().catch(error => {

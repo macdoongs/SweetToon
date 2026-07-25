@@ -28,6 +28,8 @@ import {
   CandyServiceError,
   type CandyUseCases,
 } from "./services/candy-service";
+import type { RealtimeService } from "./realtime/realtime-service";
+import { createRealtimeRouter } from "./routes/realtime";
 
 export type AppOptions = {
   readerRepository: ReaderRepository;
@@ -41,6 +43,7 @@ export type AppOptions = {
   operationsGuard?: RequestHandler;
   uploadRateLimitStore?: Store;
   auditLogger?: SecurityAuditLogger;
+  realtime?: RealtimeService;
 };
 
 export function createApp({
@@ -55,6 +58,7 @@ export function createApp({
   operationsGuard,
   uploadRateLimitStore,
   auditLogger,
+  realtime,
 }: AppOptions): Express {
   const app = express();
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -118,10 +122,17 @@ export function createApp({
     }),
   );
   app.use("/api", createReaderRouter(readerRepository));
+  if (realtime) {
+    app.use("/api", createRealtimeRouter(readerRepository, realtime));
+  }
   if (orderService) {
     app.use(
       "/api",
-      createOrderRouter(orderService, { operationsGuard, auditLogger }),
+      createOrderRouter(orderService, {
+        operationsGuard,
+        auditLogger,
+        realtime,
+      }),
     );
   }
   if (candyService) {

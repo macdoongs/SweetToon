@@ -47,6 +47,17 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
   );
   await expect(firstEvent).toContainText("KST");
 
+  const transition = await page.request.patch(
+    `/api/orders/${encodeURIComponent(orderId ?? "")}/status`,
+    { data: { status: "shipped" } },
+  );
+  expect(transition.ok()).toBeTruthy();
+  await expect(page.getByText("배송 중", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText("소장본 제작을 마치고 배송을 시작했어요."),
+  ).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("실시간 연결됨");
+
   await page.goto("/operations/orders");
   await expect(
     page.getByRole("heading", { level: 1, name: "소장본 제작 관리" }),
@@ -54,8 +65,6 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
   const operation = page
     .locator(".operations-card")
     .filter({ hasText: orderId ?? "" });
-  await expect(operation.getByText("제작 중", { exact: true })).toBeVisible();
-  await operation.getByRole("button", { name: "배송 시작" }).click();
   await expect(operation.getByText("배송 중", { exact: true })).toBeVisible();
   await operation.getByRole("button", { name: "완료 처리" }).click();
   await expect(operation.getByText("완료", { exact: true })).toBeVisible();

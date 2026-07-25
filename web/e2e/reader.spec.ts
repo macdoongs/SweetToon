@@ -21,6 +21,7 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
 
   await expect(page).toHaveURL(/\/read\/[^/]+$/);
   await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await expect(page.getByText(/지금 \d+명이 읽는 중/)).toBeVisible();
   await expect(page.locator(".site-footer")).toBeHidden();
   const episodeHeading = page.locator(".reader-toolbar h1");
   await expect(episodeHeading).toBeVisible();
@@ -77,8 +78,15 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
       page.locator(".reader-progress").evaluate((element) => element.clientWidth),
     )
     .toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await page.locator(".reader-page").dispatchEvent("pointermove");
+  await expect(page.locator(".reader-page")).not.toHaveClass(
+    /reader-page--chrome-hidden/,
+  );
   await page.getByRole("button", { name: "책갈피" }).click();
-  await expect(page.getByRole("status")).toContainText("책갈피에 저장");
+  await expect(page.locator(".reader-bookmark-toast")).toContainText(
+    "책갈피에 저장",
+  );
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -106,6 +114,15 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(page.locator(".reader-toolbar h1")).not.toHaveText(currentEpisode);
   await expect(page.locator(".webtoon-strip")).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(80);
+
+  await page.goto("/");
+  const livePopular = page.getByRole("region", {
+    name: "지금 인기 있는 작품",
+  });
+  await expect(livePopular).toBeVisible();
+  await expect(
+    livePopular.getByRole("link", { name: /달빛 세탁소/ }),
+  ).toBeVisible();
 });
 
 test("Swagger UI와 OpenAPI 계약을 같은 웹 주소에서 확인한다", async ({

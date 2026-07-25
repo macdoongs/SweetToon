@@ -33,6 +33,7 @@
 3. 무료 공개 범위는 세로 스크롤 또는 양면 보기로 감상하고 책갈피를 남깁니다.
 4. 잠긴 권은 판형·표지·수량을 선택하고 Mock 견적과 주문으로 해금합니다.
 5. 주문 후 한국 시간으로 표시되는 제작 타임라인을 확인합니다.
+   운영자가 상태를 변경하면 새로고침 없이 실시간으로 반영됩니다.
 6. 창작자는 ZIP/CBZ 원고를 검수해 발행하고 작품별 무료 권 수를 정합니다.
 7. 데모 운영자는 접수·제작·배송·완료 순서만 허용된 상태 변경을 수행합니다.
 
@@ -49,6 +50,8 @@
   탐색 밀도와 무한 스크롤 상태를 확인할 수 있게 했습니다.
 - 필터 상태를 query string에 보존해 뒤로가기·공유·서버 렌더링이 일치합니다.
 - 홈·작품·뷰어·주문·스튜디오마다 목적에 맞는 헤더와 breadcrumb를 제공합니다.
+- 리더의 최근 1분 익명 presence를 집계해 현재 독자 수와 홈 실시간 인기 작품을
+  표시합니다.
 - 일반 페이지의 푸터에는 서비스 탐색 링크와 함께 과제용 데모, Mock API,
   실제 결제·배송 없음 같은 운영 범위를 명확히 표시합니다.
 - 로딩, 빈 데이터, 잘못된 ZIP, 중복 회차, 주문 실패와 동시 상태 변경을
@@ -72,7 +75,7 @@ Manifest와 서비스 워커를 제공해 홈 화면 설치가 가능하며, 네
 - **Lv2 창작 도구:** ZIP/CBZ 검증·자연 정렬 미리보기·회차 발행·무료 정책 설정
 - **가점 범위:** 운영자 상태 전이, 반응형 UI, SEO, 이미지 검증·WebP 파생,
   PWA 설치·오프라인 폴백, RSS, Swagger/OpenAPI, 선택형 R2 저장,
-  Mock 계약, 자동화된 Compose/E2E 검증
+  Mock 계약, 주문 SSE·실시간 독자 presence, 자동화된 Compose/E2E 검증
 - **의도적 비대상:** 회원/권한, 결제, 실제 배송사, 알림, 추천·댓글,
   Komga 연동, 실제 Book Print API 호출
 
@@ -178,6 +181,10 @@ API로 전달하기 전에 거부합니다.
 에이전트만 PostgreSQL 감사 로그에 기록합니다.
 
 업로드 제한 횟수는 Redis에 저장해 여러 API replica가 같은 제한을 공유합니다.
+주문 상태 변경은 PostgreSQL에 먼저 확정한 뒤 Redis Pub/Sub으로 SSE 구독자에게
+전달합니다. 작품별 현재 독자 수는 브라우저 익명 UUID의 heartbeat를 Redis Sorted
+Set에 60초 동안만 보존하며, DB 주문 전이나 Redis 장애가 주문 상태 전이를
+되돌리지는 않습니다.
 선택적 ClamAV 모드는 ZIP/CBZ를 staging에 쓰기 전에 INSTREAM으로 검사하며, 감염
 판정이나 검사기 장애 모두 fail-closed로 처리합니다. ClamAV를 끈 기본 과제
 모드에서도 래스터 디코딩·재인코딩과 압축 안전 검증은 항상 수행됩니다.
@@ -227,7 +234,10 @@ repository와 use case를 fake 구현으로 주입해 DB 없이 오류 계약을
 - `POST /api/orders` — 멱등 요청 키를 사용한 소장본 주문 접수
 - `GET /api/orders` — 데모 사용자의 주문 목록
 - `GET /api/orders/:id` — 주문 사양과 상태 변경 타임라인
+- `GET /api/orders/:id/events` — 주문 상태와 타임라인 SSE 구독
 - `PATCH /api/orders/:id/status` — 순차적인 데모 제작 상태 변경
+- `POST /api/series/:slug/presence` — 익명 독자 presence heartbeat
+- `GET /api/realtime/popular` — 현재 독자 수 기반 실시간 인기 작품
 - `POST /api/studio/uploads` — ZIP/CBZ 검증과 자연 정렬 미리보기
 - `GET /api/studio/uploads/:sessionId/pages/:pageId` — 만료되는 원고 미리보기
 - `POST /api/studio/episodes` — 확인한 페이지 순서로 에피소드 등록
@@ -266,6 +276,8 @@ OpenAPI 3.1 문서를 각각 `/api-docs`, `/openapi.json`에서 제공합니다.
 - Mock 인쇄 주문은 로컬 PostgreSQL 상태의 출발점만 제공합니다. 결제·배송 조회와
   외부 인쇄사 동기화는 구현하지 않았습니다.
 - 대표 1화를 제외한 콘텐츠는 기능 확인용 플레이스홀더입니다.
+- 현재 독자 수는 최근 60초 heartbeat 기반의 근사치이며 장기 조회수나 개인화
+  추천 점수로 사용하지 않습니다.
 - CSV 내보내기와 창작자용 시즌 일괄 가져오기는 핵심 사용자 흐름을 흐리지 않기
   위해 제외했습니다.
 

@@ -27,7 +27,12 @@ services:
       - "traefik.http.routers.sweettoon.entrypoints=web"
       - "traefik.http.routers.sweettoon.service=sweettoon"
       - "traefik.http.routers.sweettoon.middlewares=sweettoon-upload-buffer"
+      - "traefik.http.routers.sweettoon-sse.rule=Host(`sweettoon.katsuranbo.com`) && PathRegexp(`^/api/orders/[^/]+/events`)"
+      - "traefik.http.routers.sweettoon-sse.entrypoints=web"
+      - "traefik.http.routers.sweettoon-sse.service=sweettoon"
+      - "traefik.http.routers.sweettoon-sse.priority=100"
       - "traefik.http.services.sweettoon.loadbalancer.server.port=3000"
+      - "traefik.http.services.sweettoon.loadbalancer.responseforwarding.flushinterval=-1ms"
       - "traefik.http.middlewares.sweettoon-upload-buffer.buffering.maxRequestBodyBytes=27262976"
 
 networks:

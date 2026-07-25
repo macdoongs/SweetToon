@@ -225,30 +225,15 @@ Compose에서 실제 Express API와 PostgreSQL 시드 데이터를 호출합니�
 서비스만 `PrintProvider` 경계의 Mock으로 대체하며, 서버 HTTP 테스트에서는
 repository와 use case를 fake 구현으로 주입해 DB 없이 오류 계약을 검증합니다.
 
-## 구현된 API
+## API 문서
 
-- `GET /api/series?filter=&weekday=&genre=&page=` — 필터와 페이지 기반 작품 목록
-- `GET /api/series/:slug` — 작품, 시즌, 에피소드 상세
-- `GET /api/episodes/:id` — 에피소드 컷과 이전·다음 회차
-- `POST /api/print-quotes` — 완결 시즌 페이지 수 기반 Mock 견적
-- `POST /api/orders` — 멱등 요청 키를 사용한 소장본 주문 접수
-- `GET /api/orders` — 데모 사용자의 주문 목록
-- `GET /api/orders/:id` — 주문 사양과 상태 변경 타임라인
-- `GET /api/orders/:id/events` — 주문 상태와 타임라인 SSE 구독
-- `PATCH /api/orders/:id/status` — 순차적인 데모 제작 상태 변경
-- `POST /api/series/:slug/presence` — 익명 독자 presence heartbeat
-- `GET /api/realtime/popular` — 현재 독자 수 기반 실시간 인기 작품
-- `POST /api/studio/uploads` — ZIP/CBZ 검증과 자연 정렬 미리보기
-- `GET /api/studio/uploads/:sessionId/pages/:pageId` — 만료되는 원고 미리보기
-- `POST /api/studio/episodes` — 확인한 페이지 순서로 에피소드 등록
-- `PATCH /api/studio/series/:seriesId/access-policy` — 무료 권·추가 미리보기 설정
-- `DELETE /api/studio/uploads/:sessionId` — 임시 업로드 취소·정리
-- `GET /api/images/*` — 데모 및 업로드 이미지
+전체 엔드포인트와 요청·응답 계약은 실행 중인 앱의 `/api-docs/` Swagger UI에서
+확인할 수 있습니다. 기계가 읽을 수 있는 OpenAPI 3.1 JSON은 `/openapi.json`에
+제공합니다.
 
 요청 파라미터와 응답은 Zod 계약으로 검증합니다. 조회 라우트는 저장소 인터페이스에,
 상태 규칙이 있는 주문 라우트는 service(use case)에 의존해 HTTP 테스트에서 DB 없이
-경계 조건을 검증합니다. 사람이 실행해 볼 수 있는 Swagger UI와 기계가 읽을 수 있는
-OpenAPI 3.1 문서를 각각 `/api-docs`, `/openapi.json`에서 제공합니다.
+경계 조건을 검증합니다.
 
 ## AI 활용과 데모 데이터
 

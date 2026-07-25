@@ -18,6 +18,7 @@ import {
   type ReadingProgress,
 } from "@/lib/reading-progress";
 import type { LivePopularResponse } from "@/lib/realtime";
+import { RecommendationShelves } from "./recommendation-shelves";
 
 const statusLabel = {
   ongoing: "연재 중",
@@ -95,9 +96,11 @@ function SeriesCover({
 export function HomePage({
   activeFilters,
   initialData = null,
+  recommendationSeries = [],
 }: {
   activeFilters: CatalogFilters;
   initialData?: SeriesListResponse | null;
+  recommendationSeries?: SeriesSummary[];
 }) {
   const [data, setData] = useState<SeriesListResponse | null>(initialData);
   const [error, setError] = useState<string | null>(null);
@@ -300,6 +303,8 @@ export function HomePage({
           </div>
         </section>
       ) : null}
+
+      <RecommendationShelves series={recommendationSeries} />
 
       <section className="discover-section" id="discover">
         <div className="discover-section__inner">

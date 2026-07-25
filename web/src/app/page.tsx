@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { HomePage } from "@/components/home-page";
 import { JsonLd } from "@/components/json-ld";
-import { getSeriesList } from "@/lib/server-api";
+import { getAllSeries, getSeriesList } from "@/lib/server-api";
 import {
   parseGenre,
   parseSeriesFilter,
@@ -32,7 +32,10 @@ export default async function Home({
     genre: parseGenre(query.genre),
     weekday: parseWeekday(query.weekday),
   };
-  const data = await getSeriesList(filters);
+  const [data, recommendations] = await Promise.all([
+    getSeriesList(filters),
+    getAllSeries(),
+  ]);
 
   return (
     <>
@@ -50,6 +53,7 @@ export default async function Home({
       <HomePage
         activeFilters={filters}
         initialData={data}
+        recommendationSeries={recommendations.items}
         key={`${filters.filter}:${filters.genre ?? ""}:${filters.weekday ?? ""}`}
       />
     </>

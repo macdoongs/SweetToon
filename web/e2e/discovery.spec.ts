@@ -84,6 +84,60 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
   ).toHaveAttribute("href", "https://github.com/macdoongs/SweetToon");
 });
 
+test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const recommendations = page.getByRole("region", {
+    name: "취향을 이어갈 다음 작품",
+  });
+  await expect(recommendations).toBeVisible();
+  await expect(recommendations).toContainText(
+    "아직 기록이 없어 장르별 작품부터 준비했어요.",
+  );
+  await expect(
+    recommendations.locator(".recommendation-shelf"),
+  ).toHaveCount(3);
+  await expect(
+    recommendations.locator(".recommendation-card img").first(),
+  ).toBeVisible();
+
+  await page.goto("/series/moonlight-laundry");
+  await page.getByRole("button", { name: "찜하기" }).click();
+  await page.goto("/");
+
+  const personalizedShelf = page
+    .locator(".recommendation-shelf")
+    .filter({ hasText: "〈달빛 세탁소〉을 찜한 당신을 위해" });
+  await expect(personalizedShelf).toBeVisible();
+  await expect(recommendations).not.toContainText(
+    "아직 기록이 없어 장르별 작품부터 준비했어요.",
+  );
+  await expect(
+    personalizedShelf.getByRole("link", { name: /달빛 세탁소/ }),
+  ).toHaveCount(0);
+
+  const rail = personalizedShelf.locator(".recommendation-rail");
+  await expect
+    .poll(() =>
+      rail.evaluate(
+        (element) => element.scrollWidth > element.clientWidth,
+      ),
+    )
+    .toBe(true);
+  await personalizedShelf
+    .getByRole("button", { name: /다음 작품 보기/ })
+    .click();
+  await expect
+    .poll(() => rail.evaluate((element) => element.scrollLeft))
+    .toBeGreaterThan(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
 test("설치 가능한 PWA 셸과 서비스 워커를 제공한다", async ({ page }) => {
   await page.goto("/");
 

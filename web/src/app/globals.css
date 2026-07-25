@@ -546,6 +546,178 @@ button {
   box-shadow: 0 0 0 4px rgba(47, 182, 109, 0.12);
 }
 
+.recommendations {
+  padding: 64px 0 74px;
+  overflow: hidden;
+  border-top: 1px solid rgba(95, 73, 49, 0.12);
+  background:
+    radial-gradient(circle at 92% 6%, rgba(216, 78, 110, 0.14), transparent 27%),
+    #2b2525;
+  color: #fff9f1;
+}
+
+.recommendations__inner {
+  width: var(--content);
+  margin: 0 auto;
+}
+
+.recommendations__intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 42px;
+}
+
+.recommendations__intro h2 {
+  margin: 7px 0 0;
+  font-family: Georgia, "Noto Serif KR", serif;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  letter-spacing: -0.045em;
+}
+
+.recommendations__intro > p,
+.recommendation-shelf__header > div > p:last-child {
+  color: rgba(255, 249, 241, 0.66);
+}
+
+.recommendations .eyebrow {
+  color: #ff9aaf;
+}
+
+.recommendation-shelf + .recommendation-shelf {
+  margin-top: 48px;
+}
+
+.recommendation-shelf__header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.recommendation-shelf__header h3 {
+  margin: 5px 0 4px;
+  font-family: Georgia, "Noto Serif KR", serif;
+  font-size: clamp(1.35rem, 2.6vw, 2rem);
+  letter-spacing: -0.035em;
+}
+
+.recommendation-shelf__header p {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.recommendation-shelf__controls {
+  display: flex;
+  gap: 8px;
+}
+
+.recommendation-shelf__controls button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.recommendation-shelf__controls button:hover,
+.recommendation-shelf__controls button:focus-visible {
+  border-color: #ff9aaf;
+  background: rgba(239, 104, 73, 0.22);
+}
+
+.recommendation-rail {
+  display: grid;
+  grid-auto-columns: clamp(156px, 17vw, 210px);
+  grid-auto-flow: column;
+  gap: 16px;
+  overflow-x: auto;
+  margin: 0;
+  padding: 0 0 14px;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  scrollbar-color: rgba(255, 154, 175, 0.62) rgba(255, 255, 255, 0.08);
+  scrollbar-width: thin;
+  list-style: none;
+}
+
+.recommendation-card {
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.recommendation-card > a {
+  display: grid;
+  gap: 5px;
+}
+
+.recommendation-card__cover {
+  position: relative;
+  aspect-ratio: 5 / 7;
+  overflow: hidden;
+  margin-bottom: 5px;
+  border-radius: 14px;
+  background: #4a4140;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+}
+
+.recommendation-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 200ms ease;
+}
+
+.recommendation-card:hover .recommendation-card__cover img {
+  transform: scale(1.035);
+}
+
+.recommendation-card__cover > span:first-child {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  padding: 20px;
+  font-family: Georgia, "Noto Serif KR", serif;
+  text-align: center;
+}
+
+.recommendation-card__status {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(32, 27, 27, 0.82);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  backdrop-filter: blur(8px);
+}
+
+.recommendation-card__genre,
+.recommendation-card small {
+  overflow: hidden;
+  color: rgba(255, 249, 241, 0.62);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recommendation-card strong {
+  overflow: hidden;
+  font-size: 0.96rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .discover-section {
   padding: 58px 0 88px;
   background: #fffaf3;
@@ -3238,6 +3410,28 @@ body:has(.reader-page) .site-footer {
 
   .live-popular {
     padding: 42px 0;
+  }
+
+  .recommendations {
+    padding: 48px 0 56px;
+  }
+
+  .recommendations__intro,
+  .recommendation-shelf__header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .recommendations__intro {
+    margin-bottom: 34px;
+  }
+
+  .recommendation-shelf__controls {
+    align-self: flex-end;
+  }
+
+  .recommendation-rail {
+    grid-auto-columns: min(44vw, 180px);
   }
 
   .discover-section,

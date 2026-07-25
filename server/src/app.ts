@@ -23,11 +23,17 @@ import { openApiDocument } from "./openapi";
 import type { RequestHandler } from "express";
 import type { Store } from "express-rate-limit";
 import type { SecurityAuditLogger } from "./security/audit-logger";
+import { createCandyRouter } from "./routes/candy";
+import {
+  CandyServiceError,
+  type CandyUseCases,
+} from "./services/candy-service";
 
 export type AppOptions = {
   readerRepository: ReaderRepository;
   printProvider?: PrintProvider;
   orderService?: OrderUseCases;
+  candyService?: CandyUseCases;
   studioService?: StudioUseCases;
   uploadDir?: string;
   allowedOrigins?: string[];
@@ -41,6 +47,7 @@ export function createApp({
   readerRepository,
   printProvider = createPrintProvider(),
   orderService,
+  candyService,
   studioService,
   uploadDir = path.join(process.cwd(), "data", "uploads"),
   allowedOrigins = [],
@@ -117,6 +124,9 @@ export function createApp({
       createOrderRouter(orderService, { operationsGuard, auditLogger }),
     );
   }
+  if (candyService) {
+    app.use("/api", createCandyRouter(candyService));
+  }
   if (studioService) {
     app.use(
       "/api",
@@ -136,6 +146,13 @@ export function createApp({
       _next: express.NextFunction,
     ) => {
       if (error instanceof OrderServiceError) {
+        res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      if (error instanceof CandyServiceError) {
         res.status(error.status).json({
           code: error.code,
           message: error.message,

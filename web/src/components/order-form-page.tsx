@@ -14,6 +14,10 @@ import type {
 } from "@/lib/order-types";
 import type { SeriesDetail } from "@/lib/reader-types";
 import { saveDemoEntitlement } from "@/lib/demo-entitlements";
+import {
+  getCandyWalletToken,
+  notifyCandyUpdated,
+} from "@/lib/candy-wallet";
 
 const won = new Intl.NumberFormat("ko-KR", {
   style: "currency",
@@ -99,11 +103,15 @@ export function OrderFormPage({
         {
           ...specification,
           requestKey: requestKey.current,
+          candyWalletToken: getCandyWalletToken(),
           ordererName: ordererName.trim(),
           memo: memo.trim() || null,
         },
       );
-      saveDemoEntitlement(season.id, volumeNumber, requestKey.current);
+      if (volumeNumber > 1) {
+        saveDemoEntitlement(season.id, volumeNumber, requestKey.current);
+      }
+      if (created.candyBonus > 0) notifyCandyUpdated();
       router.push(`/orders/${encodeURIComponent(created.id)}`);
     } catch (reason) {
       if (
@@ -263,6 +271,18 @@ export function OrderFormPage({
             시즌 {season.number} · {volumeNumber}권 ·{" "}
             {volumeEpisodes.at(0)?.number}~{volumeEpisodes.at(-1)?.number}화
           </p>
+          <div className="order-benefit">
+            <strong>
+              {volumeNumber === 1
+                ? "1권 혜택 · 보너스 캔디 5개"
+                : `${volumeNumber}권 혜택 · 수록 회차 바로 열람`}
+            </strong>
+            <span>
+              {volumeNumber === 1
+                ? "첫 5화는 무료로 읽고, 캔디로 원하는 유료 회차 5편을 열 수 있어요."
+                : `${volumeEpisodes.at(0)?.number}~${volumeEpisodes.at(-1)?.number}화를 추가 결제 없이 읽을 수 있어요.`}
+            </span>
+          </div>
           <dl>
             <div><dt>판형</dt><dd>{bookSize}</dd></div>
             <div>
@@ -310,7 +330,9 @@ export function OrderFormPage({
           ) : null}
           <p className="order-summary__notice">
             실제 결제나 인쇄 API 호출 없이 Mock provider로 접수됩니다.
-            주문 직후 이 브라우저에 해당 권의 디지털 이용권이 저장됩니다.
+            {volumeNumber === 1
+              ? " 주문 직후 이 브라우저의 캔디 지갑에 5개가 지급됩니다."
+              : " 주문 직후 이 브라우저에 해당 권의 디지털 이용권이 저장됩니다."}
           </p>
         </aside>
       </form>

@@ -9,6 +9,7 @@ export const openApiDocument = {
   servers: [{ url: "/", description: "현재 서버" }],
   tags: [
     { name: "Reader", description: "작품 탐색과 에피소드 감상" },
+    { name: "Candy", description: "익명 데모 캔디 지갑과 회차 해금" },
     { name: "Orders", description: "Mock 견적과 소장본 주문" },
     { name: "Studio", description: "창작자 ZIP/CBZ 발행" },
   ],
@@ -88,7 +89,7 @@ export const openApiDocument = {
         tags: ["Reader"],
         summary: "에피소드 페이지와 이전·다음 화를 조회합니다.",
         description:
-          "잠긴 권은 페이지 URL을 반환하지 않습니다. Mock 주문 requestKey를 Bearer 토큰으로 보내면 해당 권을 해금합니다.",
+          "잠긴 권은 페이지 URL을 반환하지 않습니다. Mock 주문 requestKey 또는 캔디 지갑 토큰을 Bearer 토큰으로 보내면 보유 권한을 확인합니다.",
         security: [{ demoEntitlement: [] }, {}],
         parameters: [{ $ref: "#/components/parameters/Id" }],
         responses: {
@@ -101,6 +102,85 @@ export const openApiDocument = {
             },
           },
           "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/candy-wallets/{token}": {
+      get: {
+        tags: ["Candy"],
+        summary: "브라우저의 익명 캔디 잔액을 조회합니다.",
+        parameters: [
+          {
+            name: "token",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "캔디 잔액과 개당 가격",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CandyWallet" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+        },
+      },
+    },
+    "/api/episodes/{id}/candy-unlock": {
+      post: {
+        tags: ["Candy"],
+        summary: "캔디 1개로 유료 회차를 영구 해금합니다.",
+        parameters: [{ $ref: "#/components/parameters/Id" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["walletToken", "requestKey"],
+                properties: {
+                  walletToken: { type: "string", format: "uuid" },
+                  requestKey: { type: "string", format: "uuid" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "해금 결과와 남은 캔디",
+            content: {
+              "application/json": {
+                schema: {
+                  allOf: [
+                    { $ref: "#/components/schemas/CandyWallet" },
+                    {
+                      type: "object",
+                      required: ["episodeId", "spent"],
+                      properties: {
+                        episodeId: { type: "string" },
+                        spent: { type: "boolean" },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": {
+            description: "캔디 잔액 부족",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
+              },
+            },
+          },
         },
       },
     },
@@ -156,9 +236,17 @@ export const openApiDocument = {
                   { $ref: "#/components/schemas/BookSpec" },
                   {
                     type: "object",
-                    required: ["requestKey", "ordererName"],
+                    required: [
+                      "requestKey",
+                      "candyWalletToken",
+                      "ordererName",
+                    ],
                     properties: {
                       requestKey: { type: "string", format: "uuid" },
+                      candyWalletToken: {
+                        type: "string",
+                        format: "uuid",
+                      },
                       ordererName: {
                         type: "string",
                         minLength: 2,
@@ -405,6 +493,14 @@ export const openApiDocument = {
             minimum: 1,
             maximum: 50,
           },
+        },
+      },
+      CandyWallet: {
+        type: "object",
+        required: ["balance", "unitPrice"],
+        properties: {
+          balance: { type: "integer", minimum: 0 },
+          unitPrice: { type: "integer", const: 100 },
         },
       },
       AccessPolicy: {

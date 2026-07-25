@@ -64,6 +64,7 @@ function toOrderDetail(order: OrderWithRelations): OrderDetail {
   return {
     id: order.id,
     providerOrderId: order.providerOrderId,
+    candyBonus: order.candyBonus,
     ordererType: order.ordererType === "creator" ? "creator" : "reader",
     volumeNumber: order.volumeNumber,
     quantity: order.quantity,
@@ -175,9 +176,15 @@ export class PrismaOrderRepository implements OrderRepository {
     input: CreatePendingOrderInput,
   ): Promise<OrderDetail> {
     const order = await this.prisma.$transaction(async (transaction) => {
+      await transaction.candyWallet.upsert({
+        where: { token: input.candyWalletToken },
+        update: {},
+        create: { token: input.candyWalletToken },
+      });
       const created = await transaction.order.create({
         data: {
           requestKey: input.requestKey,
+          candyWalletToken: input.candyWalletToken,
           seriesId: input.season.series.id,
           seasonId: input.season.id,
           volumeNumber: input.season.volumeNumber,
@@ -216,10 +223,33 @@ export class PrismaOrderRepository implements OrderRepository {
     providerOrderId: string,
   ): Promise<OrderDetail> {
     const order = await this.prisma.$transaction(async (transaction) => {
+      const current = await transaction.order.findUniqueOrThrow({
+        where: { id: orderId },
+      });
+      const candyBonus = current.volumeNumber === 1 ? 5 : 0;
       await transaction.order.update({
         where: { id: orderId },
-        data: { providerOrderId, status: "processing" },
+        data: { providerOrderId, status: "processing", candyBonus },
       });
+      if (
+        candyBonus > 0 &&
+        current.candyWalletToken &&
+        current.candyBonus === 0
+      ) {
+        const wallet = await transaction.candyWallet.update({
+          where: { token: current.candyWalletToken },
+          data: { balance: { increment: candyBonus } },
+        });
+        await transaction.candyTransaction.create({
+          data: {
+            walletToken: current.candyWalletToken,
+            type: "order_bonus",
+            amount: candyBonus,
+            balanceAfter: wallet.balance,
+            orderId,
+          },
+        });
+      }
       await transaction.orderEvent.create({
         data: {
           orderId,

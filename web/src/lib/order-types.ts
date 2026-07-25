@@ -30,6 +30,7 @@ export type PrintQuoteResponse = {
 
 export type CreateOrderRequest = PrintQuoteRequest & {
   requestKey: string;
+  candyWalletToken: string;
   ordererName: string;
   memo?: string | null;
 };
@@ -37,6 +38,7 @@ export type CreateOrderRequest = PrintQuoteRequest & {
 export type OrderDetail = {
   id: string;
   providerOrderId: string | null;
+  candyBonus: number;
   ordererType: "reader" | "creator";
   volumeNumber: number;
   quantity: number;

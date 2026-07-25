@@ -26,8 +26,8 @@ model Series {
   synopsis  String
   genre     String
   weekday   String   @default("mon") // mon | tue | wed | thu | fri | sat | sun
-  freeVolumeCount Int @default(0)
-  previewEpisodeCount Int @default(3)
+  freeVolumeCount Int @default(1)
+  previewEpisodeCount Int @default(0)
   coverUrl  String?
   status    String   @default("ongoing") // ongoing | completed
   createdAt DateTime @default(now())
@@ -59,6 +59,7 @@ model Episode {
   publishedAt DateTime @default(now())
   season      Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   pages       Page[]
+  candyEntitlements CandyEpisodeEntitlement[]
 
   @@unique([seasonId, number])
 }
@@ -79,6 +80,8 @@ model Order {
   id                    String       @id @default(cuid())
   requestKey            String?      @unique
   providerOrderId       String?      @unique
+  candyWalletToken      String?
+  candyBonus            Int          @default(0)
   seriesId              String
   seasonId              String
   volumeNumber          Int          @default(1)
@@ -99,6 +102,8 @@ model Order {
   series                 Series       @relation(fields: [seriesId], references: [id], onDelete: Cascade)
   season                 Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   events                 OrderEvent[]
+  candyWallet            CandyWallet? @relation(fields: [candyWalletToken], references: [token], onDelete: SetNull)
+  candyTransaction       CandyTransaction?
 }
 
 // 주문 상태 변경 이력 — "내 책이 어디쯤인지" 타임라인 UI의 근거 데이터 (Lv3)
@@ -109,6 +114,47 @@ model OrderEvent {
   message   String?
   createdAt DateTime @default(now())
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+// 공개 데모의 익명 지갑. 브라우저가 만든 UUID 토큰으로 지갑을 다시 찾는다.
+model CandyWallet {
+  token        String                    @id
+  balance      Int                       @default(0)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  orders       Order[]
+  transactions CandyTransaction[]
+  entitlements CandyEpisodeEntitlement[]
+}
+
+// 캔디 지급·사용 원장. 주문과 요청 키의 unique 제약으로 중복 처리를 막는다.
+model CandyTransaction {
+  id           String       @id @default(cuid())
+  walletToken  String
+  type         String // order_bonus | episode_unlock
+  amount       Int
+  balanceAfter Int
+  requestKey   String?      @unique
+  orderId      String?      @unique
+  episodeId    String?
+  createdAt    DateTime     @default(now())
+  wallet       CandyWallet  @relation(fields: [walletToken], references: [token], onDelete: Cascade)
+  order        Order?       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([walletToken, createdAt])
+}
+
+// 캔디로 한 번 연 회차는 영구 열람한다.
+model CandyEpisodeEntitlement {
+  id          String      @id @default(cuid())
+  walletToken String
+  episodeId   String
+  createdAt   DateTime    @default(now())
+  wallet      CandyWallet @relation(fields: [walletToken], references: [token], onDelete: Cascade)
+  episode     Episode     @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([walletToken, episodeId])
+  @@index([episodeId])
 }
 
 // 보안 감사 로그 — 원문 IP나 업로드 파일명 대신 최소 정보와 해시만 보관

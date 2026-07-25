@@ -33,6 +33,7 @@ const season: OrderableSeason = {
 
 const input: CreateOrderRequest = {
   requestKey: "f371de0c-01cd-4214-99f7-7cd8e1df82a0",
+  candyWalletToken: "e4a40518-b468-4a0a-b51d-309cd07e630c",
   seasonId: season.id,
   volumeNumber: 1,
   bookSize: "A5",
@@ -46,6 +47,7 @@ function orderFixture(overrides: Partial<OrderDetail> = {}): OrderDetail {
   return {
     id: "cmorder000000000000000001",
     providerOrderId: null,
+    candyBonus: 0,
     ordererType: "reader",
     volumeNumber: input.volumeNumber,
     quantity: input.quantity,

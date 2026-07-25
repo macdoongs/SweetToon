@@ -39,8 +39,10 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
         </h1>
         <p>
           {order.series.title} 시즌 {order.season.number} ·{" "}
-          {order.volumeNumber}권을 준비합니다. 디지털 감상 이용권도 이
-          브라우저에 바로 열렸어요.
+          {order.volumeNumber}권을 준비합니다.{" "}
+          {order.candyBonus > 0
+            ? `보너스 캔디 ${order.candyBonus}개도 이 브라우저에 지급했어요.`
+            : "수록 회차도 이 브라우저에서 바로 열렸어요."}
         </p>
       </header>
 
@@ -83,6 +85,12 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
             </div>
             <div><dt>수량</dt><dd>{order.quantity}권</dd></div>
             <div><dt>수록 범위</dt><dd>{order.volumeNumber}권 · 최대 5화</dd></div>
+            {order.candyBonus > 0 ? (
+              <div className="order-detail-card__benefit">
+                <dt>구매 혜택</dt>
+                <dd>🍬 캔디 {order.candyBonus}개</dd>
+              </div>
+            ) : null}
             {order.pageCount ? (
               <div><dt>페이지</dt><dd>{order.pageCount}쪽</dd></div>
             ) : null}

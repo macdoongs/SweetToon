@@ -18,6 +18,10 @@ describe("OpenAPI documentation", () => {
     expect(response.body.paths).toHaveProperty(
       "/api/studio/series/{seriesId}/access-policy",
     );
+    expect(response.body.paths).toHaveProperty(
+      "/api/episodes/{id}/candy-unlock",
+    );
+    expect(response.body.paths).toHaveProperty("/api/candy-wallets/{token}");
   });
 
   it("serves the Swagger UI", async () => {

@@ -142,23 +142,38 @@ try {
             if (quote.pageCount < 1 || quote.totalPrice < 1) {
               throw new Error('invalid print quote')
             }
+            const candyWalletToken = crypto.randomUUID()
+            const orderRequest = {
+              ...specification,
+              requestKey: crypto.randomUUID(),
+              candyWalletToken,
+              ordererName: 'SmokeTest'
+            }
             const order = await json('/api/orders', {
               method: 'POST',
               headers,
-              body: JSON.stringify({
-                ...specification,
-                requestKey: crypto.randomUUID(),
-                ordererName: 'SmokeTest'
-              })
+              body: JSON.stringify(orderRequest)
+            })
+            const repeatedOrder = await json('/api/orders', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(orderRequest)
             })
             const persisted = await json(
               '/api/orders/' + encodeURIComponent(order.id)
             )
+            const candyWallet = await json(
+              '/api/candy-wallets/' + encodeURIComponent(candyWalletToken)
+            )
             const eventStatuses = persisted.events.map(event => event.status)
             if (
+              repeatedOrder.id !== order.id ||
               persisted.status !== 'processing' ||
               eventStatuses.join(',') !== 'pending,processing' ||
-              !persisted.providerOrderId
+              !persisted.providerOrderId ||
+              persisted.candyBonus !== 5 ||
+              candyWallet.balance !== 5 ||
+              candyWallet.unitPrice !== 100
             ) {
               throw new Error('persistent order verification failed')
             }

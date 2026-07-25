@@ -3,7 +3,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  type MouseEvent,
   useCallback,
   useEffect,
   useRef,
@@ -25,6 +24,7 @@ import {
 } from "@/lib/reading-progress";
 import type { LivePopularResponse } from "@/lib/realtime";
 import { RecommendationShelves } from "./recommendation-shelves";
+import { DiscoverLink } from "./discover-link";
 
 const statusLabel = {
   ongoing: "연재 중",
@@ -125,32 +125,6 @@ export function HomePage({
     setError(null);
     setRequestKey((current) => current + 1);
   }, []);
-
-  const scrollToDiscover = useCallback(
-    (event: MouseEvent<HTMLAnchorElement>) => {
-      if (
-        event.button !== 0 ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.shiftKey ||
-        event.altKey
-      ) {
-        return;
-      }
-
-      const target = document.getElementById("discover");
-      if (!target) {
-        return;
-      }
-
-      event.preventDefault();
-      if (window.location.hash !== "#discover") {
-        window.history.pushState(window.history.state, "", "#discover");
-      }
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-    },
-    [],
-  );
 
   useEffect(() => {
     const refresh = () => setReadingProgress(getAllReadingProgress());
@@ -263,13 +237,9 @@ export function HomePage({
             소장하는 독자를 위한 공간입니다.
           </p>
           <div className="hero__actions">
-            <Link
-              className="button button--primary"
-              href="#discover"
-              onClick={scrollToDiscover}
-            >
+            <DiscoverLink className="button button--primary">
               오늘의 작품 보기
-            </Link>
+            </DiscoverLink>
             <span className="hero__note">
               로그인 없이 바로 읽을 수 있어요
             </span>
@@ -440,9 +410,9 @@ export function HomePage({
               {activeFilters.filter !== "all" ||
               activeFilters.genre ||
               activeFilters.weekday ? (
-                <Link className="text-link" href="/#discover">
+                <DiscoverLink className="text-link">
                   전체 작품 보기 →
-                </Link>
+                </DiscoverLink>
               ) : null}
             </div>
           ) : (

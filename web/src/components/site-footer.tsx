@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DiscoverLink } from "./discover-link";
 
 const repositoryUrl = "https://github.com/macdoongs/SweetToon";
 
@@ -22,7 +23,7 @@ export function SiteFooter() {
         <nav className="site-footer__nav" aria-label="푸터 메뉴">
           <div>
             <strong>서비스</strong>
-            <Link href="/#discover">작품 둘러보기</Link>
+            <DiscoverLink>작품 둘러보기</DiscoverLink>
             <Link href="/orders">주문 현황</Link>
             <Link href="/studio">작가 스튜디오</Link>
           </div>

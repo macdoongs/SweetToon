@@ -89,6 +89,16 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
 
   const footer = page.locator(".site-footer");
   await expect(footer).toBeVisible();
+  await footer.getByRole("link", { name: "작품 둘러보기" }).click();
+  await expect(page).toHaveURL(/\/#discover$/);
+  expect(await page.evaluate(() => window.location.hash)).toBe("#discover");
+  await expect
+    .poll(() =>
+      page.locator("#discover").evaluate((element) => {
+        return Math.abs(element.getBoundingClientRect().top);
+      }),
+    )
+    .toBeLessThan(2);
   await expect(footer.getByText("실제 결제·배송 없음")).toBeVisible();
   await expect(
     footer.getByRole("link", { name: "GitHub 저장소 ↗" }),
@@ -115,6 +125,10 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   const discoveryRail = recommendations
     .locator(".recommendation-rail")
     .first();
+  await expect(discoveryRail).toHaveAttribute(
+    "aria-roledescription",
+    "순환형 캐러셀",
+  );
   await expect
     .poll(() =>
       discoveryRail.evaluate(
@@ -122,13 +136,35 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
       ),
     )
     .toBe(true);
+  const initialScrollLeft = await discoveryRail.evaluate(
+    (element) => element.scrollLeft,
+  );
   await recommendations
     .getByRole("button", { name: /다음 작품 보기/ })
     .first()
     .click();
   await expect
     .poll(() => discoveryRail.evaluate((element) => element.scrollLeft))
-    .toBeGreaterThan(0);
+    .toBeGreaterThan(initialScrollLeft);
+  await discoveryRail.evaluate((element) => {
+    const rail = element as HTMLElement;
+    const itemCount = rail.children.length / 3;
+    const trailingCopy = rail.children.item(itemCount * 2) as HTMLElement;
+    rail.scrollLeft = trailingCopy.offsetLeft + 1;
+    rail.dispatchEvent(new Event("scroll"));
+  });
+  await expect
+    .poll(() =>
+      discoveryRail.evaluate((element) => {
+        const rail = element as HTMLElement;
+        const itemCount = rail.children.length / 3;
+        const firstOriginal = rail.children.item(itemCount) as HTMLElement;
+        const trailingCopy = rail.children.item(itemCount * 2) as HTMLElement;
+        return rail.scrollLeft >= firstOriginal.offsetLeft &&
+          rail.scrollLeft < trailingCopy.offsetLeft;
+      }),
+    )
+    .toBe(true);
 
   await page.goto("/series/moonlight-laundry");
   await page.getByRole("button", { name: "찜하기" }).click();

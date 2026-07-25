@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FAVORITES_UPDATED_EVENT,
   getFavorites,
@@ -18,10 +18,22 @@ import {
 } from "@/lib/recommendations";
 import type { SeriesSummary } from "@/lib/reader-types";
 
-function RecommendationCard({ series }: { series: SeriesSummary }) {
+function RecommendationCard({
+  duplicate = false,
+  series,
+}: {
+  duplicate?: boolean;
+  series: SeriesSummary;
+}) {
   return (
-    <li className="recommendation-card">
-      <Link href={`/series/${encodeURIComponent(series.slug)}`}>
+    <li
+      aria-hidden={duplicate || undefined}
+      className="recommendation-card"
+    >
+      <Link
+        href={`/series/${encodeURIComponent(series.slug)}`}
+        tabIndex={duplicate ? -1 : undefined}
+      >
         <div className="recommendation-card__cover">
           {series.coverUrl ? (
             <Image
@@ -48,8 +60,39 @@ function RecommendationCard({ series }: { series: SeriesSummary }) {
 
 function Shelf({ shelf }: { shelf: RecommendationShelf }) {
   const railId = `recommendation-${shelf.id}`;
+  const railRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    const rail = railRef.current;
+    const firstOriginal = rail?.children.item(
+      shelf.items.length,
+    ) as HTMLElement | null;
+    if (rail && firstOriginal) {
+      rail.scrollLeft = firstOriginal.offsetLeft;
+    }
+  }, [shelf.items.length]);
+
+  const normalizeCircularPosition = () => {
+    const rail = railRef.current;
+    const itemCount = shelf.items.length;
+    const firstOriginal = rail?.children.item(itemCount) as HTMLElement | null;
+    const firstTrailingCopy = rail?.children.item(
+      itemCount * 2,
+    ) as HTMLElement | null;
+    if (!rail || !firstOriginal || !firstTrailingCopy) {
+      return;
+    }
+
+    const segmentWidth = firstTrailingCopy.offsetLeft - firstOriginal.offsetLeft;
+    if (rail.scrollLeft < firstOriginal.offsetLeft) {
+      rail.scrollLeft += segmentWidth;
+    } else if (rail.scrollLeft >= firstTrailingCopy.offsetLeft) {
+      rail.scrollLeft -= segmentWidth;
+    }
+  };
+
   const scroll = (direction: -1 | 1) => {
-    document.getElementById(railId)?.scrollBy({
+    railRef.current?.scrollBy({
       left: direction * 720,
       behavior: "smooth",
     });
@@ -83,9 +126,29 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
           </button>
         </div>
       </header>
-      <ul className="recommendation-rail" id={railId}>
+      <ul
+        aria-roledescription="순환형 캐러셀"
+        className="recommendation-rail"
+        id={railId}
+        onScroll={normalizeCircularPosition}
+        ref={railRef}
+      >
+        {shelf.items.map((series) => (
+          <RecommendationCard
+            duplicate
+            key={`leading-${series.id}`}
+            series={series}
+          />
+        ))}
         {shelf.items.map((series) => (
           <RecommendationCard key={series.id} series={series} />
+        ))}
+        {shelf.items.map((series) => (
+          <RecommendationCard
+            duplicate
+            key={`trailing-${series.id}`}
+            series={series}
+          />
         ))}
       </ul>
     </section>

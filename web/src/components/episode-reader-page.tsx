@@ -27,6 +27,7 @@ type ReadingDirection = "ltr" | "rtl";
 type Page = EpisodeReader["pages"][number];
 
 const SETTINGS_KEY = "sweettoon:reader-settings";
+const READER_CHROME_HIDE_DELAY_MS = 2400;
 
 function loadSettings(): {
   mode: ReaderMode;
@@ -117,6 +118,10 @@ export function EpisodeReaderPage({
     Record<string, { width: number; height: number }>
   >({});
   const [bookmarkMessage, setBookmarkMessage] = useState<string | null>(null);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const [webtoonCompleted, setWebtoonCompleted] = useState(false);
+  const chromeHideTimer = useRef<number | null>(null);
+  const lastScrollY = useRef(0);
   const lastSavedPercent = useRef(-10);
   const restoredEpisode = useRef<string | null>(null);
 
@@ -156,6 +161,13 @@ export function EpisodeReaderPage({
       JSON.stringify({ mode, scale, background, direction }),
     );
   }, [background, direction, mode, scale]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setWebtoonCompleted(getEpisodeProgress(episodeId)?.completed ?? false);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [episodeId]);
 
   useEffect(() => {
     const locked = initialData?.access.state === "locked";
@@ -200,6 +212,9 @@ export function EpisodeReaderPage({
           ? 100
           : Math.min(100, Math.round((window.scrollY / scrollable) * 100));
       setProgress(nextProgress);
+      if (nextProgress >= 95) {
+        setWebtoonCompleted(true);
+      }
       if (
         episode &&
         episode.access.state !== "locked" &&
@@ -264,6 +279,77 @@ export function EpisodeReaderPage({
     mode === "double" && spreads.length > 0
       ? Math.round(((spreadIndex + 1) / spreads.length) * 100)
       : progress;
+  const isLastSpread =
+    mode === "double" &&
+    spreads.length > 0 &&
+    spreadIndex === spreads.length - 1;
+  const showFinish =
+    episode?.access.state !== "locked" &&
+    (mode === "double" ? isLastSpread : webtoonCompleted);
+  const chromePinned =
+    settingsOpen || thumbnailsOpen || helpOpen || bookmarkMessage !== null;
+
+  const revealChrome = useCallback(() => {
+    if (chromeHideTimer.current) {
+      window.clearTimeout(chromeHideTimer.current);
+    }
+    setChromeVisible(true);
+    if (!chromePinned) {
+      chromeHideTimer.current = window.setTimeout(() => {
+        setChromeVisible(false);
+      }, READER_CHROME_HIDE_DELAY_MS);
+    }
+  }, [chromePinned]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(revealChrome);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (chromeHideTimer.current) {
+        window.clearTimeout(chromeHideTimer.current);
+      }
+    };
+  }, [chromePinned, episodeId, mode, revealChrome]);
+
+  useEffect(() => {
+    const onPointerActivity = () => revealChrome();
+    const onFocus = () => revealChrome();
+    const onScroll = () => {
+      const nextScrollY = window.scrollY;
+      if (
+        mode === "webtoon" &&
+        !chromePinned &&
+        nextScrollY > Math.max(48, lastScrollY.current + 8)
+      ) {
+        if (chromeHideTimer.current) {
+          window.clearTimeout(chromeHideTimer.current);
+        }
+        setChromeVisible(false);
+      } else if (
+        nextScrollY <= 24 ||
+        nextScrollY < lastScrollY.current - 8
+      ) {
+        revealChrome();
+      }
+      lastScrollY.current = nextScrollY;
+    };
+    window.addEventListener("pointermove", onPointerActivity, {
+      passive: true,
+    });
+    window.addEventListener("mousemove", onPointerActivity, { passive: true });
+    window.addEventListener("pointerdown", onPointerActivity, {
+      passive: true,
+    });
+    window.addEventListener("focusin", onFocus);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", onPointerActivity);
+      window.removeEventListener("mousemove", onPointerActivity);
+      window.removeEventListener("pointerdown", onPointerActivity);
+      window.removeEventListener("focusin", onFocus);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [chromePinned, mode, revealChrome]);
 
   useEffect(() => {
     if (
@@ -361,6 +447,7 @@ export function EpisodeReaderPage({
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, select, button")) return;
+      revealChrome();
       if (event.key === "?") setHelpOpen((open) => !open);
       if (event.key.toLowerCase() === "t") {
         setThumbnailsOpen((open) => !open);
@@ -387,7 +474,7 @@ export function EpisodeReaderPage({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [direction, goToSpread, mode, spreadIndex]);
+  }, [direction, goToSpread, mode, revealChrome, spreadIndex]);
 
   if (error) {
     return (
@@ -412,7 +499,10 @@ export function EpisodeReaderPage({
 
   return (
     <main
-      className={`reader-page reader-page--${background} reader-page--${mode}`}
+      className={
+        `reader-page reader-page--${background} reader-page--${mode}` +
+        (chromeVisible ? "" : " reader-page--chrome-hidden")
+      }
     >
       <div
         className="reader-progress"
@@ -696,11 +786,18 @@ export function EpisodeReaderPage({
         </aside>
       ) : null}
 
-      {episode.access.state !== "locked" ? (
-        <section className="reader-finish">
-          <p className="eyebrow">여기까지 읽었어요</p>
+      {showFinish ? (
+        <section
+          className={
+            "reader-finish" +
+            (mode === "double" ? " reader-finish--double" : "")
+          }
+        >
+          <p className="eyebrow">
+            {mode === "double" ? "마지막 페이지예요" : "여기까지 읽었어요"}
+          </p>
           <h2>
-            {episode.series.title} {episode.number}화를 완독했습니다.
+            {episode.series.title} {episode.number}화를 모두 읽었습니다.
           </h2>
           <div className="reader-navigation">
             {episode.navigation.previousEpisodeId ? (

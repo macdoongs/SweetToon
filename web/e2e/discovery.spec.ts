@@ -8,7 +8,8 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
   const cards = page.locator(".series-card");
   const allCount = await cards.count();
   expect(allCount).toBe(12);
-  await expect(cards.first().locator(".series-cover--empty")).toBeVisible();
+  await expect(cards.first().locator(".series-cover")).toBeVisible();
+  await expect(page.locator(".featured-book__cover img")).toBeVisible();
   await expect(
     page.getByRole("link", {
       name: "전체",

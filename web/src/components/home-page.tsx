@@ -25,6 +25,10 @@ import {
 import type { LivePopularResponse } from "@/lib/realtime";
 import { RecommendationShelves } from "./recommendation-shelves";
 import { DiscoverLink } from "./discover-link";
+import {
+  buildCircularRailCopies,
+  useCircularRail,
+} from "./use-circular-rail";
 
 const statusLabel = {
   ongoing: "연재 중",
@@ -96,6 +100,108 @@ function SeriesCover({
     />
   ) : (
     <div className="series-cover series-cover--empty">{series.title}</div>
+  );
+}
+
+function getLivePopularCardWidth(viewportWidth: number) {
+  return viewportWidth <= 700
+    ? Math.min(viewportWidth * 0.82, 340)
+    : Math.min(Math.max(viewportWidth * 0.28, 280), 380);
+}
+
+function LivePopularRail({
+  items,
+}: {
+  items: LivePopularResponse["items"];
+}) {
+  const { loopEnabled, railRef, scroll } =
+    useCircularRail<HTMLUListElement>({
+      cardWidth: getLivePopularCardWidth,
+      itemCount: items.length,
+    });
+  const railCopies = buildCircularRailCopies(items);
+
+  return (
+    <section className="live-popular" aria-labelledby="live-popular-title">
+      <div className="live-popular__inner">
+        <div className="circular-rail-heading section-heading section-heading--compact">
+          <div>
+            <p className="eyebrow">Live now</p>
+            <h2 id="live-popular-title">지금 인기 있는 작품</h2>
+          </div>
+          <p>최근 1분 동안 독자들이 읽고 있는 작품이에요.</p>
+          {loopEnabled ? (
+            <div className="circular-rail-controls">
+              <button
+                aria-label="지금 인기 있는 작품 이전 작품 보기"
+                onClick={() => scroll(-1)}
+                type="button"
+              >
+                ←
+              </button>
+              <button
+                aria-label="지금 인기 있는 작품 다음 작품 보기"
+                onClick={() => scroll(1)}
+                type="button"
+              >
+                →
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <ul
+          aria-roledescription={
+            loopEnabled ? "순환형 캐러셀" : "작품 목록"
+          }
+          className="circular-content-rail horizontal-scroll-surface live-popular__rail"
+          id="live-popular-rail"
+          ref={railRef}
+        >
+          {railCopies.map(
+            (
+              {
+                copyIndex,
+                duplicate,
+                eager,
+                item: { series, viewerCount },
+              },
+              index,
+            ) => (
+              <li
+                aria-hidden={duplicate || undefined}
+                className="live-popular-card"
+                data-preloaded={eager || undefined}
+                key={`${copyIndex}-${series.id}`}
+              >
+                <Link
+                  href={`/series/${series.slug}`}
+                  tabIndex={duplicate ? -1 : undefined}
+                >
+                  <span className="live-popular-card__rank">
+                    {(index % items.length) + 1}
+                  </span>
+                  <div className="live-popular-card__cover">
+                    <SeriesCover
+                      priority={eager}
+                      series={series}
+                      sizes="(max-width: 700px) 72px, 84px"
+                    />
+                  </div>
+                  <div>
+                    <span>{series.genre}</span>
+                    <strong>{series.title}</strong>
+                    <small>
+                      <i aria-hidden="true" />
+                      지금 {viewerCount}명
+                    </small>
+                  </div>
+                </Link>
+              </li>
+            ),
+          )}
+        </ul>
+      </div>
+    </section>
   );
 }
 
@@ -272,42 +378,7 @@ export function HomePage({
       </header>
 
       {livePopular?.items.length ? (
-        <section className="live-popular" aria-labelledby="live-popular-title">
-          <div className="live-popular__inner">
-            <div className="section-heading section-heading--compact">
-              <div>
-                <p className="eyebrow">Live now</p>
-                <h2 id="live-popular-title">지금 인기 있는 작품</h2>
-              </div>
-              <p>최근 1분 동안 독자들이 읽고 있는 작품이에요.</p>
-            </div>
-            <div className="live-popular__grid">
-              {livePopular.items.map(({ series, viewerCount }, index) => (
-                <Link
-                  className="live-popular-card"
-                  href={`/series/${series.slug}`}
-                  key={series.id}
-                >
-                  <span className="live-popular-card__rank">{index + 1}</span>
-                  <div className="live-popular-card__cover">
-                    <SeriesCover
-                      series={series}
-                      sizes="(max-width: 700px) 72px, 84px"
-                    />
-                  </div>
-                  <div>
-                    <span>{series.genre}</span>
-                    <strong>{series.title}</strong>
-                    <small>
-                      <i aria-hidden="true" />
-                      지금 {viewerCount}명
-                    </small>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
+        <LivePopularRail items={livePopular.items} />
       ) : null}
 
       <RecommendationShelves series={recommendationSeries} />

@@ -556,25 +556,29 @@ button {
   margin: 0 auto;
 }
 
-.live-popular__grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.live-popular__rail {
+  --circular-rail-card-width: clamp(280px, 28vw, 380px);
   gap: 12px;
 }
 
 .live-popular-card {
   min-width: 0;
-  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  display: grid;
-  grid-template-columns: 28px 76px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
+  overflow: hidden;
   background: var(--surface-soft);
   transition:
     border-color 150ms ease,
     transform 150ms ease;
+}
+
+.live-popular-card > a {
+  height: 100%;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 28px 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
 }
 
 .live-popular-card:hover {
@@ -602,13 +606,13 @@ button {
   object-fit: cover;
 }
 
-.live-popular-card > div:last-child {
+.live-popular-card > a > div:last-child {
   min-width: 0;
   display: grid;
   gap: 5px;
 }
 
-.live-popular-card > div:last-child > span {
+.live-popular-card > a > div:last-child > span {
   color: var(--muted);
   font-size: 0.72rem;
 }
@@ -732,6 +736,36 @@ button {
   background: rgba(239, 104, 73, 0.22);
 }
 
+.circular-rail-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr) auto;
+}
+
+.circular-rail-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.circular-rail-controls button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.circular-rail-controls button:hover,
+.circular-rail-controls button:focus-visible {
+  border-color: var(--coral);
+  background: var(--pink-surface);
+}
+
 .horizontal-scroll-surface {
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
@@ -743,20 +777,26 @@ button {
   display: none;
 }
 
-.recommendation-rail {
+.circular-content-rail {
   display: grid;
-  grid-auto-columns: var(
-    --recommendation-card-width,
-    clamp(156px, 17vw, 210px)
-  );
+  grid-auto-columns: var(--circular-rail-card-width);
   grid-auto-flow: column;
-  gap: 16px;
   overflow-x: auto;
   margin: 0;
   padding: 0 0 14px;
   scroll-behavior: smooth;
   scroll-snap-type: x mandatory;
   list-style: none;
+}
+
+.circular-content-rail > * {
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.recommendation-rail {
+  --circular-rail-card-width: clamp(156px, 17vw, 210px);
+  gap: 16px;
 }
 
 .recommendation-card {
@@ -3250,13 +3290,14 @@ body:has(.reader-page) .site-footer {
   color: var(--muted);
 }
 
-.favorites-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.favorites-rail {
+  --circular-rail-card-width: clamp(380px, 40vw, 520px);
   gap: 22px;
-  margin: 42px 0 0;
-  padding: 0;
-  list-style: none;
+  margin-top: 42px;
+}
+
+.favorites-page__controls {
+  margin-top: 18px;
 }
 
 .favorite-card {
@@ -3530,7 +3571,6 @@ body:has(.reader-page) .site-footer {
     padding: 48px 0 72px;
   }
 
-  .favorites-grid,
   .candy-packages {
     grid-template-columns: 1fr;
   }
@@ -3582,12 +3622,12 @@ body:has(.reader-page) .site-footer {
     min-height: 280px;
   }
 
-  .live-popular__grid {
-    grid-template-columns: 1fr;
-  }
-
   .live-popular {
     padding: 42px 0;
+  }
+
+  .live-popular__rail {
+    --circular-rail-card-width: min(82vw, 340px);
   }
 
   .recommendations {
@@ -3600,6 +3640,14 @@ body:has(.reader-page) .site-footer {
     flex-direction: column;
   }
 
+  .circular-rail-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .circular-rail-heading .circular-rail-controls {
+    justify-self: end;
+  }
+
   .recommendations__intro {
     margin-bottom: 34px;
   }
@@ -3609,10 +3657,11 @@ body:has(.reader-page) .site-footer {
   }
 
   .recommendation-rail {
-    grid-auto-columns: var(
-      --recommendation-card-width,
-      min(44vw, 180px)
-    );
+    --circular-rail-card-width: min(44vw, 180px);
+  }
+
+  .favorites-rail {
+    --circular-rail-card-width: min(86vw, 420px);
   }
 
   .discover-section,

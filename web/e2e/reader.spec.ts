@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import {
+  expectSameCardPositions,
+  prepareLoopBoundary,
+  snapshotVisibleCards,
+} from "./circular-rail";
 
 test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", async ({ page }) => {
   await page.goto("/");
@@ -192,13 +197,35 @@ test("작품을 찜하고 목록에서 확인한 뒤 해제한다", async ({ pag
     page.getByRole("button", { name: "찜 해제" }),
   ).toHaveAttribute("aria-pressed", "true");
 
+  await page.goto("/series/corner-store");
+  await page.getByRole("button", { name: "찜하기" }).click();
+
   await page.goto("/favorites");
   await expect(page.getByRole("heading", { name: "찜 목록" })).toBeVisible();
-  const card = page.locator(".favorite-card");
+  const rail = page.locator(".favorites-rail");
+  await expect(rail).toHaveAttribute(
+    "aria-roledescription",
+    "순환형 캐러셀",
+  );
+  await expect(rail).toHaveCSS("scrollbar-width", "none");
+  await expect(rail.locator(".favorite-card")).toHaveCount(10);
+
+  const originalCards = rail.locator(".favorite-card:not([aria-hidden])");
+  await expect(originalCards).toHaveCount(2);
+  const beforeBoundary = await prepareLoopBoundary(rail);
+  await rail.dispatchEvent("scrollend");
+  await page.waitForTimeout(100);
+  const afterBoundary = await snapshotVisibleCards(rail);
+  expectSameCardPositions(beforeBoundary, afterBoundary, "favorites rail");
+
+  const card = originalCards.filter({ hasText: "달빛 세탁소" });
   await expect(card.getByRole("heading", { name: "달빛 세탁소" })).toBeVisible();
   await expect(card.locator("img")).toBeVisible();
 
   await card.getByRole("button", { name: "찜 해제" }).click();
+  await expect(rail).toHaveAttribute("aria-roledescription", "작품 목록");
+  await expect(rail.locator(".favorite-card")).toHaveCount(1);
+  await rail.getByRole("button", { name: "찜 해제" }).click();
   await expect(
     page.getByRole("heading", { name: "아직 찜한 작품이 없어요" }),
   ).toBeVisible();

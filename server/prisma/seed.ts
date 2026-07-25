@@ -212,34 +212,46 @@ const CATALOG_SERIES: SeriesSpec[] = CATALOG_TITLES.map((title, index) => ({
       title: "첫 번째 권",
       status: index % 3 === 0 ? "completed" : "ongoing",
       episodes: 5,
-      pagesPerEp: 1,
+      pagesPerEp: 4,
     },
   ],
 }));
 
 async function seedCatalogSeries(coverUrls: Map<string, string>) {
   for (const spec of CATALOG_SERIES) {
-    if (await prisma.series.findUnique({ where: { slug: spec.slug } })) {
-      continue;
-    }
-    const author =
-      (await prisma.author.findFirst({ where: { name: spec.author.name } })) ??
-      (await prisma.author.create({ data: spec.author }));
-    const series = await prisma.series.create({
-      data: {
-        slug: spec.slug,
-        authorId: author.id,
-        title: spec.title,
-        genre: spec.genre,
-        weekday: spec.weekday,
-        synopsis: spec.synopsis,
-        status: spec.status,
-        coverUrl: coverUrls.get(spec.slug),
-      },
+    const existingSeries = await prisma.series.findUnique({
+      where: { slug: spec.slug },
     });
+    const series =
+      existingSeries ??
+      (await (async () => {
+        const author =
+          (await prisma.author.findFirst({
+            where: { name: spec.author.name },
+          })) ?? (await prisma.author.create({ data: spec.author }));
+        return prisma.series.create({
+          data: {
+            slug: spec.slug,
+            authorId: author.id,
+            title: spec.title,
+            genre: spec.genre,
+            weekday: spec.weekday,
+            synopsis: spec.synopsis,
+            status: spec.status,
+            coverUrl: coverUrls.get(spec.slug),
+          },
+        });
+      })());
     const seasonSpec = spec.seasons[0];
-    const season = await prisma.season.create({
-      data: {
+    const season = await prisma.season.upsert({
+      where: {
+        seriesId_number: {
+          seriesId: series.id,
+          number: seasonSpec.number,
+        },
+      },
+      update: {},
+      create: {
         seriesId: series.id,
         number: seasonSpec.number,
         title: seasonSpec.title,
@@ -247,32 +259,48 @@ async function seedCatalogSeries(coverUrls: Map<string, string>) {
       },
     });
     for (let ep = 1; ep <= seasonSpec.episodes; ep++) {
-      const episode = await prisma.episode.create({
-        data: {
+      const episode = await prisma.episode.upsert({
+        where: {
+          seasonId_number: {
+            seasonId: season.id,
+            number: ep,
+          },
+        },
+        update: {},
+        create: {
           seasonId: season.id,
           number: ep,
           title: `${ep}화`,
           publishedAt: new Date(Date.now() - (5 - ep + indexOfWeekday(spec.weekday)) * 86400_000),
         },
       });
-      const rel = path.join(
-        spec.slug,
-        "s1",
-        `ep${String(ep).padStart(3, "0")}`,
-        "001.svg",
-      );
-      await prisma.page.create({
-        data: {
-          episodeId: episode.id,
-          order: 1,
-          imageUrl: writeCutSvg(
-            rel,
-            spec.title,
-            `${ep}화 · 데모 컷`,
-            spec.hue,
-          ),
-        },
-      });
+      for (let pageOrder = 1; pageOrder <= seasonSpec.pagesPerEp; pageOrder++) {
+        const rel = path.join(
+          spec.slug,
+          "s1",
+          `ep${String(ep).padStart(3, "0")}`,
+          `${String(pageOrder).padStart(3, "0")}.svg`,
+        );
+        await prisma.page.upsert({
+          where: {
+            episodeId_order: {
+              episodeId: episode.id,
+              order: pageOrder,
+            },
+          },
+          update: {},
+          create: {
+            episodeId: episode.id,
+            order: pageOrder,
+            imageUrl: writeCutSvg(
+              rel,
+              spec.title,
+              `${ep}화 · ${pageOrder} / ${seasonSpec.pagesPerEp}`,
+              (spec.hue + (pageOrder - 1) * 12) % 360,
+            ),
+          },
+        });
+      }
     }
   }
 }

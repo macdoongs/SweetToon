@@ -81,20 +81,39 @@ try {
 
     Invoke-Checked {
         docker compose exec -T web node -e "
-          fetch('http://localhost:3000/api/series')
-            .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
-            .then(body => {
-              if (!Array.isArray(body.items) || body.items.length === 0) {
-                process.exit(1)
-              }
-              console.log('series=' + body.items.length)
-            })
-            .catch(error => {
+          const base = 'http://localhost:3000'
+          async function json(path) {
+            const response = await fetch(base + path)
+            if (!response.ok) throw new Error(path + ' returned ' + response.status)
+            return response.json()
+          }
+          async function verifySeed() {
+            const body = await json('/api/series')
+            if (!Array.isArray(body.items) || body.items.length === 0) {
+              throw new Error('seeded series not found')
+            }
+            const catalog = await json('/api/series/catalog-01')
+            const firstEpisode = catalog.seasons[0]?.episodes[0]
+            if (!firstEpisode) throw new Error('catalog episode not found')
+            const reader = await json(
+              '/api/episodes/' + encodeURIComponent(firstEpisode.id)
+            )
+            if (reader.pages.length !== 4) {
+              throw new Error(
+                'catalog episode expected 4 pages, received ' +
+                  reader.pages.length
+              )
+            }
+            console.log(
+              'series=' + body.items.length + ' catalog-pages=' + reader.pages.length
+            )
+          }
+          verifySeed().catch(error => {
               console.error(error)
               process.exit(1)
             })
         "
-    } "web to API proxy and seed check"
+    } "web to API proxy and catalog seed check"
 
     Invoke-Checked {
         docker compose exec -T web node -e "

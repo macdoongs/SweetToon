@@ -31,7 +31,7 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
     /reader-page--chrome-hidden/,
     { timeout: 5_000 },
   );
-  await page.locator(".reader-page").dispatchEvent("pointermove");
+  await page.mouse.move(21, 21);
   await expect(page.locator(".reader-page")).not.toHaveClass(
     /reader-page--chrome-hidden/,
   );
@@ -79,7 +79,7 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
     )
     .toBeGreaterThan(0);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-  await page.locator(".reader-page").dispatchEvent("pointermove");
+  await page.mouse.move(20, 20);
   await expect(page.locator(".reader-page")).not.toHaveClass(
     /reader-page--chrome-hidden/,
   );

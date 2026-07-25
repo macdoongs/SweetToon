@@ -41,6 +41,21 @@ const SHOWCASE_PAGE_ASSETS = Array.from(
   (_, index) => `${String(index + 1).padStart(3, "0")}.webp`,
 );
 
+const COVER_ASSETS = [
+  ["moonlight-laundry", "moonlight-laundry.webp"],
+  ["corner-store", "corner-store.webp"],
+  ["neon-blade", "neon-blade.webp"],
+  ["rooftop-garden", "rooftop-garden.webp"],
+  ["catalog-01", "catalog-01.webp"],
+  ["catalog-04", "catalog-04.webp"],
+  ["catalog-07", "catalog-07.webp"],
+  ["catalog-10", "catalog-10.webp"],
+  ["catalog-13", "catalog-13.webp"],
+  ["catalog-16", "catalog-16.webp"],
+  ["catalog-19", "catalog-19.webp"],
+  ["catalog-22", "catalog-22.webp"],
+] as const;
+
 function writeShowcasePages() {
   return SHOWCASE_PAGE_ASSETS.map((assetName) => {
     const relPath = path.join(
@@ -202,7 +217,7 @@ const CATALOG_SERIES: SeriesSpec[] = CATALOG_TITLES.map((title, index) => ({
   ],
 }));
 
-async function seedCatalogSeries() {
+async function seedCatalogSeries(coverUrls: Map<string, string>) {
   for (const spec of CATALOG_SERIES) {
     if (await prisma.series.findUnique({ where: { slug: spec.slug } })) {
       continue;
@@ -219,6 +234,7 @@ async function seedCatalogSeries() {
         weekday: spec.weekday,
         synopsis: spec.synopsis,
         status: spec.status,
+        coverUrl: coverUrls.get(spec.slug),
       },
     });
     const seasonSpec = spec.seasons[0];
@@ -267,29 +283,31 @@ function indexOfWeekday(weekday: SeriesSpec["weekday"]) {
 
 async function main() {
   const coverUrls = new Map<string, string>(
-    SERIES.map((spec) => [
-      spec.slug,
-      writeCoverImage(
-        path.join(spec.slug, "cover.webp"),
-        `${spec.slug}.webp`,
-      ),
-    ] as const),
+    COVER_ASSETS.map(([slug, assetName]) => [
+      slug,
+      writeCoverImage(path.join(slug, "cover.webp"), assetName),
+    ]),
   );
   const showcasePageUrls = writeShowcasePages();
   // 컨테이너 재시작 시 사용자가 만든 주문과 콘텐츠를 보존한다.
   // 데모 레코드는 빈 DB에만 만들고, 정적 데모 표지만 안전하게 갱신한다.
   const existingSeries = await prisma.series.count();
   if (existingSeries > 0) {
+    for (const [slug, coverUrl] of coverUrls) {
+      await prisma.series.updateMany({
+        where: { slug },
+        data: { coverUrl },
+      });
+    }
     for (const spec of SERIES) {
       await prisma.series.updateMany({
         where: { slug: spec.slug },
         data: {
-          coverUrl: coverUrls.get(spec.slug),
           weekday: spec.weekday,
         },
       });
     }
-    await seedCatalogSeries();
+    await seedCatalogSeries(coverUrls);
     const showcaseEpisode = await prisma.episode.findFirst({
       where: {
         number: 1,
@@ -396,7 +414,7 @@ async function main() {
     }
   }
 
-  await seedCatalogSeries();
+  await seedCatalogSeries(coverUrls);
 
   // 샘플 주문 — 다양한 상태로 시드해 목록/타임라인 UI를 바로 확인 가능하게
   const laundry = await prisma.series.findFirstOrThrow({ where: { title: "달빛 세탁소" }, include: { seasons: true } });

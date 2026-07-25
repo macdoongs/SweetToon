@@ -28,9 +28,17 @@ const LOOP_COPY_COUNT = 5;
 const CENTER_COPY_INDEX = 2;
 const LOWER_RESET_COPY_INDEX = 1;
 const UPPER_RESET_COPY_INDEX = 4;
-const RESET_SEGMENT_COUNT = 2;
 const FALLBACK_SETTLE_DELAY_MS = 140;
 const STABLE_SCROLL_EPSILON = 0.01;
+const MOBILE_RECOMMENDATION_BREAKPOINT = 700;
+
+function getRoundedCardWidth(viewportWidth: number) {
+  const responsiveWidth =
+    viewportWidth <= MOBILE_RECOMMENDATION_BREAKPOINT
+      ? Math.min(viewportWidth * 0.44, 180)
+      : Math.min(Math.max(viewportWidth * 0.17, 156), 210);
+  return Math.round(responsiveWidth);
+}
 
 function getContentLeft(
   rail: HTMLUListElement,
@@ -150,12 +158,12 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
       upperResetBoundary,
       railRect,
     );
-    const segmentWidth = nextCopyLeft - centerCopyLeft;
-    const resetDistance = segmentWidth * RESET_SEGMENT_COUNT;
     if (rail.scrollLeft < lowerBoundaryLeft) {
-      jumpWithoutAnimation(rail, rail.scrollLeft + resetDistance);
+      const forwardResetDistance = nextCopyLeft - lowerBoundaryLeft;
+      jumpWithoutAnimation(rail, rail.scrollLeft + forwardResetDistance);
     } else if (rail.scrollLeft >= upperBoundaryLeft) {
-      jumpWithoutAnimation(rail, rail.scrollLeft - resetDistance);
+      const backwardResetDistance = upperBoundaryLeft - centerCopyLeft;
+      jumpWithoutAnimation(rail, rail.scrollLeft - backwardResetDistance);
     }
   }, [jumpWithoutAnimation, shelf.items.length]);
 
@@ -204,7 +212,23 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
       return;
     }
 
-    jumpWithoutAnimation(rail, getContentLeft(rail, firstCenterCopy));
+    const alignCardGrid = () => {
+      rail.style.setProperty(
+        "--recommendation-card-width",
+        `${getRoundedCardWidth(window.innerWidth)}px`,
+      );
+      jumpWithoutAnimation(rail, getContentLeft(rail, firstCenterCopy));
+    };
+    alignCardGrid();
+    let resizeFrame: number | undefined;
+    const realignAfterResize = () => {
+      if (resizeFrame !== undefined) {
+        cancelAnimationFrame(resizeFrame);
+      }
+      resizeFrame = requestAnimationFrame(alignCardGrid);
+    };
+    window.addEventListener("resize", realignAfterResize);
+
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     const normalizeAfterSettlingFallback = () => {
       if (repositioningRef.current) {
@@ -226,6 +250,10 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
     }
     return () => {
       clearTimeout(settleTimer);
+      window.removeEventListener("resize", realignAfterResize);
+      if (resizeFrame !== undefined) {
+        cancelAnimationFrame(resizeFrame);
+      }
       if (restoreScrollBehaviorFrameRef.current !== null) {
         cancelAnimationFrame(restoreScrollBehaviorFrameRef.current);
       }
@@ -233,6 +261,7 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
         cancelAnimationFrame(stableScrollFrameRef.current);
       }
       repositioningRef.current = false;
+      rail.style.removeProperty("--recommendation-card-width");
       rail.style.removeProperty("scroll-behavior");
       rail.style.removeProperty("scroll-snap-type");
       if (supportsScrollEnd) {
@@ -284,7 +313,7 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
       </header>
       <ul
         aria-roledescription="순환형 캐러셀"
-        className="recommendation-rail"
+        className="horizontal-scroll-surface recommendation-rail"
         id={railId}
         ref={railRef}
       >

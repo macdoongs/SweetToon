@@ -65,6 +65,7 @@ async function snapshotVisibleCards(rail: Locator) {
 function expectSameCardPositions(
   before: VisibleCardSnapshot,
   after: VisibleCardSnapshot,
+  context = "recommendation rail",
 ) {
   expect(after.map((card) => card.title)).toEqual(
     before.map((card) => card.title),
@@ -76,7 +77,10 @@ function expectSameCardPositions(
       Math.abs(card.left - before[index].left),
     ),
   );
-  expect(maximumShift).toBeLessThan(0.5);
+  expect(
+    maximumShift,
+    `${context} boundary shift must stay below 0.5px`,
+  ).toBeLessThan(0.5);
 }
 
 test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한다", async ({
@@ -309,37 +313,50 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
 });
 
 test("소수점 카드 폭에서도 순환 경계 위치를 보존한다", async ({ page }) => {
-  test.setTimeout(45_000);
+  test.setTimeout(60_000);
 
   for (const width of [1234, 1100, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
-    const rail = page.locator(".recommendation-rail").first();
-    await expect(rail).toBeVisible();
+    const rails = page.locator(".recommendation-rail");
+    const railCount = await rails.count();
+    expect(railCount).toBeGreaterThan(1);
 
-    await expect
-      .poll(() =>
-        rail.evaluate((element) => {
-          const carousel = element as HTMLElement;
-          const itemCount = carousel.children.length / 5;
-          const centerCopy = carousel.children.item(
-            itemCount * 2,
-          ) as HTMLElement;
-          const railRect = carousel.getBoundingClientRect();
-          const expectedLeft =
-            centerCopy.getBoundingClientRect().left -
-            railRect.left +
-            carousel.scrollLeft;
-          return Math.abs(carousel.scrollLeft - expectedLeft);
-        }),
-      )
-      .toBeLessThan(0.5);
+    for (let railIndex = 0; railIndex < railCount; railIndex += 1) {
+      const rail = rails.nth(railIndex);
+      const railId = await rail.getAttribute("id");
+      await expect(rail).toBeVisible();
+      await expect(rail).toHaveClass(/horizontal-scroll-surface/);
+      await expect(rail).toHaveCSS("scrollbar-width", "none");
 
-    const beforeBoundary = await prepareLoopBoundary(rail);
-    await rail.dispatchEvent("scrollend");
-    await page.waitForTimeout(100);
-    const afterBoundary = await snapshotVisibleCards(rail);
-    expectSameCardPositions(beforeBoundary, afterBoundary);
+      await expect
+        .poll(() =>
+          rail.evaluate((element) => {
+            const carousel = element as HTMLElement;
+            const itemCount = carousel.children.length / 5;
+            const centerCopy = carousel.children.item(
+              itemCount * 2,
+            ) as HTMLElement;
+            const railRect = carousel.getBoundingClientRect();
+            const expectedLeft =
+              centerCopy.getBoundingClientRect().left -
+              railRect.left +
+              carousel.scrollLeft;
+            return Math.abs(carousel.scrollLeft - expectedLeft);
+          }),
+        )
+        .toBeLessThan(0.5);
+
+      const beforeBoundary = await prepareLoopBoundary(rail);
+      await rail.dispatchEvent("scrollend");
+      await page.waitForTimeout(100);
+      const afterBoundary = await snapshotVisibleCards(rail);
+      expectSameCardPositions(
+        beforeBoundary,
+        afterBoundary,
+        `${width}px ${railId ?? `rail ${railIndex + 1}`}`,
+      );
+    }
   }
 });
 

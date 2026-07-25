@@ -39,6 +39,16 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
 
   await page.getByRole("button", { name: "양면 보기" }).click();
   await expect(page.locator(".reader-paged")).toBeVisible();
+  await expect(page.locator(".reader-controls")).toHaveClass(
+    /horizontal-scroll-surface/,
+  );
+  await expect(page.locator(".reader-paged__spread")).toHaveClass(
+    /horizontal-scroll-surface/,
+  );
+  await expect(page.locator(".reader-paged__spread")).toHaveCSS(
+    "scrollbar-width",
+    "none",
+  );
   await expect(page.getByText(/1 \//)).toBeVisible();
   await expect(page.locator(".reader-finish")).toHaveCount(0);
   await page.getByRole("button", { name: "화면 설정" }).click();

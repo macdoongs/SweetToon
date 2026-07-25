@@ -68,7 +68,8 @@ describe("buildRecommendationShelves", () => {
     );
 
     expect(shelves[0].title).toContain("좋아한 작품");
-    expect(shelves[0].items.map((item) => item.slug)).toEqual(["fantasy"]);
+    expect(shelves[0].items[0].slug).toBe("fantasy");
+    expect(shelves[0].items).toHaveLength(4);
     expect(shelves.flatMap((shelf) => shelf.items)).not.toContainEqual(
       expect.objectContaining({ slug: "liked" }),
     );
@@ -81,19 +82,26 @@ describe("buildRecommendationShelves", () => {
     const catalog = [
       series("fantasy-a", "판타지"),
       series("fantasy-b", "판타지"),
+      series("mystery-a", "미스터리"),
+      series("mystery-b", "미스터리"),
       series("romance-a", "로맨스"),
       series("romance-b", "로맨스"),
+      series("daily-a", "일상"),
+      series("daily-b", "일상"),
+      series("action-a", "액션"),
+      series("action-b", "액션"),
+      series("sports-a", "스포츠"),
+      series("sports-b", "스포츠"),
     ];
 
     const shelves = buildRecommendationShelves(catalog, [], {});
 
-    expect(shelves).toHaveLength(2);
-    expect(shelves.every((shelf) => shelf.items.length === 2)).toBe(true);
-    expect(shelves.map((shelf) => shelf.title)).toEqual(
-      expect.arrayContaining([
-        "새로운 세계로 떠나는 이야기",
-        "설렘이 오래 남는 이야기",
-      ]),
-    );
+    expect(shelves).toHaveLength(3);
+    expect(shelves.every((shelf) => shelf.items.length === 4)).toBe(true);
+    expect(shelves.map((shelf) => shelf.title)).toEqual([
+      "새로운 세계와 수수께끼",
+      "설렘과 다정한 하루",
+      "속도감과 뜨거운 승부",
+    ]);
   });
 });

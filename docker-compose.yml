@@ -1,6 +1,6 @@
 services:
   redis:
-    image: redis:7.4-alpine
+    image: redis:7.4-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
     command: redis-server --save "" --appendonly no
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -9,7 +9,7 @@ services:
       retries: 15
 
   db:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sweettoon}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sweettoon}
@@ -23,6 +23,19 @@ services:
       interval: 3s
       timeout: 3s
       retries: 15
+
+  migrate:
+    build:
+      context: ./server
+    command: sh -c "npx prisma migrate deploy && npm run db:seed"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sweettoon}:${POSTGRES_PASSWORD:-sweettoon}@db:5432/${POSTGRES_DB:-sweettoon}
+      UPLOAD_DIR: /app/data/uploads
+    volumes:
+      - uploads:/app/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
 
   server:
     build:
@@ -59,8 +72,8 @@ services:
     volumes:
       - uploads:/app/data/uploads
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     healthcheck:

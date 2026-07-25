@@ -80,6 +80,35 @@ pipeline {
         always {
             archiveArtifacts artifacts: 'web/playwright-report/**,web/test-results/**',
                 allowEmptyArchive: true
+            script {
+                def cleanupStatus = powershell(
+                    returnStatus: true,
+                    script: '''
+                        $projectName = $env:COMPOSE_PROJECT_NAME
+                        if ($projectName -notmatch "^sweettoon-ci-[0-9]+$") {
+                            Write-Error "Refusing unsafe Compose cleanup target: $projectName"
+                            exit 1
+                        }
+
+                        if (-not (Test-Path "$env:WORKSPACE/docker-compose.yml")) {
+                            Write-Warning "docker-compose.yml is unavailable; skipping Compose cleanup."
+                            exit 0
+                        }
+
+                        Push-Location $env:WORKSPACE
+                        try {
+                            docker compose -p $projectName down --volumes --remove-orphans
+                            exit $LASTEXITCODE
+                        }
+                        finally {
+                            Pop-Location
+                        }
+                    '''
+                )
+                if (cleanupStatus != 0) {
+                    echo "WARNING: Compose cleanup failed with exit code ${cleanupStatus}."
+                }
+            }
             cleanWs()
         }
     }

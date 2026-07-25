@@ -35,6 +35,7 @@ try {
     }
 
     Invoke-Checked { npm run lint } "web lint"
+    Invoke-Checked { npm test } "web unit tests"
     Invoke-Checked { npm run build } "web production build"
 }
 finally {

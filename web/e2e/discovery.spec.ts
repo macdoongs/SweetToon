@@ -1,4 +1,83 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
+
+type VisibleCardSnapshot = Array<{
+  left: number;
+  title: string | null;
+}>;
+
+async function prepareLoopBoundary(rail: Locator) {
+  return rail.evaluate(async (element) => {
+    const carousel = element as HTMLElement;
+    const itemCount = carousel.children.length / 5;
+    const trailingCopy = carousel.children.item(
+      itemCount * 4,
+    ) as HTMLElement;
+    const carouselRect = carousel.getBoundingClientRect();
+    const targetLeft =
+      trailingCopy.getBoundingClientRect().left -
+      carouselRect.left +
+      carousel.scrollLeft;
+
+    carousel.style.scrollBehavior = "auto";
+    carousel.style.scrollSnapType = "none";
+    carousel.scrollLeft = targetLeft;
+    carousel.style.removeProperty("scroll-behavior");
+    carousel.style.removeProperty("scroll-snap-type");
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+
+    const railRect = carousel.getBoundingClientRect();
+    return Array.from(carousel.children)
+      .map((child) => {
+        const card = child as HTMLElement;
+        const rect = card.getBoundingClientRect();
+        return {
+          left: rect.left - railRect.left,
+          title: card.querySelector("strong")?.textContent ?? null,
+          visible: rect.right > railRect.left && rect.left < railRect.right,
+        };
+      })
+      .filter((card) => card.visible)
+      .map(({ left, title }) => ({ left, title }));
+  });
+}
+
+async function snapshotVisibleCards(rail: Locator) {
+  return rail.evaluate((element) => {
+    const carousel = element as HTMLElement;
+    const railRect = carousel.getBoundingClientRect();
+    return Array.from(carousel.children)
+      .map((child) => {
+        const card = child as HTMLElement;
+        const rect = card.getBoundingClientRect();
+        return {
+          left: rect.left - railRect.left,
+          title: card.querySelector("strong")?.textContent ?? null,
+          visible: rect.right > railRect.left && rect.left < railRect.right,
+        };
+      })
+      .filter((card) => card.visible)
+      .map(({ left, title }) => ({ left, title }));
+  });
+}
+
+function expectSameCardPositions(
+  before: VisibleCardSnapshot,
+  after: VisibleCardSnapshot,
+) {
+  expect(after.map((card) => card.title)).toEqual(
+    before.map((card) => card.title),
+  );
+  expect(after).toHaveLength(before.length);
+  const maximumShift = Math.max(
+    0,
+    ...after.map((card, index) =>
+      Math.abs(card.left - before[index].left),
+    ),
+  );
+  expect(maximumShift).toBeLessThan(0.5);
+}
 
 test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한다", async ({
   page,
@@ -164,32 +243,11 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
     .poll(() => discoveryRail.evaluate((element) => element.scrollLeft))
     .toBeGreaterThan(initialScrollLeft);
   await page.waitForTimeout(600);
-  const seamlessBoundary = await discoveryRail.evaluate((element) => {
-    const rail = element as HTMLElement;
-    const itemCount = rail.children.length / 5;
-    const trailingCopy = rail.children.item(itemCount * 4) as HTMLElement;
-    const snapshot = () => {
-      const railRect = rail.getBoundingClientRect();
-      return Array.from(rail.children)
-        .map((child) => {
-          const card = child as HTMLElement;
-          const rect = card.getBoundingClientRect();
-          return {
-            left: Math.round(rect.left - railRect.left),
-            title: card.querySelector("strong")?.textContent,
-            visible: rect.right > railRect.left && rect.left < railRect.right,
-          };
-        })
-        .filter((card) => card.visible)
-        .map(({ left, title }) => ({ left, title }));
-    };
-    rail.scrollLeft = trailingCopy.offsetLeft;
-    const before = snapshot();
-    rail.dispatchEvent(new Event("scrollend"));
-    return { after: snapshot(), before };
-  });
-  expect(seamlessBoundary.after).toEqual(seamlessBoundary.before);
-  await page.waitForTimeout(50);
+  const beforeBoundary = await prepareLoopBoundary(discoveryRail);
+  await discoveryRail.dispatchEvent("scrollend");
+  await page.waitForTimeout(100);
+  const afterBoundary = await snapshotVisibleCards(discoveryRail);
+  expectSameCardPositions(beforeBoundary, afterBoundary);
   expect(
     await discoveryRail.evaluate((element) => {
       const rail = element as HTMLElement;
@@ -203,8 +261,13 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
         const itemCount = rail.children.length / 5;
         const firstOriginal = rail.children.item(itemCount * 2) as HTMLElement;
         const trailingCopy = rail.children.item(itemCount * 4) as HTMLElement;
-        return rail.scrollLeft >= firstOriginal.offsetLeft &&
-          rail.scrollLeft < trailingCopy.offsetLeft;
+        const railRect = rail.getBoundingClientRect();
+        const contentLeft = (item: HTMLElement) =>
+          item.getBoundingClientRect().left -
+          railRect.left +
+          rail.scrollLeft;
+        return rail.scrollLeft >= contentLeft(firstOriginal) - 0.5 &&
+          rail.scrollLeft < contentLeft(trailingCopy) - 0.5;
       }),
     )
     .toBe(true);
@@ -243,6 +306,41 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBeTruthy();
+});
+
+test("소수점 카드 폭에서도 순환 경계 위치를 보존한다", async ({ page }) => {
+  test.setTimeout(45_000);
+
+  for (const width of [1234, 1100, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    const rail = page.locator(".recommendation-rail").first();
+    await expect(rail).toBeVisible();
+
+    await expect
+      .poll(() =>
+        rail.evaluate((element) => {
+          const carousel = element as HTMLElement;
+          const itemCount = carousel.children.length / 5;
+          const centerCopy = carousel.children.item(
+            itemCount * 2,
+          ) as HTMLElement;
+          const railRect = carousel.getBoundingClientRect();
+          const expectedLeft =
+            centerCopy.getBoundingClientRect().left -
+            railRect.left +
+            carousel.scrollLeft;
+          return Math.abs(carousel.scrollLeft - expectedLeft);
+        }),
+      )
+      .toBeLessThan(0.5);
+
+    const beforeBoundary = await prepareLoopBoundary(rail);
+    await rail.dispatchEvent("scrollend");
+    await page.waitForTimeout(100);
+    const afterBoundary = await snapshotVisibleCards(rail);
+    expectSameCardPositions(beforeBoundary, afterBoundary);
+  }
 });
 
 test("라이트·다크·시스템 테마를 저장하고 즉시 적용한다", async ({

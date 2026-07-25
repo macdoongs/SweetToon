@@ -29,6 +29,16 @@ const CENTER_COPY_INDEX = 2;
 const LOWER_RESET_COPY_INDEX = 1;
 const UPPER_RESET_COPY_INDEX = 4;
 const RESET_SEGMENT_COUNT = 2;
+const FALLBACK_SETTLE_DELAY_MS = 140;
+const STABLE_SCROLL_EPSILON = 0.01;
+
+function getContentLeft(
+  rail: HTMLUListElement,
+  item: HTMLElement,
+  railRect = rail.getBoundingClientRect(),
+) {
+  return item.getBoundingClientRect().left - railRect.left + rail.scrollLeft;
+}
 
 function RecommendationCard({
   duplicate = false,
@@ -78,17 +88,25 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
   const railId = `recommendation-${shelf.id}`;
   const railRef = useRef<HTMLUListElement>(null);
   const restoreScrollBehaviorFrameRef = useRef<number | null>(null);
+  const stableScrollFrameRef = useRef<number | null>(null);
+  const repositioningRef = useRef(false);
 
   const jumpWithoutAnimation = useCallback(
     (rail: HTMLUListElement, left: number) => {
       if (restoreScrollBehaviorFrameRef.current !== null) {
         cancelAnimationFrame(restoreScrollBehaviorFrameRef.current);
       }
+      repositioningRef.current = true;
       rail.style.scrollBehavior = "auto";
+      rail.style.scrollSnapType = "none";
       rail.scrollLeft = left;
       restoreScrollBehaviorFrameRef.current = requestAnimationFrame(() => {
         rail.style.removeProperty("scroll-behavior");
-        restoreScrollBehaviorFrameRef.current = null;
+        rail.style.removeProperty("scroll-snap-type");
+        restoreScrollBehaviorFrameRef.current = requestAnimationFrame(() => {
+          repositioningRef.current = false;
+          restoreScrollBehaviorFrameRef.current = null;
+        });
       });
     },
     [],
@@ -119,14 +137,63 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
       return;
     }
 
-    const segmentWidth = firstNextCopy.offsetLeft - firstCenterCopy.offsetLeft;
+    const railRect = rail.getBoundingClientRect();
+    const centerCopyLeft = getContentLeft(rail, firstCenterCopy, railRect);
+    const nextCopyLeft = getContentLeft(rail, firstNextCopy, railRect);
+    const lowerBoundaryLeft = getContentLeft(
+      rail,
+      lowerResetBoundary,
+      railRect,
+    );
+    const upperBoundaryLeft = getContentLeft(
+      rail,
+      upperResetBoundary,
+      railRect,
+    );
+    const segmentWidth = nextCopyLeft - centerCopyLeft;
     const resetDistance = segmentWidth * RESET_SEGMENT_COUNT;
-    if (rail.scrollLeft < lowerResetBoundary.offsetLeft) {
+    if (rail.scrollLeft < lowerBoundaryLeft) {
       jumpWithoutAnimation(rail, rail.scrollLeft + resetDistance);
-    } else if (rail.scrollLeft >= upperResetBoundary.offsetLeft) {
+    } else if (rail.scrollLeft >= upperBoundaryLeft) {
       jumpWithoutAnimation(rail, rail.scrollLeft - resetDistance);
     }
   }, [jumpWithoutAnimation, shelf.items.length]);
+
+  const normalizeAfterStableFrame = useCallback(() => {
+    const rail = railRef.current;
+    if (!rail || repositioningRef.current) {
+      return;
+    }
+    if (stableScrollFrameRef.current !== null) {
+      cancelAnimationFrame(stableScrollFrameRef.current);
+    }
+
+    let previousScrollLeft = rail.scrollLeft;
+    const confirmStablePosition = () => {
+      if (repositioningRef.current) {
+        stableScrollFrameRef.current = null;
+        return;
+      }
+      const currentScrollLeft = rail.scrollLeft;
+      if (
+        Math.abs(currentScrollLeft - previousScrollLeft) >
+        STABLE_SCROLL_EPSILON
+      ) {
+        previousScrollLeft = currentScrollLeft;
+        stableScrollFrameRef.current = requestAnimationFrame(
+          confirmStablePosition,
+        );
+        return;
+      }
+
+      stableScrollFrameRef.current = null;
+      normalizeCircularPosition();
+    };
+
+    stableScrollFrameRef.current = requestAnimationFrame(
+      confirmStablePosition,
+    );
+  }, [normalizeCircularPosition]);
 
   useEffect(() => {
     const rail = railRef.current;
@@ -137,29 +204,46 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
       return;
     }
 
-    jumpWithoutAnimation(rail, firstCenterCopy.offsetLeft);
+    jumpWithoutAnimation(rail, getContentLeft(rail, firstCenterCopy));
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
-    const normalizeAfterSettling = () => {
+    const normalizeAfterSettlingFallback = () => {
+      if (repositioningRef.current) {
+        return;
+      }
       clearTimeout(settleTimer);
-      settleTimer = setTimeout(normalizeCircularPosition, 140);
+      settleTimer = setTimeout(
+        normalizeAfterStableFrame,
+        FALLBACK_SETTLE_DELAY_MS,
+      );
     };
-
-    rail.addEventListener("scroll", normalizeAfterSettling, {
-      passive: true,
-    });
-    rail.addEventListener("scrollend", normalizeCircularPosition);
+    const supportsScrollEnd = Reflect.has(rail, "onscrollend");
+    if (supportsScrollEnd) {
+      rail.addEventListener("scrollend", normalizeAfterStableFrame);
+    } else {
+      rail.addEventListener("scroll", normalizeAfterSettlingFallback, {
+        passive: true,
+      });
+    }
     return () => {
       clearTimeout(settleTimer);
       if (restoreScrollBehaviorFrameRef.current !== null) {
         cancelAnimationFrame(restoreScrollBehaviorFrameRef.current);
       }
+      if (stableScrollFrameRef.current !== null) {
+        cancelAnimationFrame(stableScrollFrameRef.current);
+      }
+      repositioningRef.current = false;
       rail.style.removeProperty("scroll-behavior");
-      rail.removeEventListener("scroll", normalizeAfterSettling);
-      rail.removeEventListener("scrollend", normalizeCircularPosition);
+      rail.style.removeProperty("scroll-snap-type");
+      if (supportsScrollEnd) {
+        rail.removeEventListener("scrollend", normalizeAfterStableFrame);
+      } else {
+        rail.removeEventListener("scroll", normalizeAfterSettlingFallback);
+      }
     };
   }, [
     jumpWithoutAnimation,
-    normalizeCircularPosition,
+    normalizeAfterStableFrame,
     shelf.items.length,
   ]);
 

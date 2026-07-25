@@ -44,9 +44,12 @@ export class PrismaReaderRepository implements ReaderRepository {
       include: {
         author: true,
         seasons: {
-          include: {
+          select: {
+            status: true,
+            _count: { select: { episodes: true } },
             episodes: {
-              orderBy: { number: "desc" },
+              orderBy: { publishedAt: "desc" },
+              take: 1,
             },
           },
         },
@@ -84,7 +87,10 @@ export class PrismaReaderRepository implements ReaderRepository {
           coverUrl: item.coverUrl,
           status: item.status === "completed" ? "completed" : "ongoing",
           author: { name: item.author.name },
-          episodeCount: episodes.length,
+          episodeCount: item.seasons.reduce(
+            (count, season) => count + season._count.episodes,
+            0,
+          ),
           completedSeasonCount: item.seasons.filter(
             (season) => season.status === "completed",
           ).length,

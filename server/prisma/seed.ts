@@ -105,8 +105,8 @@ const SERIES: SeriesSpec[] = [
     hue: 255,
     author: { name: "이수달", bio: "밤 산책과 빨래 개는 시간을 좋아합니다." },
     seasons: [
-      { number: 1, title: "얼룩의 계절", status: "completed", episodes: 8, pagesPerEp: 8 },
-      { number: 2, title: "새벽 배달", status: "ongoing", episodes: 3, pagesPerEp: 8 },
+      { number: 1, title: "얼룩의 계절", status: "completed", episodes: 60, pagesPerEp: 8 },
+      { number: 2, title: "새벽 배달", status: "ongoing", episodes: 45, pagesPerEp: 8 },
     ],
   },
   {
@@ -119,7 +119,7 @@ const SERIES: SeriesSpec[] = [
     hue: 35,
     author: { name: "박야근", bio: "편의점 야간 알바 3년 차의 기록." },
     seasons: [
-      { number: 1, title: "야간 근무 일지", status: "completed", episodes: 10, pagesPerEp: 6 },
+      { number: 1, title: "야간 근무 일지", status: "completed", episodes: 50, pagesPerEp: 6 },
     ],
   },
   {
@@ -132,8 +132,8 @@ const SERIES: SeriesSpec[] = [
     hue: 315,
     author: { name: "강네온", bio: "사이버펑크와 사극을 동시에 좋아하면 이렇게 됩니다." },
     seasons: [
-      { number: 1, title: "각성", status: "completed", episodes: 6, pagesPerEp: 10 },
-      { number: 2, title: "추격", status: "ongoing", episodes: 2, pagesPerEp: 10 },
+      { number: 1, title: "각성", status: "completed", episodes: 50, pagesPerEp: 10 },
+      { number: 2, title: "추격", status: "ongoing", episodes: 30, pagesPerEp: 10 },
     ],
   },
   {
@@ -145,7 +145,7 @@ const SERIES: SeriesSpec[] = [
     status: "ongoing",
     hue: 130,
     author: { name: "이수달", bio: "밤 산책과 빨래 개는 시간을 좋아합니다." },
-    seasons: [{ number: 1, title: "파종", status: "ongoing", episodes: 4, pagesPerEp: 7 }],
+    seasons: [{ number: 1, title: "파종", status: "ongoing", episodes: 35, pagesPerEp: 7 }],
   },
 ];
 
@@ -193,13 +193,16 @@ const CATALOG_WEEKDAYS = [
   "sat",
   "sun",
 ] as const;
+const CATALOG_EPISODE_COUNTS = [
+  30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 120,
+] as const;
 
 const CATALOG_SERIES: SeriesSpec[] = CATALOG_TITLES.map((title, index) => ({
   slug: `catalog-${String(index + 1).padStart(2, "0")}`,
   title,
   genre: CATALOG_GENRES[index % CATALOG_GENRES.length],
   weekday: CATALOG_WEEKDAYS[index % CATALOG_WEEKDAYS.length],
-  synopsis: `${title}에서 시작되는 다섯 번의 짧고 선명한 이야기.`,
+  synopsis: `${title}에서 시작되어 오래 이어지는 선명한 연재 이야기.`,
   status: index % 3 === 0 ? "completed" : "ongoing",
   hue: (index * 37 + 20) % 360,
   author: {
@@ -211,14 +214,18 @@ const CATALOG_SERIES: SeriesSpec[] = CATALOG_TITLES.map((title, index) => ({
       number: 1,
       title: "첫 번째 권",
       status: index % 3 === 0 ? "completed" : "ongoing",
-      episodes: 5,
+      episodes:
+        CATALOG_EPISODE_COUNTS[index % CATALOG_EPISODE_COUNTS.length],
       pagesPerEp: 4,
     },
   ],
 }));
 
-async function seedCatalogSeries(coverUrls: Map<string, string>) {
-  for (const spec of CATALOG_SERIES) {
+async function seedSeriesSpecs(
+  specs: SeriesSpec[],
+  coverUrls: Map<string, string>,
+) {
+  for (const spec of specs) {
     const existingSeries = await prisma.series.findUnique({
       where: { slug: spec.slug },
     });
@@ -242,64 +249,80 @@ async function seedCatalogSeries(coverUrls: Map<string, string>) {
           },
         });
       })());
-    const seasonSpec = spec.seasons[0];
-    const season = await prisma.season.upsert({
-      where: {
-        seriesId_number: {
-          seriesId: series.id,
-          number: seasonSpec.number,
-        },
-      },
-      update: {},
-      create: {
-        seriesId: series.id,
-        number: seasonSpec.number,
-        title: seasonSpec.title,
-        status: seasonSpec.status,
-      },
-    });
-    for (let ep = 1; ep <= seasonSpec.episodes; ep++) {
-      const episode = await prisma.episode.upsert({
+    for (const seasonSpec of spec.seasons) {
+      const season = await prisma.season.upsert({
         where: {
-          seasonId_number: {
-            seasonId: season.id,
-            number: ep,
+          seriesId_number: {
+            seriesId: series.id,
+            number: seasonSpec.number,
           },
         },
         update: {},
         create: {
-          seasonId: season.id,
-          number: ep,
-          title: `${ep}화`,
-          publishedAt: new Date(Date.now() - (5 - ep + indexOfWeekday(spec.weekday)) * 86400_000),
+          seriesId: series.id,
+          number: seasonSpec.number,
+          title: seasonSpec.title,
+          status: seasonSpec.status,
         },
       });
-      for (let pageOrder = 1; pageOrder <= seasonSpec.pagesPerEp; pageOrder++) {
-        const rel = path.join(
-          spec.slug,
-          "s1",
-          `ep${String(ep).padStart(3, "0")}`,
-          `${String(pageOrder).padStart(3, "0")}.svg`,
-        );
-        await prisma.page.upsert({
+      for (let ep = 1; ep <= seasonSpec.episodes; ep++) {
+        const episode = await prisma.episode.upsert({
           where: {
-            episodeId_order: {
-              episodeId: episode.id,
-              order: pageOrder,
+            seasonId_number: {
+              seasonId: season.id,
+              number: ep,
             },
           },
           update: {},
           create: {
-            episodeId: episode.id,
-            order: pageOrder,
-            imageUrl: writeCutSvg(
-              rel,
-              spec.title,
-              `${ep}화 · ${pageOrder} / ${seasonSpec.pagesPerEp}`,
-              (spec.hue + (pageOrder - 1) * 12) % 360,
+            seasonId: season.id,
+            number: ep,
+            title:
+              spec.slug === "moonlight-laundry" &&
+              seasonSpec.number === 1 &&
+              ep === 1
+                ? "맡겨진 얼룩"
+                : `${ep}화`,
+            publishedAt: new Date(
+              Date.now() -
+                (seasonSpec.episodes -
+                  ep +
+                  indexOfWeekday(spec.weekday)) *
+                  86400_000,
             ),
           },
         });
+        for (
+          let pageOrder = 1;
+          pageOrder <= seasonSpec.pagesPerEp;
+          pageOrder++
+        ) {
+          const rel = path.join(
+            spec.slug,
+            `s${seasonSpec.number}`,
+            `ep${String(ep).padStart(3, "0")}`,
+            `${String(pageOrder).padStart(3, "0")}.svg`,
+          );
+          await prisma.page.upsert({
+            where: {
+              episodeId_order: {
+                episodeId: episode.id,
+                order: pageOrder,
+              },
+            },
+            update: {},
+            create: {
+              episodeId: episode.id,
+              order: pageOrder,
+              imageUrl: writeCutSvg(
+                rel,
+                spec.title,
+                `${ep}화 · ${pageOrder} / ${seasonSpec.pagesPerEp}`,
+                (spec.hue + (pageOrder - 1) * 12) % 360,
+              ),
+            },
+          });
+        }
       }
     }
   }
@@ -335,7 +358,7 @@ async function main() {
         },
       });
     }
-    await seedCatalogSeries(coverUrls);
+    await seedSeriesSpecs([...SERIES, ...CATALOG_SERIES], coverUrls);
     const showcaseEpisode = await prisma.episode.findFirst({
       where: {
         number: 1,
@@ -442,7 +465,7 @@ async function main() {
     }
   }
 
-  await seedCatalogSeries(coverUrls);
+  await seedSeriesSpecs(CATALOG_SERIES, coverUrls);
 
   // 샘플 주문 — 다양한 상태로 시드해 목록/타임라인 UI를 바로 확인 가능하게
   const laundry = await prisma.series.findFirstOrThrow({ where: { title: "달빛 세탁소" }, include: { seasons: true } });
@@ -476,7 +499,7 @@ async function main() {
   for (const [orderIndex, spec] of ordersSpec.entries()) {
     const season = spec.series.seasons[0];
     const episodes = await prisma.episode.findMany({
-      where: { seasonId: season.id },
+      where: { seasonId: season.id, number: { lte: 5 } },
       select: { _count: { select: { pages: true } } },
     });
     const pageCount = episodes.reduce(

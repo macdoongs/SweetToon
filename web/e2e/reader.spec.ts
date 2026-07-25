@@ -17,6 +17,7 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     seriesTitle ?? "",
   );
+  await expect(page.locator(".episode-list__item")).toHaveCount(105);
   await page.getByRole("link", { name: "첫 화부터 읽기" }).click();
 
   await expect(page).toHaveURL(/\/read\/[^/]+$/);

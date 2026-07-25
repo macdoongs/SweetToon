@@ -80,6 +80,10 @@ try {
     } "server health and mock provider check"
 
     Invoke-Checked {
+        docker compose exec -T server npm run db:seed
+    } "idempotent seed rerun over existing data"
+
+    Invoke-Checked {
         docker compose exec -T web node -e "
           const base = 'http://localhost:3000'
           async function json(path, options) {
@@ -93,6 +97,13 @@ try {
               throw new Error('seeded series not found')
             }
             const catalog = await json('/api/series/catalog-01')
+            if (catalog.seasons[0]?.episodes.length !== 30) {
+              throw new Error('catalog-01 expected 30 episodes')
+            }
+            const longCatalog = await json('/api/series/catalog-12')
+            if (longCatalog.seasons[0]?.episodes.length !== 120) {
+              throw new Error('catalog-12 expected 120 episodes')
+            }
             const firstEpisode = catalog.seasons[0]?.episodes[0]
             if (!firstEpisode) throw new Error('catalog episode not found')
             const reader = await json(
@@ -103,6 +114,17 @@ try {
                 'catalog episode expected 4 pages, received ' +
                   reader.pages.length
               )
+            }
+            const paidEpisode = catalog.seasons[0]?.episodes[5]
+            if (!paidEpisode) throw new Error('paid catalog episode not found')
+            const paidReader = await json(
+              '/api/episodes/' + encodeURIComponent(paidEpisode.id)
+            )
+            if (
+              paidReader.access.state !== 'locked' ||
+              paidReader.pages.length !== 0
+            ) {
+              throw new Error('episode 6 should require candy or ownership')
             }
             const presence = await json(
               '/api/series/' + encodeURIComponent(catalog.slug) + '/presence',
@@ -129,6 +151,7 @@ try {
             }
             console.log(
               'series=' + body.items.length +
+                ' episode-range=30..120' +
                 ' catalog-pages=' + reader.pages.length +
                 ' live-readers=' + presence.viewerCount +
                 ' demo-bots=' + demoBot.activeBotCount

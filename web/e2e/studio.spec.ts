@@ -20,14 +20,18 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/studio");
   await expect(page.getByText("독자 공개 범위")).toBeVisible();
+  await page.getByLabel("작품").selectOption({ label: "옥상 정원 클럽" });
   const freeVolumeInput = page.getByLabel("무료 공개 권 수");
   const previewSelect = page.getByLabel("다음 권 미리보기");
   const originalPolicy = {
     freeVolumeCount: Number(await freeVolumeInput.inputValue()),
     previewEpisodeCount: Number(await previewSelect.inputValue()),
   };
-  await freeVolumeInput.fill("1");
-  await previewSelect.selectOption("2");
+  const nextEpisodeNumber = Number(
+    await page.getByLabel("회차").inputValue(),
+  );
+  await freeVolumeInput.fill(String(Math.ceil(nextEpisodeNumber / 5)));
+  await previewSelect.selectOption("0");
   const policyResponse = page.waitForResponse(
     (response) =>
       response.url().includes("/api/studio/series/") &&

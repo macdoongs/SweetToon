@@ -114,9 +114,15 @@ export function SeriesDetailPage({
       }),
     ),
   );
+  const orderedVolumes = [...volumeOptions].sort((left, right) => {
+    const direction = activeSort === "latest" ? -1 : 1;
+    const seasonDifference = left.season.number - right.season.number;
+    if (seasonDifference !== 0) return seasonDifference * direction;
+    return (left.volumeNumber - right.volumeNumber) * direction;
+  });
   const selectedVolumes = activeVolume
-    ? volumeOptions.filter((volume) => volume.key === activeVolume)
-    : volumeOptions;
+    ? orderedVolumes.filter((volume) => volume.key === activeVolume)
+    : orderedVolumes;
   const filterHref = (
     sort: "oldest" | "latest",
     volume?: string,
@@ -232,7 +238,7 @@ export function SeriesDetailPage({
             >
               전체
             </Link>
-            {volumeOptions.map((volume) => (
+            {orderedVolumes.map((volume) => (
               <Link
                 aria-current={
                   activeVolume === volume.key ? "page" : undefined

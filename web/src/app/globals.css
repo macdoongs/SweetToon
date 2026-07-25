@@ -23,6 +23,11 @@
   --warning-ink: #6f5a2d;
   --selected-surface: #20231e;
   --selected-ink: #ffffff;
+  --feature-surface: #20231e;
+  --feature-ink: #ffffff;
+  --feature-muted: rgba(255, 255, 255, 0.68);
+  --feature-control: #fffaf2;
+  --feature-control-ink: #20231e;
   --content: min(1180px, calc(100vw - 40px));
 }
 
@@ -51,6 +56,11 @@ html[data-theme="dark"] {
   --warning-ink: #f1d48a;
   --selected-surface: #e5d8cc;
   --selected-ink: #1b1817;
+  --feature-surface: #2b2522;
+  --feature-ink: #f6eee5;
+  --feature-muted: #c8bbb0;
+  --feature-control: #e5d8cc;
+  --feature-control-ink: #1b1817;
 }
 
 * {
@@ -1444,8 +1454,9 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 40px;
-  background: var(--ink);
-  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--feature-surface);
+  color: var(--feature-ink);
 }
 
 .edition-card h2 {
@@ -1458,7 +1469,7 @@ button {
 .edition-card p {
   max-width: 700px;
   margin: 10px 0 0;
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--feature-muted);
   font-size: 0.86rem;
 }
 
@@ -1467,34 +1478,73 @@ button {
   text-align: center;
 }
 
-.edition-card__status > strong,
-.edition-card__status > span {
+.edition-card__metric > strong,
+.edition-card__metric > span {
   display: block;
 }
 
-.edition-card__status > strong {
+.edition-card__metric > strong {
   font-family: Georgia, serif;
   font-size: 2.5rem;
   line-height: 1;
 }
 
-.edition-card__actions {
+.edition-card__metric > span {
+  color: var(--feature-muted);
+  font-size: 0.76rem;
+}
+
+.edition-card__picker {
+  min-width: min(320px, 30vw);
   margin-top: 16px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  text-align: left;
+}
+
+.edition-card__picker label {
+  display: grid;
+  gap: 5px;
+}
+
+.edition-card__picker label > span {
+  color: var(--feature-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.edition-card__picker select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 38px 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: var(--feature-control);
+  color: var(--feature-control-ink);
+  font-weight: 750;
+}
+
+.edition-card__order {
+  min-height: 52px;
+  flex-direction: column;
+  gap: 0;
+  background: var(--coral);
+  color: white;
+  line-height: 1.25;
 }
 
 .edition-card__unavailable {
   max-width: 210px;
   margin-top: 14px;
-  color: rgba(255, 255, 255, 0.56);
+  color: var(--feature-muted);
   font-size: 0.78rem;
 }
 
 .edition-card__status small {
   margin-top: 8px;
   display: block;
-  color: rgba(255, 255, 255, 0.48);
+  color: inherit;
+  opacity: 0.72;
   font-size: 0.67rem;
 }
 

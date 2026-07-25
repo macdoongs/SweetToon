@@ -10,7 +10,9 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
     .filter({ hasText: "소장 가능" })
     .first();
   await orderableSeries.locator("h3 a").click();
-  await page.getByRole("link", { name: /시즌 \d+ · \d+권 주문/ }).first().click();
+  await page
+    .getByRole("link", { name: /선택한 \d+권 주문하기/ })
+    .click();
 
   await expect(
     page.getByRole("heading", { level: 1 }),

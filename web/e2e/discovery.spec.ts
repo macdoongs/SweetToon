@@ -1,87 +1,9 @@
-import { expect, test, type Locator } from "@playwright/test";
-
-type VisibleCardSnapshot = Array<{
-  left: number;
-  title: string | null;
-}>;
-
-async function prepareLoopBoundary(rail: Locator) {
-  return rail.evaluate(async (element) => {
-    const carousel = element as HTMLElement;
-    const itemCount = carousel.children.length / 5;
-    const trailingCopy = carousel.children.item(
-      itemCount * 4,
-    ) as HTMLElement;
-    const carouselRect = carousel.getBoundingClientRect();
-    const targetLeft =
-      trailingCopy.getBoundingClientRect().left -
-      carouselRect.left +
-      carousel.scrollLeft;
-
-    carousel.style.scrollBehavior = "auto";
-    carousel.style.scrollSnapType = "none";
-    carousel.scrollLeft = targetLeft;
-    carousel.style.removeProperty("scroll-behavior");
-    carousel.style.removeProperty("scroll-snap-type");
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-
-    const railRect = carousel.getBoundingClientRect();
-    return Array.from(carousel.children)
-      .map((child) => {
-        const card = child as HTMLElement;
-        const rect = card.getBoundingClientRect();
-        return {
-          left: rect.left - railRect.left,
-          title: card.querySelector("strong")?.textContent ?? null,
-          visible: rect.right > railRect.left && rect.left < railRect.right,
-        };
-      })
-      .filter((card) => card.visible)
-      .map(({ left, title }) => ({ left, title }));
-  });
-}
-
-async function snapshotVisibleCards(rail: Locator) {
-  return rail.evaluate((element) => {
-    const carousel = element as HTMLElement;
-    const railRect = carousel.getBoundingClientRect();
-    return Array.from(carousel.children)
-      .map((child) => {
-        const card = child as HTMLElement;
-        const rect = card.getBoundingClientRect();
-        return {
-          left: rect.left - railRect.left,
-          title: card.querySelector("strong")?.textContent ?? null,
-          visible: rect.right > railRect.left && rect.left < railRect.right,
-        };
-      })
-      .filter((card) => card.visible)
-      .map(({ left, title }) => ({ left, title }));
-  });
-}
-
-function expectSameCardPositions(
-  before: VisibleCardSnapshot,
-  after: VisibleCardSnapshot,
-  context = "recommendation rail",
-) {
-  expect(after.map((card) => card.title)).toEqual(
-    before.map((card) => card.title),
-  );
-  expect(after).toHaveLength(before.length);
-  const maximumShift = Math.max(
-    0,
-    ...after.map((card, index) =>
-      Math.abs(card.left - before[index].left),
-    ),
-  );
-  expect(
-    maximumShift,
-    `${context} boundary shift must stay below 0.5px`,
-  ).toBeLessThan(0.5);
-}
+import { expect, test } from "@playwright/test";
+import {
+  expectSameCardPositions,
+  prepareLoopBoundary,
+  snapshotVisibleCards,
+} from "./circular-rail";
 
 test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한다", async ({
   page,
@@ -312,15 +234,16 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   ).toBeTruthy();
 });
 
-test("소수점 카드 폭에서도 순환 경계 위치를 보존한다", async ({ page }) => {
+test("모든 홈 콘텐츠 레일이 순환 경계 위치를 보존한다", async ({ page }) => {
   test.setTimeout(60_000);
 
   for (const width of [1234, 1100, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
-    const rails = page.locator(".recommendation-rail");
+    await expect(page.locator(".live-popular__rail")).toBeVisible();
+    const rails = page.locator(".circular-content-rail");
     const railCount = await rails.count();
-    expect(railCount).toBeGreaterThan(1);
+    expect(railCount).toBeGreaterThan(3);
 
     for (let railIndex = 0; railIndex < railCount; railIndex += 1) {
       const rail = rails.nth(railIndex);

@@ -67,6 +67,22 @@ function RecommendationCard({
 function Shelf({ shelf }: { shelf: RecommendationShelf }) {
   const railId = `recommendation-${shelf.id}`;
   const railRef = useRef<HTMLUListElement>(null);
+  const restoreScrollBehaviorFrameRef = useRef<number | null>(null);
+
+  const jumpWithoutAnimation = useCallback(
+    (rail: HTMLUListElement, left: number) => {
+      if (restoreScrollBehaviorFrameRef.current !== null) {
+        cancelAnimationFrame(restoreScrollBehaviorFrameRef.current);
+      }
+      rail.style.scrollBehavior = "auto";
+      rail.scrollLeft = left;
+      restoreScrollBehaviorFrameRef.current = requestAnimationFrame(() => {
+        rail.style.removeProperty("scroll-behavior");
+        restoreScrollBehaviorFrameRef.current = null;
+      });
+    },
+    [],
+  );
 
   const normalizeCircularPosition = useCallback(() => {
     const rail = railRef.current;
@@ -81,11 +97,11 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
 
     const segmentWidth = firstTrailingCopy.offsetLeft - firstOriginal.offsetLeft;
     if (rail.scrollLeft < firstOriginal.offsetLeft) {
-      rail.scrollLeft += segmentWidth;
+      jumpWithoutAnimation(rail, rail.scrollLeft + segmentWidth);
     } else if (rail.scrollLeft >= firstTrailingCopy.offsetLeft) {
-      rail.scrollLeft -= segmentWidth;
+      jumpWithoutAnimation(rail, rail.scrollLeft - segmentWidth);
     }
-  }, [shelf.items.length]);
+  }, [jumpWithoutAnimation, shelf.items.length]);
 
   useEffect(() => {
     const rail = railRef.current;
@@ -96,7 +112,7 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
       return;
     }
 
-    rail.scrollLeft = firstOriginal.offsetLeft;
+    jumpWithoutAnimation(rail, firstOriginal.offsetLeft);
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     const normalizeAfterSettling = () => {
       clearTimeout(settleTimer);
@@ -109,10 +125,18 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
     rail.addEventListener("scrollend", normalizeCircularPosition);
     return () => {
       clearTimeout(settleTimer);
+      if (restoreScrollBehaviorFrameRef.current !== null) {
+        cancelAnimationFrame(restoreScrollBehaviorFrameRef.current);
+      }
+      rail.style.removeProperty("scroll-behavior");
       rail.removeEventListener("scroll", normalizeAfterSettling);
       rail.removeEventListener("scrollend", normalizeCircularPosition);
     };
-  }, [normalizeCircularPosition, shelf.items.length]);
+  }, [
+    jumpWithoutAnimation,
+    normalizeCircularPosition,
+    shelf.items.length,
+  ]);
 
   const scroll = (direction: -1 | 1) => {
     railRef.current?.scrollBy({

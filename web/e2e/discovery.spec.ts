@@ -147,14 +147,39 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   await expect
     .poll(() => discoveryRail.evaluate((element) => element.scrollLeft))
     .toBeGreaterThan(initialScrollLeft);
-  await discoveryRail.evaluate((element) => {
+  await page.waitForTimeout(600);
+  const seamlessBoundary = await discoveryRail.evaluate((element) => {
     const rail = element as HTMLElement;
     const itemCount = rail.children.length / 3;
     const trailingCopy = rail.children.item(itemCount * 2) as HTMLElement;
-    rail.scrollLeft = trailingCopy.offsetLeft + 1;
-    rail.dispatchEvent(new Event("scroll"));
+    const snapshot = () => {
+      const railRect = rail.getBoundingClientRect();
+      return Array.from(rail.children)
+        .map((child) => {
+          const card = child as HTMLElement;
+          const rect = card.getBoundingClientRect();
+          return {
+            left: Math.round(rect.left - railRect.left),
+            title: card.querySelector("strong")?.textContent,
+            visible: rect.right > railRect.left && rect.left < railRect.right,
+          };
+        })
+        .filter((card) => card.visible)
+        .map(({ left, title }) => ({ left, title }));
+    };
+    rail.scrollLeft = trailingCopy.offsetLeft;
+    const before = snapshot();
+    rail.dispatchEvent(new Event("scrollend"));
+    return { after: snapshot(), before };
   });
-  await discoveryRail.dispatchEvent("scrollend");
+  expect(seamlessBoundary.after).toEqual(seamlessBoundary.before);
+  await page.waitForTimeout(50);
+  expect(
+    await discoveryRail.evaluate((element) => {
+      const rail = element as HTMLElement;
+      return getComputedStyle(rail).scrollBehavior;
+    }),
+  ).toBe("smooth");
   await expect
     .poll(() =>
       discoveryRail.evaluate((element) => {

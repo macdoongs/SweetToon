@@ -2,7 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   FAVORITES_UPDATED_EVENT,
   getFavorites,
@@ -62,17 +68,7 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
   const railId = `recommendation-${shelf.id}`;
   const railRef = useRef<HTMLUListElement>(null);
 
-  useEffect(() => {
-    const rail = railRef.current;
-    const firstOriginal = rail?.children.item(
-      shelf.items.length,
-    ) as HTMLElement | null;
-    if (rail && firstOriginal) {
-      rail.scrollLeft = firstOriginal.offsetLeft;
-    }
-  }, [shelf.items.length]);
-
-  const normalizeCircularPosition = () => {
+  const normalizeCircularPosition = useCallback(() => {
     const rail = railRef.current;
     const itemCount = shelf.items.length;
     const firstOriginal = rail?.children.item(itemCount) as HTMLElement | null;
@@ -89,7 +85,34 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
     } else if (rail.scrollLeft >= firstTrailingCopy.offsetLeft) {
       rail.scrollLeft -= segmentWidth;
     }
-  };
+  }, [shelf.items.length]);
+
+  useEffect(() => {
+    const rail = railRef.current;
+    const firstOriginal = rail?.children.item(
+      shelf.items.length,
+    ) as HTMLElement | null;
+    if (!rail || !firstOriginal) {
+      return;
+    }
+
+    rail.scrollLeft = firstOriginal.offsetLeft;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    const normalizeAfterSettling = () => {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(normalizeCircularPosition, 140);
+    };
+
+    rail.addEventListener("scroll", normalizeAfterSettling, {
+      passive: true,
+    });
+    rail.addEventListener("scrollend", normalizeCircularPosition);
+    return () => {
+      clearTimeout(settleTimer);
+      rail.removeEventListener("scroll", normalizeAfterSettling);
+      rail.removeEventListener("scrollend", normalizeCircularPosition);
+    };
+  }, [normalizeCircularPosition, shelf.items.length]);
 
   const scroll = (direction: -1 | 1) => {
     railRef.current?.scrollBy({
@@ -130,7 +153,6 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
         aria-roledescription="순환형 캐러셀"
         className="recommendation-rail"
         id={railId}
-        onScroll={normalizeCircularPosition}
         ref={railRef}
       >
         {shelf.items.map((series) => (

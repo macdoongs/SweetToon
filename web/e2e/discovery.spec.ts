@@ -129,6 +129,7 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
     "aria-roledescription",
     "순환형 캐러셀",
   );
+  await expect(discoveryRail).toHaveCSS("scrollbar-width", "none");
   await expect
     .poll(() =>
       discoveryRail.evaluate(
@@ -153,6 +154,7 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
     rail.scrollLeft = trailingCopy.offsetLeft + 1;
     rail.dispatchEvent(new Event("scroll"));
   });
+  await discoveryRail.dispatchEvent("scrollend");
   await expect
     .poll(() =>
       discoveryRail.evaluate((element) => {

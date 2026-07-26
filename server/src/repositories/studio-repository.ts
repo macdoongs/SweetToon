@@ -4,6 +4,8 @@ import type {
   DraftEpisode,
   EpisodeVisibility,
   PackagingRequest,
+  SeriesInfoResponse,
+  UpdateSeriesInfoRequest,
 } from "../contracts/studio";
 
 export type StudioSeason = {
@@ -84,6 +86,10 @@ export interface StudioRepository {
     title: string,
   ): Promise<DraftEpisode | null>;
   findEpisode(episodeId: string): Promise<StudioEpisode | null>;
+  updateSeriesInfo(
+    seriesId: string,
+    input: UpdateSeriesInfoRequest,
+  ): Promise<SeriesInfoResponse | null>;
   replaceEpisodePages(
     episodeId: string,
     imageUrls: string[],
@@ -202,6 +208,32 @@ export class PrismaStudioRepository implements StudioRepository {
       })
       .catch(() => null);
     return updated ? toDraftEpisode(updated) : null;
+  }
+
+  async updateSeriesInfo(
+    seriesId: string,
+    input: UpdateSeriesInfoRequest,
+  ): Promise<SeriesInfoResponse | null> {
+    const updated = await this.prisma.series
+      .update({
+        where: { id: seriesId },
+        data: {
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.synopsis !== undefined
+            ? { synopsis: input.synopsis }
+            : {}),
+        },
+        select: { id: true, slug: true, title: true, synopsis: true },
+      })
+      .catch(() => null);
+    return updated
+      ? {
+          seriesId: updated.id,
+          slug: updated.slug,
+          title: updated.title,
+          synopsis: updated.synopsis,
+        }
+      : null;
   }
 
   async findEpisode(episodeId: string): Promise<StudioEpisode | null> {

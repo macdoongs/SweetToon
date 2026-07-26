@@ -20,7 +20,9 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/studio");
   await expect(page.getByText("독자 공개 범위")).toBeVisible();
-  await page.getByLabel("작품").selectOption({ label: "옥상 정원 클럽" });
+  await page
+    .getByLabel("작품", { exact: true })
+    .selectOption({ label: "옥상 정원 클럽" });
   const freeVolumeInput = page.getByLabel("무료 공개 권 수");
   const previewSelect = page.getByLabel("다음 권 미리보기");
   const originalPolicy = {
@@ -51,7 +53,7 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
     ),
   ).toBeTruthy();
 
-  await page.getByLabel("제목").fill("E2E 새벽 원고");
+  await page.getByLabel(/^제목/).fill("E2E 새벽 원고");
   await page.locator('input[type="file"]').first().setInputFiles({
     name: "e2e-episode.cbz",
     mimeType: "application/zip",

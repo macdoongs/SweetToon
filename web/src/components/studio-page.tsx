@@ -30,6 +30,8 @@ import type {
   PackagingBookSize,
   PackagingCoverType,
   PackagingRequest,
+  SeriesInfoResponse,
+  UpdateSeriesInfoRequest,
   UploadPreview,
   UploadPurpose,
 } from "@/lib/studio-types";
@@ -100,6 +102,16 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   );
   const [policyBusy, setPolicyBusy] = useState(false);
   const [policyMessage, setPolicyMessage] = useState<string | null>(null);
+  const [seriesOverrides, setSeriesOverrides] = useState<
+    Record<string, { title: string; synopsis: string }>
+  >({});
+  const [seriesEdit, setSeriesEdit] = useState<
+    { title: string; synopsis: string } | null
+  >(null);
+  const [seriesEditBusy, setSeriesEditBusy] = useState(false);
+  const [seriesEditMessage, setSeriesEditMessage] = useState<string | null>(
+    null,
+  );
   const selectedSeries =
     availableSeries.find((item) => item.id === seriesId) ??
     availableSeries[0];
@@ -216,8 +228,60 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     );
     setSeriesId(nextSeriesId);
     setPolicyMessage(null);
+    setSeriesEdit(null);
+    setSeriesEditMessage(null);
     setSeasonId(nextSeason?.id ?? "");
     setEpisodeNumber(nextNumberFor(nextSeason));
+  }
+
+  const displayedSeriesTitle = selectedSeries
+    ? seriesOverrides[selectedSeries.id]?.title ?? selectedSeries.title
+    : "";
+  const displayedSeriesSynopsis = selectedSeries
+    ? seriesOverrides[selectedSeries.id]?.synopsis ?? selectedSeries.synopsis
+    : "";
+
+  async function saveSeriesInfo() {
+    if (!selectedSeries) return;
+    const nextTitle = (seriesEdit?.title ?? displayedSeriesTitle).trim();
+    const nextSynopsis = (
+      seriesEdit?.synopsis ?? displayedSeriesSynopsis
+    ).trim();
+    if (nextTitle.length === 0 || nextSynopsis.length === 0) {
+      setSeriesEditMessage("제목과 줄거리를 비워 둘 수 없어요.");
+      return;
+    }
+    setSeriesEditBusy(true);
+    setSeriesEditMessage(null);
+    try {
+      const updated = await patchJson<
+        UpdateSeriesInfoRequest,
+        SeriesInfoResponse
+      >(
+        `/api/studio/series/${encodeURIComponent(selectedSeries.id)}`,
+        { title: nextTitle, synopsis: nextSynopsis },
+        mutationHeaders,
+      );
+      setSeriesOverrides((current) => ({
+        ...current,
+        [updated.seriesId]: {
+          title: updated.title,
+          synopsis: updated.synopsis,
+        },
+      }));
+      setSeriesEdit(null);
+      setSeriesEditMessage(
+        "작품 정보를 저장했어요. 독자 주소(slug)는 그대로 유지됩니다.",
+      );
+    } catch (reason) {
+      setSeriesEditMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "작품 정보를 저장하지 못했습니다.",
+      );
+    } finally {
+      setSeriesEditBusy(false);
+    }
   }
 
   async function saveAccessPolicy() {
@@ -604,10 +668,57 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                   value={selectedSeries?.id}
                 >
                   {availableSeries.map((item) => (
-                    <option key={item.id} value={item.id}>{item.title}</option>
+                    <option key={item.id} value={item.id}>
+                      {seriesOverrides[item.id]?.title ?? item.title}
+                    </option>
                   ))}
                 </select>
               </label>
+              {selectedSeries ? (
+                <details className="studio-security-access studio-series-edit">
+                  <summary>작품 정보 수정</summary>
+                  <label className="field">
+                    <span>작품 제목</span>
+                    <input
+                      maxLength={80}
+                      onChange={(event) =>
+                        setSeriesEdit({
+                          title: event.target.value,
+                          synopsis:
+                            seriesEdit?.synopsis ?? displayedSeriesSynopsis,
+                        })
+                      }
+                      value={seriesEdit?.title ?? displayedSeriesTitle}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>줄거리</span>
+                    <textarea
+                      maxLength={1000}
+                      onChange={(event) =>
+                        setSeriesEdit({
+                          title: seriesEdit?.title ?? displayedSeriesTitle,
+                          synopsis: event.target.value,
+                        })
+                      }
+                      rows={4}
+                      value={seriesEdit?.synopsis ?? displayedSeriesSynopsis}
+                    />
+                  </label>
+                  <button
+                    className="button button--ghost button--wide"
+                    disabled={seriesEditBusy || seriesEdit === null}
+                    onClick={() => void saveSeriesInfo()}
+                    type="button"
+                  >
+                    {seriesEditBusy ? "저장 중…" : "작품 정보 저장"}
+                  </button>
+                  <p aria-live="polite">
+                    {seriesEditMessage ??
+                      "독자 주소(slug)는 바뀌지 않아요."}
+                  </p>
+                </details>
+              ) : null}
               {purpose === "publish" && selectedSeries && selectedPolicy ? (
                 <section className="studio-access-policy">
                   <div>
@@ -1120,7 +1231,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
               <h2>등록된 회차 관리</h2>
             </div>
             <p>
-              {selectedSeries.title} · 시즌 {selectedSeason.number} — 압축
+              {displayedSeriesTitle} · 시즌 {selectedSeason.number} — 압축
               파일명은 페이지 정렬에만 쓰이며, 제목은 여기서 언제든 고칠 수
               있어요.
             </p>

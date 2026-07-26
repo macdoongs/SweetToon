@@ -811,6 +811,45 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/studio/series/{seriesId}": {
+      patch: {
+        tags: ["Studio"],
+        summary:
+          "작품의 표시 정보(제목, 줄거리)를 부분 수정합니다. slug는 바뀌지 않습니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "seriesId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                minProperties: 1,
+                properties: {
+                  title: { type: "string", minLength: 1, maxLength: 80 },
+                  synopsis: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 1000,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "수정된 작품 정보" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
     "/api/studio/series/{seriesId}/access-policy": {
       patch: {
         tags: ["Studio"],

@@ -63,6 +63,12 @@ function studioService(): jest.Mocked<StudioUseCases> {
       season: { id: "season-1", number: 1 },
       series: { slug: "moonlight-laundry", title: "달빛 세탁소" },
     }),
+    updateSeriesInfo: jest.fn().mockResolvedValue({
+      seriesId: "series-1",
+      slug: "moonlight-laundry",
+      title: "달빛 세탁소 리마스터",
+      synopsis: "새 줄거리",
+    }),
     updateEpisodeTitle: jest.fn().mockResolvedValue({
       id: "episode-12",
       number: 12,
@@ -239,6 +245,28 @@ describe("studio routes", () => {
       .expect(400);
 
     expect(response.body.code).toBe("INVALID_EPISODE_VISIBILITY");
+  });
+
+  it("updates series display info", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .patch("/api/studio/series/series-1")
+      .send({ title: "달빛 세탁소 리마스터" })
+      .expect(200);
+
+    expect(service.updateSeriesInfo).toHaveBeenCalledWith("series-1", {
+      title: "달빛 세탁소 리마스터",
+    });
+    expect(response.body.slug).toBe("moonlight-laundry");
+  });
+
+  it("rejects a series info update without any field", async () => {
+    const response = await request(app())
+      .patch("/api/studio/series/series-1")
+      .send({})
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_SERIES_INFO");
   });
 
   it("renames a published episode", async () => {

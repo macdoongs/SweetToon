@@ -49,6 +49,24 @@ export const ReplaceEpisodePagesRequestSchema = z.object({
   pageIds: z.array(UploadPageIdSchema).min(1).max(80),
 });
 
+// slug는 독자 URL과 SEO의 기준이므로 표시 정보만 부분 수정한다.
+export const UpdateSeriesInfoRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(80).optional(),
+    synopsis: z.string().trim().min(1).max(1000).optional(),
+  })
+  .refine(
+    (value) => value.title !== undefined || value.synopsis !== undefined,
+    { message: "수정할 항목을 한 가지 이상 보내 주세요." },
+  );
+
+export const SeriesInfoResponseSchema = z.object({
+  seriesId: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  synopsis: z.string(),
+});
+
 export const DraftEpisodeSchema = z.object({
   id: z.string(),
   number: z.number().int().positive(),
@@ -118,6 +136,10 @@ export type EpisodeVisibility = z.infer<typeof EpisodeVisibilitySchema>;
 export type ReplaceEpisodePagesRequest = z.infer<
   typeof ReplaceEpisodePagesRequestSchema
 >;
+export type UpdateSeriesInfoRequest = z.infer<
+  typeof UpdateSeriesInfoRequestSchema
+>;
+export type SeriesInfoResponse = z.infer<typeof SeriesInfoResponseSchema>;
 export type DraftEpisode = z.infer<typeof DraftEpisodeSchema>;
 export type CreatePackagingRequest = z.infer<
   typeof CreatePackagingRequestSchema

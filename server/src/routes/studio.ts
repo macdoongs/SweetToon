@@ -13,6 +13,7 @@ import {
   DraftEpisodeSchema,
   PackagingRequestListSchema,
   PackagingRequestSchema,
+  ReplaceEpisodePagesRequestSchema,
   UpdateEpisodeTitleRequestSchema,
   UpdateEpisodeVisibilityRequestSchema,
   UploadPageIdSchema,
@@ -187,6 +188,32 @@ export function createStudioRouter(
         input.data.title,
       );
       res.json(DraftEpisodeSchema.parse(updated));
+    },
+  );
+
+  router.patch(
+    "/studio/episodes/:episodeId/pages",
+    auditSecurityAction(auditLogger, "studio.episode.replace-pages"),
+    mutationGuard,
+    async (req, res) => {
+      const episodeId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.episodeId);
+      const input = ReplaceEpisodePagesRequestSchema.safeParse(req.body);
+      if (!episodeId.success || !input.success) {
+        res.status(400).json({
+          code: "INVALID_PAGE_REPLACEMENT",
+          message: "업로드 세션과 페이지 순서를 다시 확인해 주세요.",
+        });
+        return;
+      }
+      const replaced = await service.replaceEpisodePages(
+        episodeId.data,
+        input.data,
+      );
+      res.json(CreatedEpisodeSchema.parse(replaced));
     },
   );
 

@@ -66,6 +66,19 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
     }),
     setEpisodeVisibility: jest.fn().mockResolvedValue(null),
     updateEpisodeTitle: jest.fn().mockResolvedValue(null),
+    findEpisode: jest.fn().mockResolvedValue({
+      id: "episode-12",
+      number: 12,
+      title: "새벽의 손님",
+      visibility: "public",
+      manuscriptDir: "C:\\old-manuscript",
+      season: {
+        id: "season-1",
+        number: 1,
+        series: { slug: "moonlight-laundry", title: "달빛 세탁소" },
+      },
+    }),
+    replaceEpisodePages: jest.fn().mockResolvedValue(undefined),
     listDraftEpisodes: jest.fn().mockResolvedValue([]),
     createPackagingRequest: jest.fn().mockImplementation(
       async (request) => ({
@@ -141,6 +154,7 @@ describe("StudioService", () => {
       title: "새벽의 손님",
       imageUrls: ["/api/images/1.png", "/api/images/2.png"],
       visibility: "public",
+      manuscriptDir: "C:\\published",
     });
     expect(storage.removeSession).toHaveBeenCalledWith(session.id);
     expect(created.readerUrl).toBe("/read/episode-12");
@@ -257,6 +271,64 @@ describe("StudioService", () => {
     await expect(
       service.setEpisodeVisibility("missing", "public"),
     ).rejects.toMatchObject({ code: "EPISODE_NOT_FOUND", status: 404 });
+  });
+
+  it("replaces episode pages and cleans up the previous manuscript", async () => {
+    const { service, repository, storage } = makeDependencies();
+
+    const replaced = await service.replaceEpisodePages("episode-12", {
+      sessionId: session.id,
+      pageIds: session.pages.map((page) => page.id),
+    });
+
+    expect(storage.publish).toHaveBeenCalledWith(
+      session,
+      expect.arrayContaining(["moonlight-laundry", "s1"]),
+      session.pages.map((page) => page.id),
+    );
+    expect(repository.replaceEpisodePages).toHaveBeenCalledWith(
+      "episode-12",
+      ["/api/images/1.png", "/api/images/2.png"],
+      "C:\\published",
+    );
+    expect(storage.removeSession).toHaveBeenCalledWith(session.id);
+    expect(storage.removePublished).toHaveBeenCalledWith(
+      "C:\\old-manuscript",
+    );
+    expect(replaced.pageCount).toBe(2);
+    expect(replaced.readerUrl).toBe("/read/episode-12");
+  });
+
+  it("keeps the previous manuscript if the page swap fails", async () => {
+    const { service, repository, storage } = makeDependencies();
+    repository.replaceEpisodePages.mockRejectedValue(
+      new Error("database down"),
+    );
+
+    await expect(
+      service.replaceEpisodePages("episode-12", {
+        sessionId: session.id,
+        pageIds: session.pages.map((page) => page.id),
+      }),
+    ).rejects.toThrow("database down");
+    expect(storage.removePublished).toHaveBeenCalledWith("C:\\published");
+    expect(storage.removePublished).not.toHaveBeenCalledWith(
+      "C:\\old-manuscript",
+    );
+    expect(storage.removeSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects page replacement for unknown episodes", async () => {
+    const { service, repository, storage } = makeDependencies();
+    repository.findEpisode.mockResolvedValue(null);
+
+    await expect(
+      service.replaceEpisodePages("missing", {
+        sessionId: session.id,
+        pageIds: session.pages.map((page) => page.id),
+      }),
+    ).rejects.toMatchObject({ code: "EPISODE_NOT_FOUND", status: 404 });
+    expect(storage.publish).not.toHaveBeenCalled();
   });
 
   it("rejects title changes for unknown episodes", async () => {

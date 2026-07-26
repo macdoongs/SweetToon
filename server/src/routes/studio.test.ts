@@ -71,6 +71,13 @@ function studioService(): jest.Mocked<StudioUseCases> {
       season: { id: "season-1", number: 1 },
       series: { slug: "moonlight-laundry", title: "달빛 세탁소" },
     }),
+    replaceEpisodePages: jest.fn().mockResolvedValue({
+      episodeId: "episode-12",
+      seriesSlug: "moonlight-laundry",
+      pageCount: 1,
+      readerUrl: "/read/episode-12",
+      visibility: "public",
+    }),
     listDraftEpisodes: jest.fn().mockResolvedValue([]),
     createPackagingRequest: jest.fn().mockResolvedValue({
       id: "packaging-1",
@@ -255,6 +262,29 @@ describe("studio routes", () => {
       .expect(400);
 
     expect(response.body.code).toBe("INVALID_EPISODE_TITLE");
+  });
+
+  it("replaces episode pages from a new upload session", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .patch("/api/studio/episodes/episode-12/pages")
+      .send({ sessionId, pageIds: [pageId] })
+      .expect(200);
+
+    expect(service.replaceEpisodePages).toHaveBeenCalledWith("episode-12", {
+      sessionId,
+      pageIds: [pageId],
+    });
+    expect(response.body.readerUrl).toBe("/read/episode-12");
+  });
+
+  it("rejects a page replacement without a valid session", async () => {
+    const response = await request(app())
+      .patch("/api/studio/episodes/episode-12/pages")
+      .send({ sessionId: "not-a-uuid", pageIds: [pageId] })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_PAGE_REPLACEMENT");
   });
 
   it("accepts a packaging service request", async () => {

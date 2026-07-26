@@ -23,6 +23,23 @@ export type CreateStudioEpisodeInput = {
   title: string;
   imageUrls: string[];
   visibility: EpisodeVisibility;
+  manuscriptDir: string;
+};
+
+export type StudioEpisode = {
+  id: string;
+  number: number;
+  title: string;
+  visibility: EpisodeVisibility;
+  manuscriptDir: string | null;
+  season: {
+    id: string;
+    number: number;
+    series: {
+      slug: string;
+      title: string;
+    };
+  };
 };
 
 export type CreatePackagingRequestInput = {
@@ -66,6 +83,12 @@ export interface StudioRepository {
     episodeId: string,
     title: string,
   ): Promise<DraftEpisode | null>;
+  findEpisode(episodeId: string): Promise<StudioEpisode | null>;
+  replaceEpisodePages(
+    episodeId: string,
+    imageUrls: string[],
+    manuscriptDir: string,
+  ): Promise<void>;
   listDraftEpisodes(): Promise<DraftEpisode[]>;
   createPackagingRequest(
     input: CreatePackagingRequestInput,
@@ -105,6 +128,7 @@ export class PrismaStudioRepository implements StudioRepository {
             number: input.number,
             title: input.title,
             visibility: input.visibility,
+            manuscriptDir: input.manuscriptDir,
           },
         });
         await transaction.page.createMany({
@@ -178,6 +202,50 @@ export class PrismaStudioRepository implements StudioRepository {
       })
       .catch(() => null);
     return updated ? toDraftEpisode(updated) : null;
+  }
+
+  async findEpisode(episodeId: string): Promise<StudioEpisode | null> {
+    const episode = await this.prisma.episode.findUnique({
+      where: { id: episodeId },
+      include: { season: { include: { series: true } } },
+    });
+    if (!episode) return null;
+    return {
+      id: episode.id,
+      number: episode.number,
+      title: episode.title,
+      visibility: episode.visibility === "private" ? "private" : "public",
+      manuscriptDir: episode.manuscriptDir,
+      season: {
+        id: episode.season.id,
+        number: episode.season.number,
+        series: {
+          slug: episode.season.series.slug,
+          title: episode.season.series.title,
+        },
+      },
+    };
+  }
+
+  async replaceEpisodePages(
+    episodeId: string,
+    imageUrls: string[],
+    manuscriptDir: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.page.deleteMany({ where: { episodeId } });
+      await transaction.page.createMany({
+        data: imageUrls.map((imageUrl, index) => ({
+          episodeId,
+          order: index + 1,
+          imageUrl,
+        })),
+      });
+      await transaction.episode.update({
+        where: { id: episodeId },
+        data: { manuscriptDir },
+      });
+    });
   }
 
   async listDraftEpisodes(): Promise<DraftEpisode[]> {

@@ -156,6 +156,13 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedEpisode | null>(null);
 
+  const [replaceTarget, setReplaceTarget] = useState<
+    { id: string; number: number; title: string } | null
+  >(null);
+  const [replaceResult, setReplaceResult] = useState<CreatedEpisode | null>(
+    null,
+  );
+
   const [applicantName, setApplicantName] = useState("");
   const [bookTitle, setBookTitle] = useState("");
   const [bookSize, setBookSize] = useState<PackagingBookSize>("A5");
@@ -269,6 +276,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     setError(null);
     setCreated(null);
     setPackagingResult(null);
+    setReplaceResult(null);
     const formData = new FormData();
     formData.append("archive", file);
     try {
@@ -394,6 +402,49 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
         reason instanceof ApiError
           ? reason.message
           : "패키징 신청을 접수하지 못했습니다.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function startReplace(episode: {
+    id: string;
+    number: number;
+    title: string;
+  }) {
+    setReplaceTarget(episode);
+    setReplaceResult(null);
+    setCreated(null);
+    setPackagingResult(null);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function submitReplacePages() {
+    if (!preview || !replaceTarget) return;
+    setBusy("publish");
+    setError(null);
+    try {
+      const result = await patchJson<
+        { sessionId: string; pageIds: string[] },
+        CreatedEpisode
+      >(
+        `/api/studio/episodes/${encodeURIComponent(replaceTarget.id)}/pages`,
+        {
+          sessionId: preview.sessionId,
+          pageIds: preview.pages.map((page) => page.id),
+        },
+        mutationHeaders,
+      );
+      setReplaceResult(result);
+      setReplaceTarget(null);
+      setPreview(null);
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason.message
+          : "원고를 교체하지 못했습니다.",
       );
     } finally {
       setBusy(null);
@@ -761,7 +812,33 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
             </section>
           ) : null}
 
-          {!seasonUnavailable && !preview && !created && !packagingResult ? (
+          {replaceTarget ? (
+            <div className="studio-replace-notice" role="status">
+              <div>
+                <strong>
+                  {replaceTarget.number}화 · {replaceTarget.title} — 원고 교체
+                  중
+                </strong>
+                <span>
+                  ZIP/CBZ를 올리고 순서를 확인하면 기존 페이지가 새 원고로
+                  모두 바뀝니다.
+                </span>
+              </div>
+              <button
+                className="button button--ghost"
+                onClick={() => setReplaceTarget(null)}
+                type="button"
+              >
+                교체 취소
+              </button>
+            </div>
+          ) : null}
+
+          {!seasonUnavailable &&
+          !preview &&
+          !created &&
+          !packagingResult &&
+          !replaceResult ? (
             <div
               className={`upload-dropzone ${dragging ? "upload-dropzone--dragging" : ""}`}
               onDragEnter={(event) => {
@@ -860,7 +937,27 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                 ))}
               </ol>
               <div className="studio-publish-bar">
-                {purpose === "packaging" ? (
+                {replaceTarget ? (
+                  <>
+                    <div>
+                      <strong>
+                        {replaceTarget.number}화 · {replaceTarget.title}
+                      </strong>
+                      <span>
+                        기존 페이지가 새 원고 {preview.pages.length}쪽으로
+                        교체됩니다.
+                      </span>
+                    </div>
+                    <button
+                      className="button button--primary"
+                      disabled={busy !== null}
+                      onClick={() => void submitReplacePages()}
+                      type="button"
+                    >
+                      {busy === "publish" ? "교체 중…" : "원고 교체"}
+                    </button>
+                  </>
+                ) : purpose === "packaging" ? (
                   <>
                     <div>
                       <strong>
@@ -982,6 +1079,33 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
             </div>
           ) : null}
 
+          {replaceResult ? (
+            <div className="studio-success">
+              <span>✓</span>
+              <p className="eyebrow">Pages replaced</p>
+              <h2>원고를 새 파일로 교체했어요.</h2>
+              <p>
+                {replaceResult.pageCount}장의 페이지가 순서대로 다시
+                등록되었고, 이전 원고 파일은 정리했습니다.
+              </p>
+              <div>
+                <Link
+                  className="button button--primary"
+                  href={replaceResult.readerUrl}
+                >
+                  교체된 에피소드 보기
+                </Link>
+                <button
+                  className="button button--ghost"
+                  onClick={() => setReplaceResult(null)}
+                  type="button"
+                >
+                  새 원고 올리기
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {error ? (
             <p className="studio-error" role="alert">{error}</p>
           ) : null}
@@ -1054,6 +1178,20 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                       >
                         보기
                       </Link>
+                      <button
+                        className="button button--ghost"
+                        onClick={() =>
+                          startReplace({
+                            id: episode.id,
+                            number: episode.number,
+                            title:
+                              renamedTitles[episode.id] ?? episode.title,
+                          })
+                        }
+                        type="button"
+                      >
+                        원고 교체
+                      </button>
                       <button
                         className="button button--primary"
                         onClick={() =>
@@ -1150,6 +1288,19 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                         type="button"
                       >
                         제목 수정
+                      </button>
+                      <button
+                        className="button button--ghost"
+                        onClick={() =>
+                          startReplace({
+                            id: draft.id,
+                            number: draft.number,
+                            title: draft.title,
+                          })
+                        }
+                        type="button"
+                      >
+                        원고 교체
                       </button>
                       <button
                         className="button button--primary"

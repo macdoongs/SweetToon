@@ -8,6 +8,7 @@ import type {
   DraftEpisode,
   EpisodeVisibility,
   PackagingRequest,
+  ReplaceEpisodePagesRequest,
   UploadPreview,
 } from "../contracts/studio";
 import {
@@ -60,6 +61,10 @@ export interface StudioUseCases {
     episodeId: string,
     title: string,
   ): Promise<DraftEpisode>;
+  replaceEpisodePages(
+    episodeId: string,
+    input: ReplaceEpisodePagesRequest,
+  ): Promise<CreatedEpisode>;
   listDraftEpisodes(): Promise<DraftEpisode[]>;
   createPackagingRequest(
     input: CreatePackagingRequest,
@@ -185,6 +190,7 @@ export class StudioService implements StudioUseCases {
         title: input.title,
         imageUrls: published.imageUrls,
         visibility: input.visibility,
+        manuscriptDir: published.directory,
       });
       createdEpisodeId = created.id;
       await this.storage.removeSession(session.id);
@@ -268,6 +274,66 @@ export class StudioService implements StudioUseCases {
       );
     }
     return updated;
+  }
+
+  async replaceEpisodePages(
+    episodeId: string,
+    input: ReplaceEpisodePagesRequest,
+  ): Promise<CreatedEpisode> {
+    const [episode, session] = await Promise.all([
+      this.repository.findEpisode(episodeId),
+      this.storage.getSession(input.sessionId),
+    ]);
+    if (!episode) {
+      throw new StudioServiceError(
+        "EPISODE_NOT_FOUND",
+        "원고를 교체할 에피소드를 찾을 수 없습니다.",
+        404,
+      );
+    }
+    if (!session) {
+      throw new StudioServiceError(
+        "UPLOAD_SESSION_NOT_FOUND",
+        "미리보기 시간이 만료되었어요. ZIP 파일을 다시 올려 주세요.",
+        404,
+      );
+    }
+    assertPageOrderCoversSession(input.pageIds, session);
+
+    const publicationId = crypto.randomUUID();
+    const published = await this.storage.publish(
+      session,
+      [
+        episode.season.series.slug,
+        `s${episode.season.number}`,
+        `ep${episode.number}-${publicationId}`,
+      ],
+      input.pageIds,
+    );
+    try {
+      await this.repository.replaceEpisodePages(
+        episode.id,
+        published.imageUrls,
+        published.directory,
+      );
+    } catch (error) {
+      await this.storage.removePublished(published.directory);
+      throw error;
+    }
+    await this.storage.removeSession(session.id);
+    // 이전 원고는 스튜디오 발행분일 때만 지운다. 시드 원고는 건드리지 않는다.
+    if (episode.manuscriptDir) {
+      await this.storage
+        .removePublished(episode.manuscriptDir)
+        .catch(() => undefined);
+    }
+    return {
+      episodeId: episode.id,
+      seriesSlug: episode.season.series.slug,
+      pageCount: published.imageUrls.length,
+      readerUrl: `/read/${episode.id}`,
+      visibility: episode.visibility,
+    };
   }
 
   async listDraftEpisodes(): Promise<DraftEpisode[]> {

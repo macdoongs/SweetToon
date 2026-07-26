@@ -2844,6 +2844,33 @@ button {
   min-width: 200px;
 }
 
+.studio-replace-notice {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(216, 105, 74, 0.4);
+  border-radius: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(216, 105, 74, 0.08);
+}
+
+.studio-replace-notice > div {
+  display: grid;
+  gap: 3px;
+}
+
+.studio-replace-notice strong {
+  font-size: 0.84rem;
+}
+
+.studio-replace-notice span {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
 .studio-drafts > p {
   margin: 12px 0 0;
   color: var(--coral-dark);

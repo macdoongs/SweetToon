@@ -44,6 +44,11 @@ export const UpdateEpisodeTitleRequestSchema = z.object({
   title: z.string().trim().min(1).max(80),
 });
 
+export const ReplaceEpisodePagesRequestSchema = z.object({
+  sessionId: UploadSessionIdSchema,
+  pageIds: z.array(UploadPageIdSchema).min(1).max(80),
+});
+
 export const DraftEpisodeSchema = z.object({
   id: z.string(),
   number: z.number().int().positive(),
@@ -110,6 +115,9 @@ export const AccessPolicyResponseSchema = AccessPolicySchema.extend({
 });
 
 export type EpisodeVisibility = z.infer<typeof EpisodeVisibilitySchema>;
+export type ReplaceEpisodePagesRequest = z.infer<
+  typeof ReplaceEpisodePagesRequestSchema
+>;
 export type DraftEpisode = z.infer<typeof DraftEpisodeSchema>;
 export type CreatePackagingRequest = z.infer<
   typeof CreatePackagingRequestSchema

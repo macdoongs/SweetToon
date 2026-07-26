@@ -710,6 +710,44 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/studio/episodes/{episodeId}/pages": {
+      patch: {
+        tags: ["Studio"],
+        summary:
+          "새 업로드 세션의 원고로 기존 에피소드의 페이지 전체를 교체합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["sessionId", "pageIds"],
+                properties: {
+                  sessionId: { type: "string", format: "uuid" },
+                  pageIds: {
+                    type: "array",
+                    items: { type: "string", format: "uuid" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "교체된 에피소드 요약" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
     "/api/studio/drafts": {
       get: {
         tags: ["Studio"],

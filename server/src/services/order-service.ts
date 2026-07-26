@@ -1,7 +1,9 @@
 import type {
   CreateOrderRequest,
   OrderDetail,
+  OrderListQuery,
   OrderListResponse,
+  OrderReceipt,
   OrderStatus,
   OrderTransitionRequest,
   PrintQuoteRequest,
@@ -11,6 +13,7 @@ import type { PrintProvider } from "../printing/print-provider";
 import type {
   OrderRepository,
   OrderableSeason,
+  ActiveDemoOrder,
 } from "../repositories/order-repository";
 
 export class OrderServiceError extends Error {
@@ -26,14 +29,15 @@ export class OrderServiceError extends Error {
 
 export interface OrderUseCases {
   quote(input: PrintQuoteRequest): Promise<PrintQuoteResponse>;
-  create(input: CreateOrderRequest): Promise<OrderDetail>;
+  create(input: CreateOrderRequest): Promise<OrderReceipt>;
   get(id: string): Promise<OrderDetail>;
-  list(): Promise<OrderListResponse>;
+  list(query: OrderListQuery): Promise<OrderListResponse>;
   transition(id: string, input: OrderTransitionRequest): Promise<OrderDetail>;
 }
 
 export interface DemoOrderUseCases extends OrderUseCases {
   createDemo(input: CreateOrderRequest): Promise<OrderDetail>;
+  findActiveDemo(): Promise<ActiveDemoOrder | null>;
   pruneCompletedDemos(keep: number): Promise<void>;
   clearDemos(): Promise<void>;
 }
@@ -125,7 +129,7 @@ export class OrderService implements DemoOrderUseCases {
     return this.buildQuote(input, season);
   }
 
-  async create(input: CreateOrderRequest): Promise<OrderDetail> {
+  async create(input: CreateOrderRequest): Promise<OrderReceipt> {
     return this.createOrder(input, false);
   }
 
@@ -144,7 +148,7 @@ export class OrderService implements DemoOrderUseCases {
   private async createOrder(
     input: CreateOrderRequest,
     isDemo: boolean,
-  ): Promise<OrderDetail> {
+  ): Promise<OrderReceipt> {
     const existing = await this.repository.findByRequestKey(input.requestKey);
     if (existing) {
       return existing;
@@ -155,7 +159,7 @@ export class OrderService implements DemoOrderUseCases {
       input.volumeNumber,
     );
     const quote = await this.buildQuote(input, season);
-    let order: OrderDetail;
+    let order: OrderReceipt;
     try {
       order = await this.repository.createPendingOrder({
         ...input,
@@ -216,8 +220,12 @@ export class OrderService implements DemoOrderUseCases {
     return order;
   }
 
-  list(): Promise<OrderListResponse> {
-    return this.repository.listOrders();
+  list(query: OrderListQuery): Promise<OrderListResponse> {
+    return this.repository.listOrders(query);
+  }
+
+  findActiveDemo(): Promise<ActiveDemoOrder | null> {
+    return this.repository.findActiveDemoOrder();
   }
 
   async transition(

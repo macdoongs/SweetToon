@@ -14,19 +14,50 @@ import {
 } from "@/lib/reading-progress";
 import {
   buildRecommendationShelves,
+  type RecommendationSeries,
   type RecommendationShelf,
 } from "@/lib/recommendations";
-import type { SeriesSummary } from "@/lib/reader-types";
+import {
+  buildCircularRailCopies,
+  prioritizeThumbnailItems,
+  useCircularRail,
+} from "./use-circular-rail";
 
-function RecommendationCard({ series }: { series: SeriesSummary }) {
+const MOBILE_RECOMMENDATION_BREAKPOINT = 700;
+
+function getRecommendationCardWidth(viewportWidth: number) {
+  const responsiveWidth =
+    viewportWidth <= MOBILE_RECOMMENDATION_BREAKPOINT
+      ? Math.min(viewportWidth * 0.44, 180)
+      : Math.min(Math.max(viewportWidth * 0.17, 156), 210);
+  return Math.round(responsiveWidth);
+}
+
+function RecommendationCard({
+  duplicate = false,
+  eager = false,
+  series,
+}: {
+  duplicate?: boolean;
+  eager?: boolean;
+  series: RecommendationSeries;
+}) {
   return (
-    <li className="recommendation-card">
-      <Link href={`/series/${encodeURIComponent(series.slug)}`}>
+    <li
+      aria-hidden={duplicate || undefined}
+      className="recommendation-card"
+      data-preloaded={eager || undefined}
+    >
+      <Link
+        href={`/series/${encodeURIComponent(series.slug)}`}
+        tabIndex={duplicate ? -1 : undefined}
+      >
         <div className="recommendation-card__cover">
           {series.coverUrl ? (
             <Image
               alt={`${series.title} 표지`}
               height={560}
+              loading={eager ? "eager" : undefined}
               sizes="(max-width: 700px) 42vw, 210px"
               src={series.coverUrl}
               width={400}
@@ -48,12 +79,16 @@ function RecommendationCard({ series }: { series: SeriesSummary }) {
 
 function Shelf({ shelf }: { shelf: RecommendationShelf }) {
   const railId = `recommendation-${shelf.id}`;
-  const scroll = (direction: -1 | 1) => {
-    document.getElementById(railId)?.scrollBy({
-      left: direction * 720,
-      behavior: "smooth",
+  const prioritizedItems = prioritizeThumbnailItems(
+    shelf.items,
+    (series) => Boolean(series.coverUrl),
+  );
+  const { loopEnabled, railRef, scroll } =
+    useCircularRail<HTMLUListElement>({
+      cardWidth: getRecommendationCardWidth,
+      itemCount: prioritizedItems.length,
     });
-  };
+  const railCopies = buildCircularRailCopies(prioritizedItems);
 
   return (
     <section
@@ -83,9 +118,19 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
           </button>
         </div>
       </header>
-      <ul className="recommendation-rail" id={railId}>
-        {shelf.items.map((series) => (
-          <RecommendationCard key={series.id} series={series} />
+      <ul
+        aria-roledescription={loopEnabled ? "순환형 캐러셀" : "작품 목록"}
+        className="circular-content-rail horizontal-scroll-surface recommendation-rail"
+        id={railId}
+        ref={railRef}
+      >
+        {railCopies.map(({ copyIndex, duplicate, eager, item: series }) => (
+          <RecommendationCard
+            duplicate={duplicate}
+            eager={eager}
+            key={`${copyIndex}-${series.id}`}
+            series={series}
+          />
         ))}
       </ul>
     </section>
@@ -95,7 +140,7 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
 export function RecommendationShelves({
   series,
 }: {
-  series: SeriesSummary[];
+  series: RecommendationSeries[];
 }) {
   const [favorites, setFavorites] = useState<FavoriteSeries[]>([]);
   const [progress, setProgress] = useState<
@@ -136,10 +181,9 @@ export function RecommendationShelves({
             <h2 id="recommendations-title">취향을 이어갈 다음 작품</h2>
           </div>
           <p>
-            찜과 최근 열람 기록을 바탕으로 추천해요.
             {!favorites.length && !Object.keys(progress).length
-              ? " 아직 기록이 없어 장르별 작품부터 준비했어요."
-              : ""}
+              ? "아직 기록이 없어도 괜찮아요. 서로 어울리는 장르를 세 가지 분류로 모았어요."
+              : "찜과 최근 열람 기록을 바탕으로 추천해요."}
           </p>
         </header>
         {shelves.map((shelf) => (

@@ -64,6 +64,8 @@ export class DemoBotService implements DemoBotController {
   private timer: NodeJS.Timeout | null = null;
   private tickNumber = 0;
   private seriesCursor = 0;
+  private orderSeriesCursor = 0;
+  private orderVolumeCursor = 0;
   private ticking = false;
   private lastTickAt: string | null = null;
   private nextTickAt: string | null = null;
@@ -130,6 +132,8 @@ export class DemoBotService implements DemoBotController {
     await this.orderService.clearDemos();
     this.tickNumber = 0;
     this.seriesCursor = 0;
+    this.orderSeriesCursor = 0;
+    this.orderVolumeCursor = 0;
     this.activeOrderId = null;
     this.lastAction = "데모 독자와 주문을 초기화했습니다.";
     if (this.running) await this.tick();
@@ -185,21 +189,9 @@ export class DemoBotService implements DemoBotController {
   }
 
   private async loadSeriesSlugs(): Promise<string[]> {
-    const first = await this.readerRepository.listSeries({
-      filter: "all",
-      page: 1,
-      pageSize: 24,
-    });
-    const second = first.nextPage
-      ? await this.readerRepository.listSeries({
-          filter: "all",
-          page: first.nextPage,
-          pageSize: 24,
-        })
-      : null;
-    return [...first.items, ...(second?.items ?? [])]
-      .filter((item) => Boolean(item.coverUrl))
-      .map((item) => item.slug);
+    return (await this.readerRepository.listRealtimeSeriesKeys()).map(
+      (item) => item.slug,
+    );
   }
 
   private async tickReaders(slugs: string[]): Promise<void> {
@@ -235,13 +227,7 @@ export class DemoBotService implements DemoBotController {
   }
 
   private async tickOrder(slugs: string[]): Promise<void> {
-    const { items } = await this.orderService.list();
-    const active = items.find(
-      (order) =>
-        order.isDemo &&
-        order.status !== "completed" &&
-        order.status !== "canceled",
-    );
+    const active = await this.orderService.findActiveDemo();
     if (active) {
       const status = nextOrderStatus[active.status];
       if (!status) return;
@@ -254,17 +240,30 @@ export class DemoBotService implements DemoBotController {
       return;
     }
 
-    for (const slug of slugs) {
+    for (let offset = 0; offset < slugs.length; offset += 1) {
+      const slugIndex = (this.orderSeriesCursor + offset) % slugs.length;
+      const slug = slugs[slugIndex];
       const series = await this.readerRepository.findSeriesBySlug(slug);
-      const season = series?.seasons.find(
-        (item) => item.status === "completed" && item.episodes.length > 0,
-      );
-      if (!season) continue;
+      const editions =
+        series?.seasons
+          .filter((season) => season.status === "completed")
+          .flatMap((season) =>
+            [...new Set(season.episodes.map((episode) => episode.volumeNumber))]
+              .sort((left, right) => left - right)
+              .map((volumeNumber) => ({
+                seasonId: season.id,
+                volumeNumber,
+              })),
+          ) ?? [];
+      if (editions.length === 0) continue;
+      const edition = editions[this.orderVolumeCursor % editions.length];
+      this.orderSeriesCursor = (slugIndex + 1) % slugs.length;
+      this.orderVolumeCursor += 1;
       const created = await this.orderService.createDemo({
         requestKey: randomUUID(),
         candyWalletToken: DEMO_WALLET_TOKEN,
-        seasonId: season.id,
-        volumeNumber: 1,
+        seasonId: edition.seasonId,
+        volumeNumber: edition.volumeNumber,
         bookSize: "A5",
         coverType: "softcover",
         quantity: 1,
@@ -273,7 +272,8 @@ export class DemoBotService implements DemoBotController {
       });
       await this.realtime.publishOrder(created);
       this.activeOrderId = created.id;
-      this.lastAction = `새 데모 주문 ${created.id}을 생성했습니다.`;
+      this.lastAction =
+        `${series?.title ?? slug} ${edition.volumeNumber}권 데모 주문을 생성했습니다.`;
       await this.orderService.pruneCompletedDemos(5);
       return;
     }

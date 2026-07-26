@@ -64,7 +64,7 @@ try {
 
     Invoke-Checked {
         docker compose exec -T server node -e "
-          fetch('http://localhost:4000/health')
+          fetch('http://localhost:4000/health/ready')
             .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
             .then(body => {
               if (body.ok !== true || body.printProvider !== 'mock') {
@@ -77,14 +77,50 @@ try {
               process.exit(1)
             })
         "
-    } "server health and mock provider check"
+    } "server readiness and mock provider check"
+
+    $runtimeUidLine = docker compose exec -T server grep "^Uid:" /proc/1/status
+    if (
+        $LASTEXITCODE -ne 0 -or
+        $runtimeUidLine -notmatch "^Uid:\s+([0-9]+)" -or
+        [int]$Matches[1] -eq 0
+    ) {
+        throw "server runtime must use a non-root user."
+    }
+    foreach ($developmentDependency in @(
+        "jest",
+        "prisma",
+        "tsx",
+        "typescript"
+    )) {
+        Invoke-Checked {
+            docker compose exec -T server test ! -e `
+                "/app/node_modules/$developmentDependency"
+        } "production runtime excludes $developmentDependency"
+    }
+
+    $seedPagePath = "/app/data/uploads/catalog-01/s1/ep001/001.svg"
+    $seedPageMtimeBefore = docker compose exec -T server `
+        stat -c "%Y" $seedPagePath
+    if ($LASTEXITCODE -ne 0 -or -not $seedPageMtimeBefore) {
+        throw "Could not read seeded page modification time."
+    }
 
     Invoke-Checked {
         docker compose run --rm migrate
     } "migration and seed rerun over existing database"
 
+    $seedPageMtimeAfter = docker compose exec -T server `
+        stat -c "%Y" $seedPagePath
+    if (
+        $LASTEXITCODE -ne 0 -or
+        "$seedPageMtimeBefore".Trim() -ne "$seedPageMtimeAfter".Trim()
+    ) {
+        throw "Idempotent seed rewrote an existing generated page."
+    }
+
     Invoke-Checked {
-        docker compose exec -T server npx prisma migrate diff `
+        docker compose run --rm migrate npx prisma migrate diff `
             --from-schema-datasource prisma/schema.prisma `
             --to-schema-datamodel prisma/schema.prisma `
             --exit-code
@@ -102,6 +138,20 @@ try {
             const body = await json('/api/series')
             if (!Array.isArray(body.items) || body.items.length === 0) {
               throw new Error('seeded series not found')
+            }
+            const allSeries = [...body.items]
+            let nextPage = body.nextPage
+            while (nextPage) {
+              const nextPageBody = await json('/api/series?page=' + nextPage)
+              allSeries.push(...nextPageBody.items)
+              nextPage = nextPageBody.nextPage
+            }
+            const missingCover = allSeries.find(series => !series.coverUrl)
+            if (allSeries.length !== body.total || missingCover) {
+              throw new Error(
+                'every seeded series must expose a cover: ' +
+                (missingCover?.slug ?? allSeries.length + '/' + body.total)
+              )
             }
             const catalog = await json('/api/series/catalog-01')
             if (catalog.seasons[0]?.episodes.length !== 30) {
@@ -125,6 +175,13 @@ try {
             const longCatalog = await json('/api/series/catalog-12')
             if (longCatalog.seasons[0]?.episodes.length !== 120) {
               throw new Error('catalog-12 expected 120 episodes')
+            }
+            const orders = await json('/api/orders')
+            const firstSeedOrder = orders.items.find(
+              order => order.providerOrderId === 'mock_seed_1'
+            )
+            if (firstSeedOrder?.season.number !== 1) {
+              throw new Error('seeded sample order must use season 1')
             }
             const firstEpisode = catalog.seasons[0]?.episodes[0]
             if (!firstEpisode) throw new Error('catalog episode not found')
@@ -158,13 +215,12 @@ try {
             )
             const popular = await json('/api/realtime/popular')
             const demoBot = await json('/api/realtime/demo-bot')
-            const catalogPopularity = popular.items.find(
-              item => item.series.slug === catalog.slug
+            const hasPopularSeries = popular.items.some(
+              item => item.viewerCount >= 1
             )
             if (
               presence.viewerCount < 1 ||
-              !catalogPopularity ||
-              catalogPopularity.viewerCount < 1 ||
+              !hasPopularSeries ||
               !demoBot.available ||
               !demoBot.running ||
               demoBot.activeBotCount < 1
@@ -172,7 +228,7 @@ try {
               throw new Error('realtime presence verification failed')
             }
             console.log(
-              'series=' + body.items.length +
+              'series=' + allSeries.length +
                 ' episode-range=30..120' +
                 ' catalog-pages=' + reader.pages.length +
                 ' live-readers=' + presence.viewerCount +

@@ -39,6 +39,8 @@ pipeline {
                         exit 1
                         ;;
                     esac
+                    export SITE_URL="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" url)"
+                    export SITE_HOST="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" host)"
                     docker network inspect traefik-net >/dev/null
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" config --quiet
                 '''
@@ -50,6 +52,8 @@ pipeline {
                 retry(3) {
                     sh '''
                         set -eu
+                        export SITE_URL="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" url)"
+                        export SITE_HOST="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" host)"
                         COMPOSE_BAKE=false DOCKER_BUILDKIT=0 \
                           docker compose ${COMPOSE_FILES} \
                             --env-file "${DEPLOY_ENV_FILE}" build
@@ -62,6 +66,8 @@ pipeline {
             steps {
                 sh '''
                     set -eu
+                    export SITE_URL="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" url)"
+                    export SITE_HOST="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" host)"
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" up -d --wait --wait-timeout 120 --remove-orphans
                 '''
             }
@@ -71,18 +77,20 @@ pipeline {
             steps {
                 sh '''
                     set -eu
+                    export SITE_URL="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" url)"
+                    export SITE_HOST="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" host)"
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" ps
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T server \
-                      node -e "fetch('http://localhost:4000/health').then(r => { if (!r.ok) process.exit(1); console.log('api ok') }).catch(() => process.exit(1))"
+                      node -e "fetch('http://localhost:4000/health/ready').then(r => { if (!r.ok) process.exit(1); console.log('api ready') }).catch(() => process.exit(1))"
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web \
-                      node -e "fetch('http://localhost:3000').then(r => { if (!r.ok) process.exit(1); console.log('web ok') }).catch(() => process.exit(1))"
+                      node -e "fetch('http://localhost:3000/health').then(r => { if (!r.ok) process.exit(1); console.log('web ready') }).catch(() => process.exit(1))"
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web \
                       wget --quiet --output-document=/dev/null \
-                        --header='Host: sweettoon.katsuranbo.com' http://traefik/
+                        --header="Host: ${SITE_HOST}" http://traefik/
                     order_id="$(docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web \
                       node -e "fetch('http://localhost:3000/api/orders').then(r => r.json()).then(body => { if (!body.items?.[0]?.id) process.exit(1); process.stdout.write(body.items[0].id) }).catch(() => process.exit(1))")"
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web sh -c \
-                      "timeout 10 wget -qO- --header='Host: sweettoon.katsuranbo.com' \
+                      "timeout 10 wget -qO- --header='Host: ${SITE_HOST}' \
                         'http://traefik/api/orders/${order_id}/events' | \
                         grep -m1 '^event: order'"
                 '''
@@ -92,7 +100,11 @@ pipeline {
 
     post {
         failure {
-            sh 'docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" logs --no-color --tail 200 || true'
+            sh '''
+                export SITE_URL="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" url)"
+                export SITE_HOST="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" host)"
+                docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" logs --no-color --tail 200 || true
+            '''
         }
     }
 }

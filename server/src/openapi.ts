@@ -52,7 +52,7 @@ export const openApiDocument = {
             schema: {
               type: "integer",
               minimum: 1,
-              maximum: 24,
+              maximum: 100,
               default: 12,
             },
           },
@@ -93,7 +93,7 @@ export const openApiDocument = {
         tags: ["Reader"],
         summary: "에피소드 페이지와 이전·다음 화를 조회합니다.",
         description:
-          "잠긴 권은 페이지 URL을 반환하지 않습니다. Mock 주문 requestKey 또는 캔디 지갑 토큰을 Bearer 토큰으로 보내면 보유 권한을 확인합니다.",
+          "잠긴 권은 페이지 URL을 반환하지 않습니다. Mock 주문 생성 응답의 entitlementToken 또는 캔디 지갑 토큰을 Bearer 토큰으로 보내면 보유 권한을 확인합니다.",
         security: [{ demoEntitlement: [] }, {}],
         parameters: [{ $ref: "#/components/parameters/Id" }],
         responses: {
@@ -413,7 +413,24 @@ export const openApiDocument = {
     "/api/orders": {
       get: {
         tags: ["Orders"],
-        summary: "공용 데모 주문 목록을 조회합니다.",
+        summary: "공용 데모 주문 요약을 커서 페이지로 조회합니다.",
+        parameters: [
+          {
+            name: "cursor",
+            in: "query",
+            schema: { type: "string" },
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 50,
+              default: 20,
+            },
+          },
+        ],
         responses: {
           "200": {
             description: "개인정보가 제외된 주문 목록",
@@ -466,7 +483,8 @@ export const openApiDocument = {
         },
         responses: {
           "201": {
-            description: "생성된 주문",
+            description:
+              "생성된 주문과 해당 권을 읽을 때 사용하는 entitlementToken",
             content: {
               "application/json": {
                 schema: { type: "object", additionalProperties: true },
@@ -649,7 +667,8 @@ export const openApiDocument = {
       demoEntitlement: {
         type: "http",
         scheme: "bearer",
-        description: "Mock 주문 생성 시 브라우저가 보관하는 requestKey",
+        description:
+          "Mock 주문 생성 응답에서 브라우저가 보관하는 entitlementToken",
       },
       studioApiKey: {
         type: "apiKey",

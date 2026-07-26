@@ -42,6 +42,7 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
   const body = await response.json();
   expect(body).not.toHaveProperty("ordererName");
   expect(body).not.toHaveProperty("memo");
+  expect(body).not.toHaveProperty("entitlementToken");
   const firstEvent = page.locator("time").first();
   await expect(firstEvent).toHaveAttribute(
     "datetime",

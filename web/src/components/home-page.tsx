@@ -2,7 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { getJson } from "@/lib/api";
 import type { SeriesListResponse, SeriesSummary } from "@/lib/reader-types";
 import {
@@ -19,6 +24,13 @@ import {
 } from "@/lib/reading-progress";
 import type { LivePopularResponse } from "@/lib/realtime";
 import { RecommendationShelves } from "./recommendation-shelves";
+import type { RecommendationSeries } from "@/lib/recommendations";
+import { DiscoverLink } from "./discover-link";
+import {
+  buildCircularRailCopies,
+  prioritizeThumbnailItems,
+  useCircularRail,
+} from "./use-circular-rail";
 
 const statusLabel = {
   ongoing: "연재 중",
@@ -72,10 +84,12 @@ function formatLatestDate(value: string) {
 function SeriesCover({
   series,
   priority = false,
+  loading,
   sizes = "(max-width: 700px) calc(100vw - 28px), (max-width: 960px) calc((100vw - 70px) / 2), 360px",
 }: {
   series: SeriesSummary;
   priority?: boolean;
+  loading?: "eager" | "lazy";
   sizes?: string;
 }) {
   return series.coverUrl ? (
@@ -83,6 +97,7 @@ function SeriesCover({
       alt={`${series.title} 표지`}
       className="series-cover"
       height={840}
+      loading={loading}
       preload={priority}
       sizes={sizes}
       src={series.coverUrl}
@@ -93,6 +108,179 @@ function SeriesCover({
   );
 }
 
+function getLivePopularCardWidth(viewportWidth: number) {
+  return viewportWidth <= 700
+    ? Math.min(viewportWidth * 0.82, 340)
+    : Math.min(Math.max(viewportWidth * 0.28, 280), 380);
+}
+
+function LivePopularRail({
+  items,
+}: {
+  items: LivePopularResponse["items"];
+}) {
+  const [displayItems, setDisplayItems] = useState(items);
+  const interactingRef = useRef(false);
+  const pendingItemsRef = useRef<LivePopularResponse["items"] | null>(null);
+  const interactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const prioritizedItems = prioritizeThumbnailItems(
+    displayItems,
+    ({ series }) => Boolean(series.coverUrl),
+  );
+  const { loopEnabled, railRef, scroll } =
+    useCircularRail<HTMLUListElement>({
+      cardWidth: getLivePopularCardWidth,
+      itemCount: prioritizedItems.length,
+    });
+  const railCopies = buildCircularRailCopies(prioritizedItems);
+
+  const beginInteraction = useCallback(() => {
+    interactingRef.current = true;
+    if (interactionTimerRef.current) {
+      clearTimeout(interactionTimerRef.current);
+      interactionTimerRef.current = null;
+    }
+  }, []);
+
+  const settleInteraction = useCallback(() => {
+    if (!interactingRef.current) return;
+    if (interactionTimerRef.current) {
+      clearTimeout(interactionTimerRef.current);
+    }
+    interactionTimerRef.current = setTimeout(() => {
+      if (railRef.current?.contains(document.activeElement)) {
+        interactionTimerRef.current = null;
+        return;
+      }
+      interactingRef.current = false;
+      interactionTimerRef.current = null;
+      if (pendingItemsRef.current) {
+        setDisplayItems(pendingItemsRef.current);
+        pendingItemsRef.current = null;
+      }
+    }, 250);
+  }, []);
+
+  useEffect(() => {
+    if (interactingRef.current) {
+      pendingItemsRef.current = items;
+    } else {
+      setDisplayItems(items);
+    }
+  }, [items]);
+
+  useEffect(() => {
+    window.addEventListener("pointerup", settleInteraction);
+    window.addEventListener("pointercancel", settleInteraction);
+    return () => {
+      window.removeEventListener("pointerup", settleInteraction);
+      window.removeEventListener("pointercancel", settleInteraction);
+      if (interactionTimerRef.current) {
+        clearTimeout(interactionTimerRef.current);
+      }
+    };
+  }, [settleInteraction]);
+
+  return (
+    <section className="live-popular" aria-labelledby="live-popular-title">
+      <div className="live-popular__inner">
+        <div className="circular-rail-heading section-heading section-heading--compact">
+          <div>
+            <p className="eyebrow">Live now</p>
+            <h2 id="live-popular-title">지금 인기 있는 작품</h2>
+          </div>
+          <p>최근 1분 동안 독자들이 읽고 있는 작품이에요.</p>
+          {loopEnabled ? (
+            <div className="circular-rail-controls">
+              <button
+                aria-label="지금 인기 있는 작품 이전 작품 보기"
+                onClick={() => scroll(-1)}
+                type="button"
+              >
+                ←
+              </button>
+              <button
+                aria-label="지금 인기 있는 작품 다음 작품 보기"
+                onClick={() => scroll(1)}
+                type="button"
+              >
+                →
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <ul
+          aria-roledescription={
+            loopEnabled ? "순환형 캐러셀" : "작품 목록"
+          }
+          className="circular-content-rail horizontal-scroll-surface live-popular__rail"
+          id="live-popular-rail"
+          onBlurCapture={(event) => {
+            if (
+              !event.relatedTarget ||
+              !event.currentTarget.contains(event.relatedTarget as Node)
+            ) {
+              settleInteraction();
+            }
+          }}
+          onFocusCapture={beginInteraction}
+          onPointerDown={beginInteraction}
+          onScroll={() => {
+            beginInteraction();
+            settleInteraction();
+          }}
+          ref={railRef}
+        >
+          {railCopies.map(
+            (
+              {
+                copyIndex,
+                duplicate,
+                eager,
+                item: { series, viewerCount },
+              },
+              index,
+            ) => (
+              <li
+                aria-hidden={duplicate || undefined}
+                className="live-popular-card"
+                data-preloaded={eager || undefined}
+                key={`${copyIndex}-${series.id}`}
+              >
+                <Link
+                  href={`/series/${encodeURIComponent(series.slug)}`}
+                  tabIndex={duplicate ? -1 : undefined}
+                >
+                  <span className="live-popular-card__rank">
+                    {(index % prioritizedItems.length) + 1}
+                  </span>
+                  <div className="live-popular-card__cover">
+                    <SeriesCover
+                      loading={eager ? "eager" : undefined}
+                      series={series}
+                      sizes="(max-width: 700px) 72px, 84px"
+                    />
+                  </div>
+                  <div>
+                    <span>{series.genre}</span>
+                    <strong>{series.title}</strong>
+                    <small>
+                      <i aria-hidden="true" />
+                      지금 {viewerCount}명
+                    </small>
+                  </div>
+                </Link>
+              </li>
+            ),
+          )}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 export function HomePage({
   activeFilters,
   initialData = null,
@@ -100,7 +288,7 @@ export function HomePage({
 }: {
   activeFilters: CatalogFilters;
   initialData?: SeriesListResponse | null;
-  recommendationSeries?: SeriesSummary[];
+  recommendationSeries?: RecommendationSeries[];
 }) {
   const [data, setData] = useState<SeriesListResponse | null>(initialData);
   const [error, setError] = useState<string | null>(null);
@@ -231,9 +419,9 @@ export function HomePage({
             소장하는 독자를 위한 공간입니다.
           </p>
           <div className="hero__actions">
-            <Link className="button button--primary" href="#discover">
+            <DiscoverLink className="button button--primary">
               오늘의 작품 보기
-            </Link>
+            </DiscoverLink>
             <span className="hero__note">
               로그인 없이 바로 읽을 수 있어요
             </span>
@@ -242,7 +430,7 @@ export function HomePage({
         {featured ? (
           <Link
             className="featured-book"
-            href={`/series/${featured.slug}`}
+            href={`/series/${encodeURIComponent(featured.slug)}`}
             aria-label={`${featured.title} 작품 보기`}
           >
             <div className="featured-book__halo" />
@@ -266,42 +454,7 @@ export function HomePage({
       </header>
 
       {livePopular?.items.length ? (
-        <section className="live-popular" aria-labelledby="live-popular-title">
-          <div className="live-popular__inner">
-            <div className="section-heading section-heading--compact">
-              <div>
-                <p className="eyebrow">Live now</p>
-                <h2 id="live-popular-title">지금 인기 있는 작품</h2>
-              </div>
-              <p>최근 1분 동안 독자들이 읽고 있는 작품이에요.</p>
-            </div>
-            <div className="live-popular__grid">
-              {livePopular.items.map(({ series, viewerCount }, index) => (
-                <Link
-                  className="live-popular-card"
-                  href={`/series/${series.slug}`}
-                  key={series.id}
-                >
-                  <span className="live-popular-card__rank">{index + 1}</span>
-                  <div className="live-popular-card__cover">
-                    <SeriesCover
-                      series={series}
-                      sizes="(max-width: 700px) 72px, 84px"
-                    />
-                  </div>
-                  <div>
-                    <span>{series.genre}</span>
-                    <strong>{series.title}</strong>
-                    <small>
-                      <i aria-hidden="true" />
-                      지금 {viewerCount}명
-                    </small>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
+        <LivePopularRail items={livePopular.items} />
       ) : null}
 
       <RecommendationShelves series={recommendationSeries} />
@@ -404,9 +557,9 @@ export function HomePage({
               {activeFilters.filter !== "all" ||
               activeFilters.genre ||
               activeFilters.weekday ? (
-                <Link className="text-link" href="/#discover">
+                <DiscoverLink className="text-link">
                   전체 작품 보기 →
-                </Link>
+                </DiscoverLink>
               ) : null}
             </div>
           ) : (
@@ -415,7 +568,7 @@ export function HomePage({
                 <article className="series-card" key={series.id}>
                   <Link
                     className="series-card__image"
-                    href={`/series/${series.slug}`}
+                    href={`/series/${encodeURIComponent(series.slug)}`}
                   >
                     <SeriesCover series={series} />
                     <span
@@ -427,7 +580,7 @@ export function HomePage({
                   <div className="series-card__body">
                     <span className="series-card__genre">{series.genre}</span>
                     <h3>
-                      <Link href={`/series/${series.slug}`}>
+                      <Link href={`/series/${encodeURIComponent(series.slug)}`}>
                         {series.title}
                       </Link>
                     </h3>
@@ -438,7 +591,7 @@ export function HomePage({
                     ) ? (
                       <Link
                         className="series-card__continue"
-                        href={`/read/${getSeriesProgressFromStore(readingProgress, series.slug)?.episodeId}`}
+                        href={`/read/${encodeURIComponent(getSeriesProgressFromStore(readingProgress, series.slug)?.episodeId ?? "")}`}
                       >
                         <span>
                           이어보기 ·{" "}
@@ -464,7 +617,7 @@ export function HomePage({
                     {series.latestEpisode ? (
                       <Link
                         className="series-card__latest"
-                        href={`/read/${series.latestEpisode.id}`}
+                        href={`/read/${encodeURIComponent(series.latestEpisode.id)}`}
                         aria-label={`${series.title} 최신 ${series.latestEpisode.number}화 ${series.latestEpisode.title} 읽기`}
                       >
                         <span>최신 {series.latestEpisode.number}화</span>

@@ -12,6 +12,7 @@ import type {
   OrderDetail,
   OrderListResponse,
   OrderStatus,
+  OrderSummary,
   OrderTransitionRequest,
 } from "@/lib/order-types";
 import {
@@ -39,11 +40,13 @@ const nextAction: Partial<
 };
 
 export function OperationsOrderPage({
-  initialOrders,
+  initialResponse,
 }: {
-  initialOrders: OrderDetail[];
+  initialResponse: OrderListResponse;
 }) {
-  const [orders, setOrders] = useState(initialOrders);
+  const [orders, setOrders] = useState(initialResponse.items);
+  const [nextCursor, setNextCursor] = useState(initialResponse.nextCursor);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [botBusy, setBotBusy] = useState(false);
   const [botStatus, setBotStatus] = useState<DemoBotStatus | null>(null);
@@ -61,7 +64,15 @@ export function OperationsOrderPage({
           getJson<DemoBotStatus>("/api/realtime/demo-bot"),
         ]);
         if (!active) return;
-        setOrders(orderResponse.items);
+        setOrders((current) => {
+          const refreshedIds = new Set(
+            orderResponse.items.map((order) => order.id),
+          );
+          return [
+            ...orderResponse.items,
+            ...current.filter((order) => !refreshedIds.has(order.id)),
+          ];
+        });
         setBotStatus(nextBotStatus);
       } catch {
         // Keep the last successful snapshot visible during a transient poll.
@@ -113,6 +124,7 @@ export function OperationsOrderPage({
       setBotStatus(updated);
       const orderResponse = await getJson<OrderListResponse>("/api/orders");
       setOrders(orderResponse.items);
+      setNextCursor(orderResponse.nextCursor);
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -124,7 +136,7 @@ export function OperationsOrderPage({
     }
   }
 
-  async function advance(order: OrderDetail) {
+  async function advance(order: OrderSummary) {
     const action = nextAction[order.status];
     if (!action) return;
     setBusyId(order.id);
@@ -148,6 +160,33 @@ export function OperationsOrderPage({
       );
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const response = await getJson<OrderListResponse>(
+        `/api/orders?cursor=${encodeURIComponent(nextCursor)}&limit=20`,
+      );
+      setOrders((current) => {
+        const currentIds = new Set(current.map((order) => order.id));
+        return [
+          ...current,
+          ...response.items.filter((order) => !currentIds.has(order.id)),
+        ];
+      });
+      setNextCursor(response.nextCursor);
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "이전 주문을 더 불러오지 못했습니다.",
+      );
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -327,6 +366,16 @@ export function OperationsOrderPage({
           );
         })}
       </section>
+      {nextCursor ? (
+        <button
+          className="button button--secondary"
+          disabled={loadingMore}
+          onClick={() => void loadMore()}
+          type="button"
+        >
+          {loadingMore ? "불러오는 중…" : "이전 주문 더 보기"}
+        </button>
+      ) : null}
     </main>
   );
 }

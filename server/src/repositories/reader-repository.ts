@@ -4,11 +4,15 @@ import type {
   SeriesDetail,
   SeriesListQuery,
   SeriesListResponse,
+  SeriesSummary,
 } from "../contracts/reader";
 import { WeekdaySchema } from "../contracts/reader";
 
 export interface ReaderRepository {
   listSeries(query: SeriesListQuery): Promise<SeriesListResponse>;
+  listRealtimeSeriesKeys(): Promise<Array<{ slug: string; title: string }>>;
+  listRealtimeSeries(slugs?: string[]): Promise<SeriesSummary[]>;
+  seriesExists(slug: string): Promise<boolean>;
   findSeriesBySlug(slug: string): Promise<SeriesDetail | null>;
   findEpisodeById(
     id: string,
@@ -16,7 +20,80 @@ export interface ReaderRepository {
   ): Promise<EpisodeReader | null>;
 }
 
+const seriesSummaryInclude = {
+  author: true,
+  seasons: {
+    select: {
+      status: true,
+      _count: { select: { episodes: true } },
+      episodes: {
+        orderBy: { publishedAt: "desc" as const },
+        take: 1,
+      },
+    },
+  },
+} satisfies Prisma.SeriesInclude;
+
+const WEEKDAY_ORDER = new Map(
+  WeekdaySchema.options.map((weekday, index) => [weekday, index]),
+);
+const FACET_CACHE_MS = 5 * 60_000;
+
+type SeriesFacets = SeriesListResponse["facets"];
+
+type SeriesSummaryRecord = Prisma.SeriesGetPayload<{
+  include: typeof seriesSummaryInclude;
+}>;
+
+function toSeriesSummary(item: SeriesSummaryRecord): SeriesSummary {
+  const episodes = item.seasons.flatMap((season) => season.episodes);
+  const latestEpisode = [...episodes].sort(
+    (left, right) =>
+      right.publishedAt.getTime() - left.publishedAt.getTime(),
+  )[0];
+
+  return {
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    synopsis: item.synopsis,
+    genre: item.genre,
+    weekday: WeekdaySchema.parse(item.weekday),
+    freeVolumeCount: item.freeVolumeCount,
+    previewEpisodeCount: item.previewEpisodeCount,
+    coverUrl: item.coverUrl,
+    status: item.status === "completed" ? "completed" : "ongoing",
+    author: { name: item.author.name },
+    episodeCount: item.seasons.reduce(
+      (count, season) => count + season._count.episodes,
+      0,
+    ),
+    completedSeasonCount: item.seasons.filter(
+      (season) => season.status === "completed",
+    ).length,
+    latestEpisode: latestEpisode
+      ? {
+          id: latestEpisode.id,
+          number: latestEpisode.number,
+          title: latestEpisode.title,
+          publishedAt: latestEpisode.publishedAt.toISOString(),
+          volumeNumber: Math.ceil(latestEpisode.number / 5),
+          access:
+            latestEpisode.number <=
+            item.freeVolumeCount * 5 + item.previewEpisodeCount
+              ? "free"
+              : "locked",
+        }
+      : null,
+  };
+}
+
 export class PrismaReaderRepository implements ReaderRepository {
+  private facetCache:
+    | { expiresAt: number; value: SeriesFacets }
+    | undefined;
+  private facetLoad: Promise<SeriesFacets> | undefined;
+
   constructor(private readonly prisma: PrismaClient) {}
 
   async listSeries(query: SeriesListQuery): Promise<SeriesListResponse> {
@@ -30,94 +107,123 @@ export class PrismaReaderRepository implements ReaderRepository {
       ...(query.weekday ? { weekday: query.weekday } : {}),
     };
     const skip = (query.page - 1) * query.pageSize;
-    const [series, total, genres, weekdays] = await this.prisma.$transaction([
-      this.prisma.series.findMany({
-      where,
-      skip,
-      take: query.pageSize,
-      orderBy: [
-        { coverUrl: { sort: "asc", nulls: "last" } },
-        { status: "asc" },
-        { createdAt: "desc" },
-        { id: "desc" },
-      ],
-      include: {
-        author: true,
-        seasons: {
-          select: {
-            status: true,
-            _count: { select: { episodes: true } },
-            episodes: {
-              orderBy: { publishedAt: "desc" },
-              take: 1,
-            },
-          },
-        },
-      },
-      }),
-      this.prisma.series.count({ where }),
-      this.prisma.series.findMany({
-        select: { genre: true },
-        distinct: ["genre"],
-        orderBy: { genre: "asc" },
-      }),
-      this.prisma.series.findMany({
-        select: { weekday: true },
-        distinct: ["weekday"],
-      }),
+    const [[coveredCount, total], facets] = await Promise.all([
+      this.prisma.$transaction([
+        this.prisma.series.count({
+          where: { ...where, coverUrl: { not: null } },
+        }),
+        this.prisma.series.count({ where }),
+      ]),
+      this.loadFacets(),
     ]);
+    const coveredTake = Math.min(
+      query.pageSize,
+      Math.max(0, coveredCount - skip),
+    );
+    const covered =
+      coveredTake > 0
+        ? await this.prisma.series.findMany({
+            where: { ...where, coverUrl: { not: null } },
+            skip,
+            take: coveredTake,
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            include: seriesSummaryInclude,
+          })
+        : [];
+    const uncoveredTake = query.pageSize - covered.length;
+    const uncovered =
+      uncoveredTake > 0 && coveredCount < total
+        ? await this.prisma.series.findMany({
+            where: { ...where, coverUrl: null },
+            skip: Math.max(0, skip - coveredCount),
+            take: uncoveredTake,
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            include: seriesSummaryInclude,
+          })
+        : [];
+    const series = [...covered, ...uncovered];
 
     return {
-      items: series.map((item) => {
-        const episodes = item.seasons.flatMap((season) => season.episodes);
-        const latestEpisode = [...episodes].sort(
-          (left, right) =>
-            right.publishedAt.getTime() - left.publishedAt.getTime(),
-        )[0];
-
-        return {
-          id: item.id,
-          slug: item.slug,
-          title: item.title,
-          synopsis: item.synopsis,
-          genre: item.genre,
-          weekday: WeekdaySchema.parse(item.weekday),
-          freeVolumeCount: item.freeVolumeCount,
-          previewEpisodeCount: item.previewEpisodeCount,
-          coverUrl: item.coverUrl,
-          status: item.status === "completed" ? "completed" : "ongoing",
-          author: { name: item.author.name },
-          episodeCount: item.seasons.reduce(
-            (count, season) => count + season._count.episodes,
-            0,
-          ),
-          completedSeasonCount: item.seasons.filter(
-            (season) => season.status === "completed",
-          ).length,
-          latestEpisode: latestEpisode
-            ? {
-                id: latestEpisode.id,
-                number: latestEpisode.number,
-                title: latestEpisode.title,
-                publishedAt: latestEpisode.publishedAt.toISOString(),
-                volumeNumber: Math.ceil(latestEpisode.number / 5),
-                access:
-                  latestEpisode.number <=
-                    item.freeVolumeCount * 5 + item.previewEpisodeCount
-                    ? "free"
-                    : "locked",
-              }
-            : null,
-        };
-      }),
+      items: series.map(toSeriesSummary),
       page: query.page,
       nextPage: skip + series.length < total ? query.page + 1 : null,
       total,
-      facets: {
-        genres: genres.map((item) => item.genre),
-        weekdays: weekdays.map((item) => WeekdaySchema.parse(item.weekday)),
-      },
+      facets,
     };
+  }
+
+  private async loadFacets(): Promise<SeriesFacets> {
+    const now = Date.now();
+    if (this.facetCache && this.facetCache.expiresAt > now) {
+      return this.facetCache.value;
+    }
+    if (!this.facetLoad) {
+      this.facetLoad = this.prisma
+        .$transaction([
+          this.prisma.series.findMany({
+            select: { genre: true },
+            distinct: ["genre"],
+            orderBy: { genre: "asc" },
+          }),
+          this.prisma.series.findMany({
+            select: { weekday: true },
+            distinct: ["weekday"],
+          }),
+        ])
+        .then(([genres, weekdays]) => {
+          const value: SeriesFacets = {
+            genres: genres.map((item) => item.genre),
+            weekdays: weekdays
+              .map((item) => WeekdaySchema.parse(item.weekday))
+              .sort(
+                (left, right) =>
+                  (WEEKDAY_ORDER.get(left) ?? 0) -
+                  (WEEKDAY_ORDER.get(right) ?? 0),
+              ),
+          };
+          this.facetCache = {
+            expiresAt: Date.now() + FACET_CACHE_MS,
+            value,
+          };
+          return value;
+        })
+        .finally(() => {
+          this.facetLoad = undefined;
+        });
+    }
+    return this.facetLoad;
+  }
+
+  async listRealtimeSeriesKeys(): Promise<
+    Array<{ slug: string; title: string }>
+  > {
+    const series = await this.prisma.series.findMany({
+      where: { coverUrl: { not: null } },
+      select: { slug: true, title: true },
+    });
+    return series;
+  }
+
+  async listRealtimeSeries(slugs?: string[]): Promise<SeriesSummary[]> {
+    if (slugs?.length === 0) return [];
+    const series = await this.prisma.series.findMany({
+      where: {
+        coverUrl: { not: null },
+        ...(slugs ? { slug: { in: slugs } } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: seriesSummaryInclude,
+    });
+    return series.map(toSeriesSummary);
+  }
+
+  async seriesExists(slug: string): Promise<boolean> {
+    return Boolean(
+      await this.prisma.series.findUnique({
+        where: { slug },
+        select: { id: true },
+      }),
+    );
   }
 
   async findSeriesBySlug(slug: string): Promise<SeriesDetail | null> {
@@ -184,9 +290,6 @@ export class PrismaReaderRepository implements ReaderRepository {
     const episode = await this.prisma.episode.findUnique({
       where: { id },
       include: {
-        pages: {
-          orderBy: { order: "asc" },
-        },
         season: {
           include: {
             series: true,
@@ -217,7 +320,7 @@ export class PrismaReaderRepository implements ReaderRepository {
       accessToken!.length <= 100 &&
       ((await this.prisma.order.count({
           where: {
-            requestKey: accessToken,
+            entitlementToken: accessToken,
             seasonId: episode.season.id,
             volumeNumber,
             status: { not: "canceled" },
@@ -234,6 +337,13 @@ export class PrismaReaderRepository implements ReaderRepository {
       : hasEntitlement
         ? "entitled"
         : "locked";
+    const pages =
+      accessState === "locked"
+        ? []
+        : await this.prisma.page.findMany({
+            where: { episodeId: episode.id },
+            orderBy: { order: "asc" },
+          });
 
     return {
       id: episode.id,
@@ -250,14 +360,11 @@ export class PrismaReaderRepository implements ReaderRepository {
         number: episode.season.number,
         title: episode.season.title,
       },
-      pages:
-        accessState === "locked"
-          ? []
-          : episode.pages.map((page) => ({
-              id: page.id,
-              order: page.order,
-              imageUrl: page.imageUrl,
-            })),
+      pages: pages.map((page) => ({
+        id: page.id,
+        order: page.order,
+        imageUrl: page.imageUrl,
+      })),
       access: {
         state: accessState,
         volumeNumber,

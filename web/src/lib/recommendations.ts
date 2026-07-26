@@ -2,12 +2,17 @@ import type { FavoriteSeries } from "./favorites";
 import type { ReadingProgress } from "./reading-progress";
 import type { SeriesSummary } from "./reader-types";
 
+export type RecommendationSeries = Pick<
+  SeriesSummary,
+  "id" | "slug" | "title" | "genre" | "coverUrl" | "status" | "author"
+>;
+
 export type RecommendationShelf = {
   id: string;
   eyebrow: string;
   title: string;
   description: string;
-  items: SeriesSummary[];
+  items: RecommendationSeries[];
 };
 
 const genreCopy: Record<string, string> = {
@@ -18,6 +23,30 @@ const genreCopy: Record<string, string> = {
   미스터리: "다음 장면을 추리하게 되는 이야기",
   스포츠: "함께 뛰고 응원하고 싶은 이야기",
 };
+
+const discoveryGroups = [
+  {
+    id: "worlds-and-mysteries",
+    eyebrow: "Worlds & mysteries",
+    title: "새로운 세계와 수수께끼",
+    description: "판타지와 미스터리 작품을 함께 둘러보세요.",
+    genres: ["판타지", "미스터리"],
+  },
+  {
+    id: "romance-and-daily-life",
+    eyebrow: "Romance & daily life",
+    title: "설렘과 다정한 하루",
+    description: "로맨스와 일상 작품을 한 레일에 모았어요.",
+    genres: ["로맨스", "일상"],
+  },
+  {
+    id: "action-and-sports",
+    eyebrow: "Action & sports",
+    title: "속도감과 뜨거운 승부",
+    description: "액션과 스포츠 작품을 이어서 만나보세요.",
+    genres: ["액션", "스포츠"],
+  },
+] as const;
 
 function genreTokens(genre: string) {
   return new Set(
@@ -38,7 +67,10 @@ function genreAffinity(left: string, right: string) {
   return overlap / Math.max(leftTokens.size, rightTokens.size, 1);
 }
 
-function byCoverThenTitle(left: SeriesSummary, right: SeriesSummary) {
+function byCoverThenTitle(
+  left: RecommendationSeries,
+  right: RecommendationSeries,
+) {
   if (Boolean(left.coverUrl) !== Boolean(right.coverUrl)) {
     return left.coverUrl ? -1 : 1;
   }
@@ -46,9 +78,9 @@ function byCoverThenTitle(left: SeriesSummary, right: SeriesSummary) {
 }
 
 function recommendationScore(
-  candidate: SeriesSummary,
+  candidate: RecommendationSeries,
   favoriteSeeds: FavoriteSeries[],
-  readingSeeds: SeriesSummary[],
+  readingSeeds: RecommendationSeries[],
 ) {
   const favoriteScore = favoriteSeeds.reduce((score, seed) => {
     const affinity = genreAffinity(candidate.genre, seed.genre);
@@ -66,9 +98,9 @@ function recommendationScore(
 }
 
 function personalizedShelf(
-  candidates: SeriesSummary[],
+  candidates: RecommendationSeries[],
   favoriteSeeds: FavoriteSeries[],
-  readingSeeds: SeriesSummary[],
+  readingSeeds: RecommendationSeries[],
 ): RecommendationShelf | null {
   const latestFavorite = [...favoriteSeeds].sort(
     (left, right) => Date.parse(right.addedAt) - Date.parse(left.addedAt),
@@ -83,11 +115,11 @@ function personalizedShelf(
       score: recommendationScore(series, favoriteSeeds, readingSeeds),
       anchorAffinity: genreAffinity(series.genre, anchorGenre),
     }))
-    .filter(({ score, anchorAffinity }) => score > 0 && anchorAffinity > 0)
+    .filter(({ score }) => score > 0)
     .sort(
       (left, right) =>
-        right.score - left.score ||
         right.anchorAffinity - left.anchorAffinity ||
+        right.score - left.score ||
         byCoverThenTitle(left.series, right.series),
     )
     .slice(0, 8)
@@ -101,13 +133,13 @@ function personalizedShelf(
     title: latestFavorite
       ? `〈${anchorTitle}〉을 찜한 당신을 위해`
       : `〈${anchorTitle}〉을 읽은 당신을 위해`,
-    description: `${anchorGenre} 취향과 비슷한 작품을 골랐어요.`,
+    description: `${anchorGenre} 취향과 가까운 작품부터 먼저 보여드려요.`,
     items: ranked,
   };
 }
 
 function genreShelves(
-  candidates: SeriesSummary[],
+  candidates: RecommendationSeries[],
   preferredGenres: string[],
   limit: number,
 ) {
@@ -157,8 +189,35 @@ function genreShelves(
     .slice(0, limit);
 }
 
+function discoveryShelves(candidates: RecommendationSeries[]) {
+  const shelves = discoveryGroups
+    .map((group): RecommendationShelf | null => {
+      const items = candidates
+        .filter((series) =>
+          group.genres.some(
+            (genre) => genreAffinity(series.genre, genre) > 0,
+          ),
+        )
+        .sort(byCoverThenTitle)
+        .slice(0, 10);
+      if (items.length < 2) return null;
+      return {
+        id: `discover-${group.id}`,
+        eyebrow: group.eyebrow,
+        title: group.title,
+        description: group.description,
+        items,
+      };
+    })
+    .filter((shelf): shelf is RecommendationShelf => shelf !== null);
+
+  return shelves.length
+    ? shelves
+    : genreShelves(candidates, [], 3);
+}
+
 export function buildRecommendationShelves(
-  series: SeriesSummary[],
+  series: RecommendationSeries[],
   favorites: FavoriteSeries[],
   progressStore: Record<string, ReadingProgress>,
 ): RecommendationShelf[] {
@@ -177,7 +236,7 @@ export function buildRecommendationShelves(
 
   const readingSeeds = [...latestProgressBySeries.keys()]
     .map((slug) => seriesBySlug.get(slug))
-    .filter((item): item is SeriesSummary => Boolean(item));
+    .filter((item): item is RecommendationSeries => Boolean(item));
   const excludedSlugs = new Set([
     ...favorites.map((favorite) => favorite.slug),
     ...latestProgressBySeries.keys(),
@@ -196,6 +255,10 @@ export function buildRecommendationShelves(
     favorites,
     readingSeeds,
   );
+  if (!personalized && !preferredGenres.length) {
+    return discoveryShelves(candidates);
+  }
+
   const shelves = genreShelves(
     candidates,
     preferredGenres.filter(

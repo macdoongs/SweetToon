@@ -39,6 +39,10 @@ type Page = EpisodeReader["pages"][number];
 const SETTINGS_KEY = "sweettoon:reader-settings";
 const READER_CHROME_HIDE_DELAY_MS = 2400;
 
+function isExternalImage(url: string) {
+  return /^https?:\/\//i.test(url);
+}
+
 function loadSettings(): {
   mode: ReaderMode;
   scale: ScaleType;
@@ -137,7 +141,19 @@ export function EpisodeReaderPage({
   const chromeHideTimer = useRef<number | null>(null);
   const lastScrollY = useRef(0);
   const lastSavedPercent = useRef(-10);
-  const restoredEpisode = useRef<string | null>(null);
+  const restoredProgressKey = useRef<string | null>(null);
+  const suppressDoubleProgressSave = useRef(false);
+  const suppressWebtoonProgressSave = useRef(false);
+  const requestedDimensionPageIds = useRef(new Set<string>());
+  const readerMounted = useRef(true);
+  const progressRestorationKey = episode ? `${episode.id}:${mode}` : null;
+
+  useEffect(() => {
+    readerMounted.current = true;
+    return () => {
+      readerMounted.current = false;
+    };
+  }, []);
 
   const retry = useCallback(() => {
     setError(null);
@@ -291,6 +307,38 @@ export function EpisodeReaderPage({
 
   useEffect(() => {
     if (mode !== "webtoon") return;
+    const allowProgressSave = () => {
+      suppressWebtoonProgressSave.current = false;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        [
+          "ArrowDown",
+          "ArrowUp",
+          "End",
+          "Home",
+          "PageDown",
+          "PageUp",
+          " ",
+        ].includes(event.key)
+      ) {
+        allowProgressSave();
+      }
+    };
+    window.addEventListener("wheel", allowProgressSave, { passive: true });
+    window.addEventListener("touchmove", allowProgressSave, {
+      passive: true,
+    });
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("wheel", allowProgressSave);
+      window.removeEventListener("touchmove", allowProgressSave);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "webtoon") return;
     const updateProgress = () => {
       const scrollable =
         document.documentElement.scrollHeight - window.innerHeight;
@@ -305,7 +353,8 @@ export function EpisodeReaderPage({
       if (
         episode &&
         episode.access.state !== "locked" &&
-        (restoredEpisode.current === episode.id ||
+        !suppressWebtoonProgressSave.current &&
+        (restoredProgressKey.current === progressRestorationKey ||
           !getEpisodeProgress(episode.id)) &&
         (Math.abs(nextProgress - lastSavedPercent.current) >= 5 ||
           nextProgress === 100)
@@ -338,14 +387,17 @@ export function EpisodeReaderPage({
       window.removeEventListener("scroll", updateProgress);
       window.removeEventListener("resize", updateProgress);
     };
-  }, [episode, mode]);
+  }, [episode, mode, progressRestorationKey]);
 
   useEffect(() => {
     if (!episode || mode !== "double") return;
+    const requestedPageIds = requestedDimensionPageIds.current;
     for (const page of episode.pages) {
-      if (dimensions[page.id]) continue;
+      if (requestedPageIds.has(page.id)) continue;
+      requestedPageIds.add(page.id);
       const image = new window.Image();
       image.onload = () => {
+        if (!readerMounted.current) return;
         setDimensions((current) => ({
           ...current,
           [page.id]: {
@@ -354,9 +406,12 @@ export function EpisodeReaderPage({
           },
         }));
       };
+      image.onerror = () => {
+        requestedPageIds.delete(page.id);
+      };
       image.src = page.imageUrl;
     }
-  }, [dimensions, episode, mode]);
+  }, [episode, mode]);
 
   const spreads = useMemo(
     () => buildSpreads(episode?.pages ?? [], dimensions),
@@ -450,6 +505,13 @@ export function EpisodeReaderPage({
     ) {
       return;
     }
+    if (
+      restoredProgressKey.current !== progressRestorationKey &&
+      getEpisodeProgress(episode.id)
+    ) {
+      return;
+    }
+    if (suppressDoubleProgressSave.current) return;
     const currentPage = spreads[spreadIndex]?.[0];
     const nextProgress = Math.round(
       ((spreadIndex + 1) / spreads.length) * 100,
@@ -464,19 +526,20 @@ export function EpisodeReaderPage({
       completed: nextProgress >= 100,
       updatedAt: new Date().toISOString(),
     });
-  }, [episode, mode, spreadIndex, spreads]);
+  }, [episode, mode, progressRestorationKey, spreadIndex, spreads]);
 
   useEffect(() => {
     if (
       !episode ||
       episode.access.state === "locked" ||
-      restoredEpisode.current === episode.id
+      !progressRestorationKey ||
+      restoredProgressKey.current === progressRestorationKey
     ) {
       return;
     }
     const saved = getEpisodeProgress(episode.id);
     if (!saved || saved.completed) {
-      restoredEpisode.current = episode.id;
+      restoredProgressKey.current = progressRestorationKey;
       return;
     }
     if (mode === "double" && spreads.length > 0) {
@@ -484,20 +547,24 @@ export function EpisodeReaderPage({
         spread.some((page) => page.order === saved.pageOrder),
       );
       const frame = requestAnimationFrame(() => {
-        if (index >= 0) setSpreadIndex(index);
-        restoredEpisode.current = episode.id;
+        if (index >= 0) {
+          suppressDoubleProgressSave.current = true;
+          setSpreadIndex(index);
+        }
+        restoredProgressKey.current = progressRestorationKey;
       });
       return () => cancelAnimationFrame(frame);
     } else if (mode === "webtoon") {
       const frame = requestAnimationFrame(() => {
+        suppressWebtoonProgressSave.current = true;
         document
           .getElementById(`page-${saved.pageOrder}`)
           ?.scrollIntoView({ block: "start" });
-        restoredEpisode.current = episode.id;
+        restoredProgressKey.current = progressRestorationKey;
       });
       return () => cancelAnimationFrame(frame);
     }
-  }, [episode, mode, spreads]);
+  }, [episode, mode, progressRestorationKey, spreads]);
 
   const bookmark = useCallback(() => {
     if (!episode || episode.access.state === "locked") return;
@@ -528,6 +595,7 @@ export function EpisodeReaderPage({
 
   const goToSpread = useCallback(
     (index: number) => {
+      suppressDoubleProgressSave.current = false;
       setSpreadIndex(Math.max(0, Math.min(spreads.length - 1, index)));
     },
     [spreads.length],
@@ -602,7 +670,7 @@ export function EpisodeReaderPage({
       <header className="reader-toolbar">
         <Link
           className="reader-toolbar__back"
-          href={`/series/${episode.series.slug}`}
+          href={`/series/${encodeURIComponent(episode.series.slug)}`}
           aria-label="작품으로 돌아가기"
         >
           ←
@@ -623,11 +691,17 @@ export function EpisodeReaderPage({
         <span className="reader-toolbar__progress">{readerProgress}%</span>
       </header>
 
-      <nav className="reader-controls" aria-label="뷰어 도구">
+      <nav
+        className="horizontal-scroll-surface reader-controls"
+        aria-label="뷰어 도구"
+      >
         <div role="group" aria-label="읽기 모드">
           <button
             aria-pressed={mode === "webtoon"}
             onClick={() => {
+              if (mode === "webtoon") return;
+              restoredProgressKey.current = null;
+              suppressWebtoonProgressSave.current = true;
               setMode("webtoon");
               setSpreadIndex(0);
             }}
@@ -637,6 +711,8 @@ export function EpisodeReaderPage({
           <button
             aria-pressed={mode === "double"}
             onClick={() => {
+              if (mode === "double") return;
+              restoredProgressKey.current = null;
               setMode("double");
               window.scrollTo({ top: 0 });
             }}
@@ -783,7 +859,7 @@ export function EpisodeReaderPage({
           </Link>
           <Link
             className="reader-finish__back"
-            href={`/series/${episode.series.slug}#episodes`}
+            href={`/series/${encodeURIComponent(episode.series.slug)}#episodes`}
           >
             무료 회차 목록으로
           </Link>
@@ -793,7 +869,7 @@ export function EpisodeReaderPage({
           <h2>아직 등록된 원고가 없어요.</h2>
           <Link
             className="button button--light"
-            href={`/series/${episode.series.slug}`}
+            href={`/series/${encodeURIComponent(episode.series.slug)}`}
           >
             에피소드 목록으로
           </Link>
@@ -808,9 +884,10 @@ export function EpisodeReaderPage({
               <Image
                 alt={`${episode.title} ${page.order}번째 컷`}
                 height={1200}
-                priority={page.order <= 2}
+                preload={page.order <= 2}
+                sizes="min(100vw, 800px)"
                 src={page.imageUrl}
-                unoptimized
+                unoptimized={isExternalImage(page.imageUrl)}
                 width={800}
               />
             </div>
@@ -835,15 +912,16 @@ export function EpisodeReaderPage({
           >
             ←
           </button>
-          <div className="reader-paged__spread">
+          <div className="horizontal-scroll-surface reader-paged__spread">
             {(spreads[spreadIndex] ?? []).map((page) => (
               <Image
                 alt={`${episode.title} ${page.order}번째 페이지`}
                 height={1200}
                 key={page.id}
-                priority
+                preload
+                sizes="(max-width: 700px) calc(100vw - 56px), min(46vw, 800px)"
                 src={page.imageUrl}
-                unoptimized
+                unoptimized={isExternalImage(page.imageUrl)}
                 width={800}
               />
             ))}
@@ -880,6 +958,7 @@ export function EpisodeReaderPage({
                 key={page.id}
                 onClick={() => {
                   if (mode === "webtoon") {
+                    suppressWebtoonProgressSave.current = false;
                     document
                       .getElementById(`page-${page.order}`)
                       ?.scrollIntoView({ behavior: "smooth" });
@@ -895,8 +974,9 @@ export function EpisodeReaderPage({
                 <Image
                   alt={`${page.order}쪽 미리보기`}
                   height={180}
+                  sizes="120px"
                   src={page.imageUrl}
-                  unoptimized
+                  unoptimized={isExternalImage(page.imageUrl)}
                   width={120}
                 />
                 <span>{page.order}</span>
@@ -923,7 +1003,7 @@ export function EpisodeReaderPage({
             {episode.navigation.previousEpisodeId ? (
               <Link
                 className="button button--dark-ghost"
-                href={`/read/${episode.navigation.previousEpisodeId}`}
+                href={`/read/${encodeURIComponent(episode.navigation.previousEpisodeId)}`}
               >
                 ← 이전 화
               </Link>
@@ -933,14 +1013,14 @@ export function EpisodeReaderPage({
             {episode.navigation.nextEpisodeId ? (
               <Link
                 className="button button--light"
-                href={`/read/${episode.navigation.nextEpisodeId}`}
+                href={`/read/${encodeURIComponent(episode.navigation.nextEpisodeId)}`}
               >
                 다음 화 이어보기 →
               </Link>
             ) : (
               <Link
                 className="button button--light"
-                href={`/series/${episode.series.slug}#edition`}
+                href={`/series/${encodeURIComponent(episode.series.slug)}#edition`}
               >
                 소장본 알아보기 →
               </Link>
@@ -948,7 +1028,7 @@ export function EpisodeReaderPage({
           </div>
           <Link
             className="reader-finish__back"
-            href={`/series/${episode.series.slug}`}
+            href={`/series/${encodeURIComponent(episode.series.slug)}`}
           >
             에피소드 목록으로 돌아가기
           </Link>

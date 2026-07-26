@@ -47,13 +47,29 @@ const COVER_ASSETS = [
   ["neon-blade", "neon-blade.webp"],
   ["rooftop-garden", "rooftop-garden.webp"],
   ["catalog-01", "catalog-01.webp"],
+  ["catalog-02", "catalog-02.webp"],
+  ["catalog-03", "catalog-03.webp"],
   ["catalog-04", "catalog-04.webp"],
+  ["catalog-05", "catalog-05.webp"],
+  ["catalog-06", "catalog-06.webp"],
   ["catalog-07", "catalog-07.webp"],
+  ["catalog-08", "catalog-08.webp"],
+  ["catalog-09", "catalog-09.webp"],
   ["catalog-10", "catalog-10.webp"],
+  ["catalog-11", "catalog-11.webp"],
+  ["catalog-12", "catalog-12.webp"],
   ["catalog-13", "catalog-13.webp"],
+  ["catalog-14", "catalog-14.webp"],
+  ["catalog-15", "catalog-15.webp"],
   ["catalog-16", "catalog-16.webp"],
+  ["catalog-17", "catalog-17.webp"],
+  ["catalog-18", "catalog-18.webp"],
   ["catalog-19", "catalog-19.webp"],
+  ["catalog-20", "catalog-20.webp"],
+  ["catalog-21", "catalog-21.webp"],
   ["catalog-22", "catalog-22.webp"],
+  ["catalog-23", "catalog-23.webp"],
+  ["catalog-24", "catalog-24.webp"],
 ] as const;
 
 function writeShowcasePages() {
@@ -292,40 +308,76 @@ async function seedSeriesSpecs(
             ),
           },
         });
-        for (
-          let pageOrder = 1;
-          pageOrder <= seasonSpec.pagesPerEp;
-          pageOrder++
-        ) {
-          const rel = path.join(
-            spec.slug,
-            `s${seasonSpec.number}`,
-            `ep${String(ep).padStart(3, "0")}`,
-            `${String(pageOrder).padStart(3, "0")}.svg`,
-          );
-          await prisma.page.upsert({
-            where: {
-              episodeId_order: {
-                episodeId: episode.id,
-                order: pageOrder,
-              },
-            },
-            update: {},
-            create: {
+        const existingPageOrders = new Set(
+          (
+            await prisma.page.findMany({
+              where: { episodeId: episode.id },
+              select: { order: true },
+            })
+          ).map((page) => page.order),
+        );
+        const pages = Array.from(
+          { length: seasonSpec.pagesPerEp },
+          (_, pageIndex) => {
+            const pageOrder = pageIndex + 1;
+            if (existingPageOrders.has(pageOrder)) return null;
+            const rel = path.join(
+              spec.slug,
+              `s${seasonSpec.number}`,
+              `ep${String(ep).padStart(3, "0")}`,
+              `${String(pageOrder).padStart(3, "0")}.svg`,
+            );
+            return {
               episodeId: episode.id,
               order: pageOrder,
               imageUrl: writeCutSvg(
                 rel,
                 spec.title,
                 `${ep}화 · ${pageOrder} / ${seasonSpec.pagesPerEp}`,
-                (spec.hue + (pageOrder - 1) * 12) % 360,
+                (spec.hue + pageIndex * 12) % 360,
               ),
-            },
+            };
+          },
+        ).filter((page) => page !== null);
+        if (pages.length > 0) {
+          await prisma.page.createMany({
+            data: pages,
+            skipDuplicates: true,
           });
         }
       }
     }
   }
+}
+
+async function isSeriesSpecComplete(spec: SeriesSpec): Promise<boolean> {
+  const series = await prisma.series.findUnique({
+    where: { slug: spec.slug },
+    select: { id: true },
+  });
+  if (!series) return false;
+
+  for (const seasonSpec of spec.seasons) {
+    const season = await prisma.season.findUnique({
+      where: {
+        seriesId_number: {
+          seriesId: series.id,
+          number: seasonSpec.number,
+        },
+      },
+      select: {
+        id: true,
+        _count: { select: { episodes: true } },
+      },
+    });
+    if (!season || season._count.episodes < seasonSpec.episodes) return false;
+
+    const pageCount = await prisma.page.count({
+      where: { episode: { seasonId: season.id } },
+    });
+    if (pageCount < seasonSpec.episodes * seasonSpec.pagesPerEp) return false;
+  }
+  return true;
 }
 
 function indexOfWeekday(weekday: SeriesSpec["weekday"]) {
@@ -358,7 +410,11 @@ async function main() {
         },
       });
     }
-    await seedSeriesSpecs([...SERIES, ...CATALOG_SERIES], coverUrls);
+    const incompleteSpecs: SeriesSpec[] = [];
+    for (const spec of [...SERIES, ...CATALOG_SERIES]) {
+      if (!(await isSeriesSpecComplete(spec))) incompleteSpecs.push(spec);
+    }
+    await seedSeriesSpecs(incompleteSpecs, coverUrls);
     const showcaseEpisode = await prisma.episode.findFirst({
       where: {
         number: 1,
@@ -385,7 +441,7 @@ async function main() {
       }
     }
     console.log(
-      `Seed 데이터 유지: 기존 작품 ${existingSeries}개, 표지와 대표 1화를 갱신했습니다.`,
+      `Seed 데이터 유지: 기존 작품 ${existingSeries}개, 부족한 작품 ${incompleteSpecs.length}개를 백필하고 표지와 대표 1화를 갱신했습니다.`,
     );
     return;
   }
@@ -438,29 +494,32 @@ async function main() {
           },
         });
 
-        for (let pg = 1; pg <= seasonSpec.pagesPerEp; pg++) {
-          const isShowcasePage =
-            spec.slug === "moonlight-laundry" &&
-            seasonSpec.number === 1 &&
-            ep === 1;
-          const rel = path.join(
-            spec.slug,
-            `s${seasonSpec.number}`,
-            `ep${String(ep).padStart(3, "0")}`,
-            `${String(pg).padStart(3, "0")}.svg`,
-          );
-          const imageUrl = isShowcasePage
-            ? showcasePageUrls[pg - 1]
-            : writeCutSvg(
-                rel,
-                spec.title,
-                `시즌${seasonSpec.number} · ${ep}화 · ${pg}컷`,
-                spec.hue,
-              );
-          await prisma.page.create({
-            data: { episodeId: episode.id, order: pg, imageUrl },
-          });
-        }
+        const pages = Array.from(
+          { length: seasonSpec.pagesPerEp },
+          (_, pageIndex) => {
+            const pageOrder = pageIndex + 1;
+            const isShowcasePage =
+              spec.slug === "moonlight-laundry" &&
+              seasonSpec.number === 1 &&
+              ep === 1;
+            const rel = path.join(
+              spec.slug,
+              `s${seasonSpec.number}`,
+              `ep${String(ep).padStart(3, "0")}`,
+              `${String(pageOrder).padStart(3, "0")}.svg`,
+            );
+            const imageUrl = isShowcasePage
+              ? showcasePageUrls[pageIndex]
+              : writeCutSvg(
+                  rel,
+                  spec.title,
+                  `시즌${seasonSpec.number} · ${ep}화 · ${pageOrder}컷`,
+                  spec.hue,
+                );
+            return { episodeId: episode.id, order: pageOrder, imageUrl };
+          },
+        );
+        await prisma.page.createMany({ data: pages });
       }
     }
   }
@@ -468,9 +527,21 @@ async function main() {
   await seedSeriesSpecs(CATALOG_SERIES, coverUrls);
 
   // 샘플 주문 — 다양한 상태로 시드해 목록/타임라인 UI를 바로 확인 가능하게
-  const laundry = await prisma.series.findFirstOrThrow({ where: { title: "달빛 세탁소" }, include: { seasons: true } });
-  const store = await prisma.series.findFirstOrThrow({ where: { title: "골목 끝 편의점" }, include: { seasons: true } });
-  const blade = await prisma.series.findFirstOrThrow({ where: { title: "네온 검객" }, include: { seasons: true } });
+  const orderedSeasons = {
+    orderBy: { number: "asc" as const },
+  };
+  const laundry = await prisma.series.findFirstOrThrow({
+    where: { title: "달빛 세탁소" },
+    include: { seasons: orderedSeasons },
+  });
+  const store = await prisma.series.findFirstOrThrow({
+    where: { title: "골목 끝 편의점" },
+    include: { seasons: orderedSeasons },
+  });
+  const blade = await prisma.series.findFirstOrThrow({
+    where: { title: "네온 검객" },
+    include: { seasons: orderedSeasons },
+  });
 
   const ordersSpec = [
     { series: laundry, ordererName: "김소장", ordererType: "reader", coverType: "hardcover", bookSize: "A5", quantity: 1, status: "completed", memo: "1시즌 정주행 기념 소장!" },

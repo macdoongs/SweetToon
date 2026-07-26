@@ -1,5 +1,7 @@
 import os from "node:os";
 import path from "node:path";
+import type { AddressInfo } from "node:net";
+import http from "node:http";
 import request from "supertest";
 import { createApp } from "../app";
 import type { OrderDetail } from "../contracts/order";
@@ -41,6 +43,10 @@ const order: OrderDetail = {
   },
   events: [],
 };
+const receipt = {
+  ...order,
+  entitlementToken: "37c4af96-e1ff-48f2-a0b9-909826823f05",
+};
 
 function makeReaderRepository(): ReaderRepository {
   return {
@@ -51,6 +57,9 @@ function makeReaderRepository(): ReaderRepository {
       total: 0,
       facets: { genres: [], weekdays: [] },
     }),
+    listRealtimeSeriesKeys: jest.fn().mockResolvedValue([]),
+    listRealtimeSeries: jest.fn().mockResolvedValue([]),
+    seriesExists: jest.fn().mockResolvedValue(false),
     findSeriesBySlug: jest.fn().mockResolvedValue(null),
     findEpisodeById: jest.fn().mockResolvedValue(null),
   };
@@ -78,9 +87,12 @@ function makeService(): jest.Mocked<OrderUseCases> {
         title: "얼룩의 계절",
       },
     }),
-    create: jest.fn().mockResolvedValue(order),
+    create: jest.fn().mockResolvedValue(receipt),
     get: jest.fn().mockResolvedValue(order),
-    list: jest.fn().mockResolvedValue({ items: [order] }),
+    list: jest.fn().mockResolvedValue({
+      items: [order],
+      nextCursor: null,
+    }),
     transition: jest.fn().mockResolvedValue({
       ...order,
       status: "shipped",
@@ -90,6 +102,7 @@ function makeService(): jest.Mocked<OrderUseCases> {
 
 function makeRealtime(): jest.Mocked<RealtimeService> {
   return {
+    checkHealth: jest.fn().mockResolvedValue(undefined),
     publishOrder: jest.fn().mockResolvedValue(undefined),
     subscribeOrder: jest.fn().mockResolvedValue(async () => undefined),
     heartbeatSeries: jest.fn().mockResolvedValue(0),
@@ -137,7 +150,8 @@ describe("order routes", () => {
   });
 
   it("creates and lists persistent orders through the use case boundary", async () => {
-    const app = makeApp();
+    const service = makeService();
+    const app = makeApp(service);
     const created = await request(app)
       .post("/api/orders")
       .send({
@@ -155,11 +169,35 @@ describe("order routes", () => {
     const listed = await request(app).get("/api/orders").expect(200);
 
     expect(created.body.id).toBe(order.id);
+    expect(created.body.entitlementToken).toBe(receipt.entitlementToken);
     expect(listed.body.items[0].id).toBe(order.id);
     expect(created.body).not.toHaveProperty("ordererName");
     expect(created.body).not.toHaveProperty("memo");
     expect(listed.body.items[0]).not.toHaveProperty("ordererName");
     expect(listed.body.items[0]).not.toHaveProperty("memo");
+    expect(listed.body.items[0]).not.toHaveProperty("entitlementToken");
+    expect(listed.body.items[0]).not.toHaveProperty("events");
+    expect(service.list).toHaveBeenCalledWith({ limit: 20 });
+  });
+
+  it("passes a bounded cursor page to the order use case", async () => {
+    const service = makeService();
+    await request(makeApp(service))
+      .get(`/api/orders?cursor=${order.id}&limit=1`)
+      .expect(200);
+
+    expect(service.list).toHaveBeenCalledWith({
+      cursor: order.id,
+      limit: 1,
+    });
+  });
+
+  it("rejects an invalid order-list cursor", async () => {
+    const response = await request(makeApp())
+      .get("/api/orders?cursor=not-a-cuid")
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_ORDER_LIST_QUERY");
   });
 
   it("converts use case errors into user-facing API errors", async () => {
@@ -207,5 +245,45 @@ describe("order routes", () => {
       .expect(400);
 
     expect(response.body.code).toBe("INVALID_ORDER_STATUS");
+  });
+
+  it("releases a delayed realtime subscription after the client disconnects", async () => {
+    const realtime = makeRealtime();
+    let resolveSubscription:
+      | ((unsubscribe: () => Promise<void>) => void)
+      | undefined;
+    const subscriptionStarted = new Promise<void>((resolve) => {
+      realtime.subscribeOrder.mockImplementation(
+        () =>
+          new Promise((resolveSubscribe) => {
+            resolveSubscription = resolveSubscribe;
+            resolve();
+          }),
+      );
+    });
+    const unsubscribe = jest.fn().mockResolvedValue(undefined);
+    const server = makeApp(undefined, realtime).listen(0);
+
+    try {
+      const { port } = server.address() as AddressInfo;
+      const client = http.get(
+        `http://127.0.0.1:${port}/api/orders/${order.id}/events`,
+      );
+      client.on("error", () => undefined);
+
+      await subscriptionStarted;
+      client.destroy();
+      await new Promise<void>((resolve) => client.once("close", resolve));
+      resolveSubscription?.(unsubscribe);
+
+      for (let attempt = 0; attempt < 20 && !unsubscribe.mock.calls.length; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 });

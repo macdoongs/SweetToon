@@ -11,6 +11,7 @@ import {
 } from "@/lib/reading-progress";
 import { ErrorState, PageLoading } from "./reader-states";
 import { FavoriteButton } from "./favorite-button";
+import { DiscoverLink } from "./discover-link";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -143,7 +144,7 @@ export function SeriesDetailPage({
       <nav className="page-breadcrumb" aria-label="현재 위치">
         <Link href="/">홈</Link>
         <span aria-hidden="true">/</span>
-        <Link href="/#discover">작품</Link>
+        <DiscoverLink>작품</DiscoverLink>
         <span aria-hidden="true">/</span>
         <strong aria-current="page">{series.title}</strong>
       </nav>
@@ -187,7 +188,7 @@ export function SeriesDetailPage({
             {firstEpisode ? (
               <Link
                 className="button button--primary"
-                href={`/read/${firstEpisode.id}`}
+                href={`/read/${encodeURIComponent(firstEpisode.id)}`}
               >
                 첫 화부터 읽기
               </Link>
@@ -287,7 +288,7 @@ export function SeriesDetailPage({
                     <li key={episode.id}>
                       <Link
                         className="episode-list__item"
-                        href={`/read/${episode.id}`}
+                        href={`/read/${encodeURIComponent(episode.id)}`}
                       >
                         <span className="episode-list__number">
                           {String(episode.number).padStart(2, "0")}
@@ -305,7 +306,7 @@ export function SeriesDetailPage({
                               ? `${readingProgress[episode.id].percent}% 읽음`
                               : episode.access === "free"
                                 ? "무료"
-                                : "소장본 이용권"}
+                                : "캔디 1개 또는 소장본 이용권"}
                         </span>
                         <span className="episode-list__arrow">→</span>
                       </Link>

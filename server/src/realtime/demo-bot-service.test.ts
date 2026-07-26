@@ -91,6 +91,11 @@ function dependencies() {
       total: 1,
       facets: { genres: ["힐링"], weekdays: ["mon"] },
     }),
+    listRealtimeSeriesKeys: jest
+      .fn()
+      .mockResolvedValue([{ slug: summary.slug, title: summary.title }]),
+    listRealtimeSeries: jest.fn().mockResolvedValue([summary]),
+    seriesExists: jest.fn().mockResolvedValue(true),
     findSeriesBySlug: jest.fn().mockResolvedValue(detail),
     findEpisodeById: jest.fn().mockResolvedValue(null),
   };
@@ -99,12 +104,14 @@ function dependencies() {
     create: jest.fn(),
     createDemo: jest.fn().mockResolvedValue(demoOrder),
     get: jest.fn(),
-    list: jest.fn().mockResolvedValue({ items: [] }),
+    list: jest.fn().mockResolvedValue({ items: [], nextCursor: null }),
+    findActiveDemo: jest.fn().mockResolvedValue(null),
     transition: jest.fn(),
     pruneCompletedDemos: jest.fn().mockResolvedValue(undefined),
     clearDemos: jest.fn().mockResolvedValue(undefined),
   };
   const realtime: jest.Mocked<RealtimeService> = {
+    checkHealth: jest.fn().mockResolvedValue(undefined),
     publishOrder: jest.fn().mockResolvedValue(undefined),
     subscribeOrder: jest.fn(),
     heartbeatSeries: jest.fn().mockResolvedValue(1),
@@ -151,16 +158,9 @@ describe("DemoBotService", () => {
 
   it("only assigns virtual readers to series that have a thumbnail", async () => {
     const { readerRepository, orderService, realtime } = dependencies();
-    readerRepository.listSeries.mockResolvedValue({
-      items: [
-        { ...summary, slug: "without-cover", coverUrl: null },
-        summary,
-      ],
-      page: 1,
-      nextPage: null,
-      total: 2,
-      facets: { genres: ["힐링"], weekdays: ["mon"] },
-    });
+    readerRepository.listRealtimeSeriesKeys.mockResolvedValue([
+      { slug: summary.slug, title: summary.title },
+    ]);
     const bot = new DemoBotService(
       readerRepository,
       orderService,
@@ -177,6 +177,87 @@ describe("DemoBotService", () => {
     expect(
       realtime.heartbeatSeries.mock.calls.map(([slug]) => slug),
     ).toEqual(expect.arrayContaining([summary.slug]));
+    await bot.close();
+  });
+
+  it("rotates completed series and volume numbers between demo purchases", async () => {
+    const { readerRepository, orderService, realtime } = dependencies();
+    const secondSummary = {
+      ...summary,
+      id: "series-2",
+      slug: "corner-store",
+      title: "골목 끝 편의점",
+    };
+    const secondDetail: SeriesDetail = {
+      ...detail,
+      id: secondSummary.id,
+      slug: secondSummary.slug,
+      title: secondSummary.title,
+      seasons: [
+        {
+          ...detail.seasons[0],
+          id: "cmseason00000000000000002",
+          episodes: [
+            { ...detail.seasons[0].episodes[0], id: "episode-2", volumeNumber: 1 },
+            { ...detail.seasons[0].episodes[0], id: "episode-3", number: 6, volumeNumber: 2 },
+          ],
+        },
+      ],
+    };
+    readerRepository.listRealtimeSeriesKeys.mockResolvedValue([
+      { slug: summary.slug, title: summary.title },
+      { slug: secondSummary.slug, title: secondSummary.title },
+    ]);
+    readerRepository.findSeriesBySlug.mockImplementation(async (slug) =>
+      slug === secondSummary.slug ? secondDetail : detail,
+    );
+    orderService.findActiveDemo
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: demoOrder.id,
+        isDemo: true,
+        status: "pending",
+      })
+      .mockResolvedValueOnce({
+        id: demoOrder.id,
+        isDemo: true,
+        status: "processing",
+      })
+      .mockResolvedValueOnce({
+        id: demoOrder.id,
+        isDemo: true,
+        status: "shipped",
+      })
+      .mockResolvedValueOnce(null);
+    orderService.transition.mockImplementation(async (_id, input) => ({
+      ...demoOrder,
+      status: input.status,
+    }));
+    const bot = new DemoBotService(
+      readerRepository,
+      orderService,
+      realtime,
+      { available: true, autoStart: false, readerCount: 2, speed: "fast" },
+    );
+
+    await bot.update({ running: true });
+    for (let tick = 1; tick < 15; tick += 1) {
+      await bot.update({ readerCount: 2 });
+    }
+
+    expect(orderService.createDemo).toHaveBeenCalledTimes(2);
+    expect(orderService.createDemo.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        seasonId: detail.seasons[0].id,
+        volumeNumber: 1,
+      }),
+    );
+    expect(orderService.createDemo.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        seasonId: secondDetail.seasons[0].id,
+        volumeNumber: 2,
+      }),
+    );
     await bot.close();
   });
 

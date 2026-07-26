@@ -113,6 +113,15 @@ const episode: EpisodeReader = {
 function makeRepository(): jest.Mocked<ReaderRepository> {
   return {
     listSeries: jest.fn().mockResolvedValue(seriesList),
+    listRealtimeSeriesKeys: jest
+      .fn()
+      .mockResolvedValue(
+        seriesList.items.map(({ slug, title }) => ({ slug, title })),
+      ),
+    listRealtimeSeries: jest.fn().mockResolvedValue(seriesList.items),
+    seriesExists: jest
+      .fn()
+      .mockImplementation(async (slug) => slug === seriesDetail.slug),
     findSeriesBySlug: jest
       .fn()
       .mockImplementation(async (slug) =>
@@ -157,6 +166,22 @@ describe("reader routes", () => {
       .expect(400);
 
     expect(response.body.code).toBe("INVALID_SERIES_FILTER");
+  });
+
+  it("accepts a larger page for summary-only recommendation reads", async () => {
+    const repository = makeRepository();
+    const app = createApp({
+      readerRepository: repository,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+    });
+
+    await request(app).get("/api/series?pageSize=100").expect(200);
+
+    expect(repository.listSeries).toHaveBeenCalledWith({
+      filter: "all",
+      page: 1,
+      pageSize: 100,
+    });
   });
 
   it("returns a series with seasons and episodes", async () => {

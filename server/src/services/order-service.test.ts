@@ -1,6 +1,6 @@
 import type {
   CreateOrderRequest,
-  OrderDetail,
+  OrderReceipt,
 } from "../contracts/order";
 import type {
   PrintOrderResult,
@@ -43,7 +43,7 @@ const input: CreateOrderRequest = {
   memo: null,
 };
 
-function orderFixture(overrides: Partial<OrderDetail> = {}): OrderDetail {
+function orderFixture(overrides: Partial<OrderReceipt> = {}): OrderReceipt {
   return {
     id: "cmorder000000000000000001",
     isDemo: false,
@@ -76,12 +76,13 @@ function orderFixture(overrides: Partial<OrderDetail> = {}): OrderDetail {
         createdAt: "2026-07-24T00:00:00.000Z",
       },
     ],
+    entitlementToken: "37c4af96-e1ff-48f2-a0b9-909826823f05",
     ...overrides,
   };
 }
 
 function makeDependencies() {
-  let savedOrder: OrderDetail | null = null;
+  let savedOrder: OrderReceipt | null = null;
   const repository: jest.Mocked<OrderRepository> = {
     findOrderableSeason: jest.fn().mockResolvedValue(season),
     findByRequestKey: jest.fn().mockImplementation(async () => savedOrder),
@@ -100,7 +101,11 @@ function makeDependencies() {
     transitionStatus: jest.fn(),
     markCanceled: jest.fn().mockResolvedValue(undefined),
     findById: jest.fn().mockResolvedValue(null),
-    listOrders: jest.fn().mockResolvedValue({ items: [] }),
+    listOrders: jest.fn().mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    }),
+    findActiveDemoOrder: jest.fn().mockResolvedValue(null),
     pruneCompletedDemoOrders: jest.fn().mockResolvedValue(undefined),
     deleteDemoOrders: jest.fn().mockResolvedValue(undefined),
   };

@@ -5,8 +5,6 @@ import {
   SITE_NAME,
 } from "@/lib/site";
 
-export const dynamic = "force-dynamic";
-
 function escapeXml(value: string): string {
   return value
     .replaceAll("&", "&amp;")

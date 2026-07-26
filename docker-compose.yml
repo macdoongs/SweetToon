@@ -19,7 +19,11 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sweettoon -d sweettoon"]
+      test:
+        [
+          "CMD-SHELL",
+          'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"',
+        ]
       interval: 3s
       timeout: 3s
       retries: 15
@@ -27,6 +31,7 @@ services:
   migrate:
     build:
       context: ./server
+      target: migrate
     command: sh -c "npx prisma migrate deploy && npm run db:seed"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-sweettoon}:${POSTGRES_PASSWORD:-sweettoon}@db:5432/${POSTGRES_DB:-sweettoon}
@@ -40,6 +45,7 @@ services:
   server:
     build:
       context: ./server
+      target: runner
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-sweettoon}:${POSTGRES_PASSWORD:-sweettoon}@db:5432/${POSTGRES_DB:-sweettoon}
       PORT: 4000
@@ -63,7 +69,7 @@ services:
       API_SECURITY_MODE: ${API_SECURITY_MODE:-demo}
       STUDIO_API_KEY: ${STUDIO_API_KEY:-}
       OPERATIONS_API_KEY: ${OPERATIONS_API_KEY:-}
-      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET:-sweettoon-local-audit-hash-secret}
+      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET:-}
       MALWARE_SCANNER: ${MALWARE_SCANNER:-none}
       CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
@@ -82,7 +88,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://localhost:4000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 3s
       timeout: 3s
@@ -94,11 +100,12 @@ services:
       context: ./web
       args:
         API_INTERNAL_URL: http://server:4000
+        SITE_URL: ${SITE_URL:-http://localhost:3000}
     environment:
       HOSTNAME: 0.0.0.0
       PORT: 3000
       API_INTERNAL_URL: http://server:4000
-      SITE_URL: ${SITE_URL:-https://sweettoon.katsuranbo.com}
+      SITE_URL: ${SITE_URL:-http://localhost:3000}
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
@@ -110,7 +117,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 3s
       timeout: 3s

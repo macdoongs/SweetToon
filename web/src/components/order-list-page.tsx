@@ -1,9 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { formatKoreanDateTime } from "@/lib/date-time";
-import type { OrderDetail } from "@/lib/order-types";
+import type { OrderSummary } from "@/lib/order-types";
+import { DiscoverLink } from "./discover-link";
 
-const statusLabel: Record<OrderDetail["status"], string> = {
+const statusLabel: Record<OrderSummary["status"], string> = {
   pending: "접수",
   processing: "제작 중",
   shipped: "배송 중",
@@ -11,7 +12,7 @@ const statusLabel: Record<OrderDetail["status"], string> = {
   canceled: "취소",
 };
 
-export function OrderListPage({ orders }: { orders: OrderDetail[] }) {
+export function OrderListPage({ orders }: { orders: OrderSummary[] }) {
   return (
     <main className="orders-page">
       <nav className="page-breadcrumb" aria-label="현재 위치">
@@ -35,9 +36,9 @@ export function OrderListPage({ orders }: { orders: OrderDetail[] }) {
         <section className="orders-empty">
           <h2>아직 주문한 소장본이 없어요.</h2>
           <p>완결된 시즌을 골라 첫 번째 책을 만들어 보세요.</p>
-          <Link className="button button--primary" href="/#discover">
+          <DiscoverLink className="button button--primary">
             작품 둘러보기
-          </Link>
+          </DiscoverLink>
         </section>
       ) : (
         <section className="order-list" aria-label="주문 목록">

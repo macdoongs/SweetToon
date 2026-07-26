@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import {
+  expectSameCardPositions,
+  prepareLoopBoundary,
+  snapshotVisibleCards,
+} from "./circular-rail";
 
 test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한다", async ({
   page,
@@ -54,6 +59,17 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
   ).toHaveAttribute("aria-current", "page");
 
   await page.goto("/#discover");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.getByRole("link", { name: "오늘의 작품 보기" }).click();
+  await expect(page).toHaveURL(/\/#discover$/);
+  await expect
+    .poll(() =>
+      page.locator("#discover").evaluate((element) => {
+        return Math.abs(element.getBoundingClientRect().top);
+      }),
+    )
+    .toBeLessThan(2);
+
   const initialPageCount = await cards.count();
   await page.evaluate(() =>
     window.scrollTo(0, document.documentElement.scrollHeight),
@@ -78,6 +94,16 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
 
   const footer = page.locator(".site-footer");
   await expect(footer).toBeVisible();
+  await footer.getByRole("link", { name: "작품 둘러보기" }).click();
+  await expect(page).toHaveURL(/\/#discover$/);
+  expect(await page.evaluate(() => window.location.hash)).toBe("#discover");
+  await expect
+    .poll(() =>
+      page.locator("#discover").evaluate((element) => {
+        return Math.abs(element.getBoundingClientRect().top);
+      }),
+    )
+    .toBeLessThan(2);
   await expect(footer.getByText("실제 결제·배송 없음")).toBeVisible();
   await expect(
     footer.getByRole("link", { name: "GitHub 저장소 ↗" }),
@@ -85,7 +111,7 @@ test("독자가 URL 필터로 연재작과 소장 가능한 작품을 탐색한�
 });
 
 test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
 
   const recommendations = page.getByRole("region", {
@@ -93,7 +119,7 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   });
   await expect(recommendations).toBeVisible();
   await expect(recommendations).toContainText(
-    "아직 기록이 없어 장르별 작품부터 준비했어요.",
+    "아직 기록이 없어도 괜찮아요.",
   );
   await expect(
     recommendations.locator(".recommendation-shelf"),
@@ -101,6 +127,76 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   await expect(
     recommendations.locator(".recommendation-card img").first(),
   ).toBeVisible();
+  const discoveryRail = recommendations
+    .locator(".recommendation-rail")
+    .first();
+  await expect(discoveryRail).toHaveAttribute(
+    "aria-roledescription",
+    "순환형 캐러셀",
+  );
+  await expect(discoveryRail).toHaveCSS("scrollbar-width", "none");
+  const duplicateImages = discoveryRail.locator(
+    '.recommendation-card[data-preloaded="true"] img',
+  );
+  expect(await duplicateImages.count()).toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      duplicateImages.evaluateAll((images) =>
+        images.every(
+          (image) =>
+            (image as HTMLImageElement).loading === "eager" &&
+            (image as HTMLImageElement).complete &&
+            (image as HTMLImageElement).naturalWidth > 0,
+        ),
+      ),
+    )
+    .toBe(true);
+  await expect
+    .poll(() =>
+      discoveryRail.evaluate(
+        (element) => element.scrollWidth > element.clientWidth,
+      ),
+    )
+    .toBe(true);
+  const initialScrollLeft = await discoveryRail.evaluate(
+    (element) => element.scrollLeft,
+  );
+  await recommendations
+    .getByRole("button", { name: /다음 작품 보기/ })
+    .first()
+    .click();
+  await expect
+    .poll(() => discoveryRail.evaluate((element) => element.scrollLeft))
+    .toBeGreaterThan(initialScrollLeft);
+  await page.waitForTimeout(600);
+  const beforeBoundary = await prepareLoopBoundary(discoveryRail);
+  await discoveryRail.dispatchEvent("scrollend");
+  await page.waitForTimeout(100);
+  const afterBoundary = await snapshotVisibleCards(discoveryRail);
+  expectSameCardPositions(beforeBoundary, afterBoundary);
+  expect(
+    await discoveryRail.evaluate((element) => {
+      const rail = element as HTMLElement;
+      return getComputedStyle(rail).scrollBehavior;
+    }),
+  ).toBe("smooth");
+  await expect
+    .poll(() =>
+      discoveryRail.evaluate((element) => {
+        const rail = element as HTMLElement;
+        const itemCount = rail.children.length / 5;
+        const firstOriginal = rail.children.item(itemCount * 2) as HTMLElement;
+        const trailingCopy = rail.children.item(itemCount * 4) as HTMLElement;
+        const railRect = rail.getBoundingClientRect();
+        const contentLeft = (item: HTMLElement) =>
+          item.getBoundingClientRect().left -
+          railRect.left +
+          rail.scrollLeft;
+        return rail.scrollLeft >= contentLeft(firstOriginal) - 0.5 &&
+          rail.scrollLeft < contentLeft(trailingCopy) - 0.5;
+      }),
+    )
+    .toBe(true);
 
   await page.goto("/series/moonlight-laundry");
   await page.getByRole("button", { name: "찜하기" }).click();
@@ -136,6 +232,55 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBeTruthy();
+});
+
+test("모든 홈 콘텐츠 레일이 순환 경계 위치를 보존한다", async ({ page }) => {
+  test.setTimeout(60_000);
+
+  for (const width of [1234, 1100, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(page.locator(".live-popular__rail")).toBeVisible();
+    const rails = page.locator(".circular-content-rail");
+    const railCount = await rails.count();
+    expect(railCount).toBeGreaterThan(3);
+
+    for (let railIndex = 0; railIndex < railCount; railIndex += 1) {
+      const rail = rails.nth(railIndex);
+      const railId = await rail.getAttribute("id");
+      await expect(rail).toBeVisible();
+      await expect(rail).toHaveClass(/horizontal-scroll-surface/);
+      await expect(rail).toHaveCSS("scrollbar-width", "none");
+
+      await expect
+        .poll(() =>
+          rail.evaluate((element) => {
+            const carousel = element as HTMLElement;
+            const itemCount = carousel.children.length / 5;
+            const centerCopy = carousel.children.item(
+              itemCount * 2,
+            ) as HTMLElement;
+            const railRect = carousel.getBoundingClientRect();
+            const expectedLeft =
+              centerCopy.getBoundingClientRect().left -
+              railRect.left +
+              carousel.scrollLeft;
+            return Math.abs(carousel.scrollLeft - expectedLeft);
+          }),
+        )
+        .toBeLessThan(0.5);
+
+      const beforeBoundary = await prepareLoopBoundary(rail);
+      await rail.dispatchEvent("scrollend");
+      await page.waitForTimeout(100);
+      const afterBoundary = await snapshotVisibleCards(rail);
+      expectSameCardPositions(
+        beforeBoundary,
+        afterBoundary,
+        `${width}px ${railId ?? `rail ${railIndex + 1}`}`,
+      );
+    }
+  }
 });
 
 test("라이트·다크·시스템 테마를 저장하고 즉시 적용한다", async ({
@@ -292,5 +437,17 @@ test("최신 회차 RSS를 발견하고 구독할 수 있다", async ({ page }) 
   expect(feed).toContain('<rss version="2.0"');
   expect(feed).toContain("<language>ko-KR</language>");
   expect(feed).toContain("<item>");
-  expect(feed).toContain("https://sweettoon.katsuranbo.com/read/");
+  expect(feed).toContain(
+    `${process.env.SITE_URL ?? "http://localhost:3000"}/read/`,
+  );
+
+  const sitemapResponse = await page.request.get("/sitemap.xml");
+  expect(sitemapResponse.ok()).toBeTruthy();
+  const sitemap = await sitemapResponse.text();
+  const expectedSiteUrl =
+    process.env.SITE_URL ?? "http://localhost:3000";
+  expect(sitemap).toContain(
+    `<loc>${expectedSiteUrl}/series/moonlight-laundry</loc>`,
+  );
+  expect(sitemap).toContain(`<loc>${expectedSiteUrl}/read/`);
 });

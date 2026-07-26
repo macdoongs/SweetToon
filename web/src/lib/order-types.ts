@@ -68,7 +68,15 @@ export type OrderDetail = {
   }>;
 };
 
-export type OrderListResponse = { items: OrderDetail[] };
+export type OrderReceipt = OrderDetail & {
+  entitlementToken: string;
+};
+
+export type OrderSummary = Omit<OrderDetail, "events">;
+export type OrderListResponse = {
+  items: OrderSummary[];
+  nextCursor: string | null;
+};
 export type OrderTransitionRequest = {
   status: "processing" | "shipped" | "completed";
 };

@@ -113,6 +113,10 @@ const episode: EpisodeReader = {
 function makeRepository(): jest.Mocked<ReaderRepository> {
   return {
     listSeries: jest.fn().mockResolvedValue(seriesList),
+    listRealtimeSeries: jest.fn().mockResolvedValue(seriesList.items),
+    seriesExists: jest
+      .fn()
+      .mockImplementation(async (slug) => slug === seriesDetail.slug),
     findSeriesBySlug: jest
       .fn()
       .mockImplementation(async (slug) =>

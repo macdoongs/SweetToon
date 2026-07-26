@@ -188,7 +188,7 @@ export function SeriesDetailPage({
             {firstEpisode ? (
               <Link
                 className="button button--primary"
-                href={`/read/${firstEpisode.id}`}
+                href={`/read/${encodeURIComponent(firstEpisode.id)}`}
               >
                 첫 화부터 읽기
               </Link>
@@ -288,7 +288,7 @@ export function SeriesDetailPage({
                     <li key={episode.id}>
                       <Link
                         className="episode-list__item"
-                        href={`/read/${episode.id}`}
+                        href={`/read/${encodeURIComponent(episode.id)}`}
                       >
                         <span className="episode-list__number">
                           {String(episode.number).padStart(2, "0")}

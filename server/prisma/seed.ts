@@ -292,10 +292,19 @@ async function seedSeriesSpecs(
             ),
           },
         });
+        const existingPageOrders = new Set(
+          (
+            await prisma.page.findMany({
+              where: { episodeId: episode.id },
+              select: { order: true },
+            })
+          ).map((page) => page.order),
+        );
         const pages = Array.from(
           { length: seasonSpec.pagesPerEp },
           (_, pageIndex) => {
             const pageOrder = pageIndex + 1;
+            if (existingPageOrders.has(pageOrder)) return null;
             const rel = path.join(
               spec.slug,
               `s${seasonSpec.number}`,
@@ -313,14 +322,46 @@ async function seedSeriesSpecs(
               ),
             };
           },
-        );
-        await prisma.page.createMany({
-          data: pages,
-          skipDuplicates: true,
-        });
+        ).filter((page) => page !== null);
+        if (pages.length > 0) {
+          await prisma.page.createMany({
+            data: pages,
+            skipDuplicates: true,
+          });
+        }
       }
     }
   }
+}
+
+async function isSeriesSpecComplete(spec: SeriesSpec): Promise<boolean> {
+  const series = await prisma.series.findUnique({
+    where: { slug: spec.slug },
+    select: { id: true },
+  });
+  if (!series) return false;
+
+  for (const seasonSpec of spec.seasons) {
+    const season = await prisma.season.findUnique({
+      where: {
+        seriesId_number: {
+          seriesId: series.id,
+          number: seasonSpec.number,
+        },
+      },
+      select: {
+        id: true,
+        _count: { select: { episodes: true } },
+      },
+    });
+    if (!season || season._count.episodes < seasonSpec.episodes) return false;
+
+    const pageCount = await prisma.page.count({
+      where: { episode: { seasonId: season.id } },
+    });
+    if (pageCount < seasonSpec.episodes * seasonSpec.pagesPerEp) return false;
+  }
+  return true;
 }
 
 function indexOfWeekday(weekday: SeriesSpec["weekday"]) {
@@ -353,7 +394,11 @@ async function main() {
         },
       });
     }
-    await seedSeriesSpecs([...SERIES, ...CATALOG_SERIES], coverUrls);
+    const incompleteSpecs: SeriesSpec[] = [];
+    for (const spec of [...SERIES, ...CATALOG_SERIES]) {
+      if (!(await isSeriesSpecComplete(spec))) incompleteSpecs.push(spec);
+    }
+    await seedSeriesSpecs(incompleteSpecs, coverUrls);
     const showcaseEpisode = await prisma.episode.findFirst({
       where: {
         number: 1,
@@ -380,7 +425,7 @@ async function main() {
       }
     }
     console.log(
-      `Seed 데이터 유지: 기존 작품 ${existingSeries}개, 표지와 대표 1화를 갱신했습니다.`,
+      `Seed 데이터 유지: 기존 작품 ${existingSeries}개, 부족한 작품 ${incompleteSpecs.length}개를 백필하고 표지와 대표 1화를 갱신했습니다.`,
     );
     return;
   }

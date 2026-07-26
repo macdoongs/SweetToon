@@ -4,6 +4,8 @@ import type { ReaderRepository } from "../repositories/reader-repository";
 
 const readerRepository = {
   listSeries: jest.fn(),
+  listRealtimeSeries: jest.fn(),
+  seriesExists: jest.fn(),
   findSeriesBySlug: jest.fn(),
   findEpisodeById: jest.fn(),
 } as unknown as ReaderRepository;

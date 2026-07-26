@@ -157,6 +157,20 @@ test("저장된 페이지를 양면 모드에서 복원한 뒤 모드 전환에�
 
   await page.addInitScript(
     ({ episodeId, episodeNumber, episodeTitle }) => {
+      const trackedWindow = window as typeof window & {
+        __sweettoonPreloadImageCount: number;
+      };
+      const NativeImage = window.Image;
+      trackedWindow.__sweettoonPreloadImageCount = 0;
+      Object.defineProperty(window, "Image", {
+        configurable: true,
+        value: class extends NativeImage {
+          constructor(width?: number, height?: number) {
+            super(width, height);
+            trackedWindow.__sweettoonPreloadImageCount += 1;
+          }
+        },
+      });
       localStorage.setItem(
         "sweettoon:reader-settings",
         JSON.stringify({
@@ -189,8 +203,25 @@ test("저장된 페이지를 양면 모드에서 복원한 뒤 모드 전환에�
     },
   );
 
+  const readerResponse = await page.request.get(`/api/episodes/${episode.id}`);
+  expect(readerResponse.ok()).toBeTruthy();
+  const reader = await readerResponse.json();
+  const pageCount = reader.pages.length as number;
+
   await page.goto(`/read/${episode.id}`);
   await expect(page.locator(".reader-paged")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __sweettoonPreloadImageCount: number;
+            }
+          ).__sweettoonPreloadImageCount,
+      ),
+    )
+    .toBe(pageCount);
   await expect(page.locator(".reader-paged__counter")).not.toHaveText(/^1 \//);
   await expect
     .poll(() =>
@@ -228,6 +259,16 @@ test("저장된 페이지를 양면 모드에서 복원한 뒤 모드 전환에�
       }, episode.id),
     )
     .toBe(5);
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __sweettoonPreloadImageCount: number;
+          }
+        ).__sweettoonPreloadImageCount,
+    ),
+  ).toBe(pageCount);
 });
 
 test("Swagger UI와 OpenAPI 계약을 같은 웹 주소에서 확인한다", async ({
@@ -384,4 +425,47 @@ test("1권 주문 보너스 캔디로 유료 회차를 한 번만 차감해 해�
   await page.reload();
   await expect(page.locator(".webtoon-strip")).toBeVisible();
   await expect(page.locator(".site-nav__candy")).toContainText("캔디 4");
+});
+
+test("무료 권이 없는 작품도 1권 주문 entitlement로 즉시 읽는다", async ({
+  page,
+}) => {
+  const detailResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  expect(detailResponse.ok()).toBeTruthy();
+  const series = await detailResponse.json();
+  const season = series.seasons.find(
+    (candidate: { number: number }) => candidate.number === 1,
+  );
+  const firstEpisode = season.episodes.find(
+    (candidate: { number: number }) => candidate.number === 1,
+  );
+  const policyUrl = `/api/studio/series/${encodeURIComponent(series.id)}/access-policy`;
+
+  const restrict = await page.request.patch(policyUrl, {
+    data: { freeVolumeCount: 0, previewEpisodeCount: 0 },
+  });
+  expect(restrict.ok()).toBeTruthy();
+
+  try {
+    await page.goto(`/read/${encodeURIComponent(firstEpisode.id)}`);
+    await expect(page.locator(".reader-paywall")).toBeVisible();
+
+    await page.goto("/series/moonlight-laundry#edition");
+    await page.getByRole("link", { name: /선택한 1권 주문하기/ }).click();
+    await page.getByLabel("주문자 닉네임").fill("소장독자");
+    await page.getByRole("button", { name: "견적 확인하기" }).click();
+    await page.getByRole("button", { name: "이 사양으로 주문하기" }).click();
+    await expect(page).toHaveURL(/\/orders\/[^/]+$/);
+
+    await page.goto(`/read/${encodeURIComponent(firstEpisode.id)}`);
+    await expect(page.locator(".webtoon-strip")).toBeVisible();
+    await expect(page.locator(".reader-paywall")).toHaveCount(0);
+  } finally {
+    const restore = await page.request.patch(policyUrl, {
+      data: { freeVolumeCount: 1, previewEpisodeCount: 0 },
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
 });

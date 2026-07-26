@@ -69,14 +69,20 @@ export function createApp({
   fs.mkdirSync(uploadDir, { recursive: true });
 
   app.set("trust proxy", 1);
-  app.use(
-    helmet({
-      // Swagger UI uses an inline bootstrap script. The public web app keeps
-      // its own CSP; API responses still receive the remaining Helmet headers.
-      contentSecurityPolicy: false,
-      crossOriginResourcePolicy: { policy: "cross-origin" },
-    }),
-  );
+  const defaultSecurityHeaders = helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  });
+  const swaggerSecurityHeaders = helmet({
+    // Swagger UI uses an inline bootstrap script.
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  });
+  app.use((req, res, next) => {
+    const securityHeaders = req.path.startsWith("/api-docs")
+      ? swaggerSecurityHeaders
+      : defaultSecurityHeaders;
+    securityHeaders(req, res, next);
+  });
   app.use(
     cors({
       credentials: false,

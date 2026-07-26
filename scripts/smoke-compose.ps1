@@ -89,9 +89,25 @@ try {
         '
     } "non-root production-only server runtime check"
 
+    $seedPagePath = "/app/data/uploads/catalog-01/s1/ep001/001.svg"
+    $seedPageMtimeBefore = docker compose exec -T server `
+        stat -c "%Y" $seedPagePath
+    if ($LASTEXITCODE -ne 0 -or -not $seedPageMtimeBefore) {
+        throw "Could not read seeded page modification time."
+    }
+
     Invoke-Checked {
         docker compose run --rm migrate
     } "migration and seed rerun over existing database"
+
+    $seedPageMtimeAfter = docker compose exec -T server `
+        stat -c "%Y" $seedPagePath
+    if (
+        $LASTEXITCODE -ne 0 -or
+        "$seedPageMtimeBefore".Trim() -ne "$seedPageMtimeAfter".Trim()
+    ) {
+        throw "Idempotent seed rewrote an existing generated page."
+    }
 
     Invoke-Checked {
         docker compose run --rm migrate npx prisma migrate diff `

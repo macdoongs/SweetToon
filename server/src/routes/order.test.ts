@@ -43,6 +43,10 @@ const order: OrderDetail = {
   },
   events: [],
 };
+const receipt = {
+  ...order,
+  entitlementToken: "37c4af96-e1ff-48f2-a0b9-909826823f05",
+};
 
 function makeReaderRepository(): ReaderRepository {
   return {
@@ -53,6 +57,8 @@ function makeReaderRepository(): ReaderRepository {
       total: 0,
       facets: { genres: [], weekdays: [] },
     }),
+    listRealtimeSeries: jest.fn().mockResolvedValue([]),
+    seriesExists: jest.fn().mockResolvedValue(false),
     findSeriesBySlug: jest.fn().mockResolvedValue(null),
     findEpisodeById: jest.fn().mockResolvedValue(null),
   };
@@ -80,9 +86,12 @@ function makeService(): jest.Mocked<OrderUseCases> {
         title: "얼룩의 계절",
       },
     }),
-    create: jest.fn().mockResolvedValue(order),
+    create: jest.fn().mockResolvedValue(receipt),
     get: jest.fn().mockResolvedValue(order),
-    list: jest.fn().mockResolvedValue({ items: [order] }),
+    list: jest.fn().mockResolvedValue({
+      items: [order],
+      nextCursor: null,
+    }),
     transition: jest.fn().mockResolvedValue({
       ...order,
       status: "shipped",
@@ -139,7 +148,8 @@ describe("order routes", () => {
   });
 
   it("creates and lists persistent orders through the use case boundary", async () => {
-    const app = makeApp();
+    const service = makeService();
+    const app = makeApp(service);
     const created = await request(app)
       .post("/api/orders")
       .send({
@@ -157,11 +167,35 @@ describe("order routes", () => {
     const listed = await request(app).get("/api/orders").expect(200);
 
     expect(created.body.id).toBe(order.id);
+    expect(created.body.entitlementToken).toBe(receipt.entitlementToken);
     expect(listed.body.items[0].id).toBe(order.id);
     expect(created.body).not.toHaveProperty("ordererName");
     expect(created.body).not.toHaveProperty("memo");
     expect(listed.body.items[0]).not.toHaveProperty("ordererName");
     expect(listed.body.items[0]).not.toHaveProperty("memo");
+    expect(listed.body.items[0]).not.toHaveProperty("entitlementToken");
+    expect(listed.body.items[0]).not.toHaveProperty("events");
+    expect(service.list).toHaveBeenCalledWith({ limit: 20 });
+  });
+
+  it("passes a bounded cursor page to the order use case", async () => {
+    const service = makeService();
+    await request(makeApp(service))
+      .get(`/api/orders?cursor=${order.id}&limit=1`)
+      .expect(200);
+
+    expect(service.list).toHaveBeenCalledWith({
+      cursor: order.id,
+      limit: 1,
+    });
+  });
+
+  it("rejects an invalid order-list cursor", async () => {
+    const response = await request(makeApp())
+      .get("/api/orders?cursor=not-a-cuid")
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_ORDER_LIST_QUERY");
   });
 
   it("converts use case errors into user-facing API errors", async () => {

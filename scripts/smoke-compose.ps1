@@ -80,11 +80,21 @@ try {
     } "server health and mock provider check"
 
     Invoke-Checked {
+        docker compose exec -T server sh -c '
+          test "$(awk "/^Uid:/{print \$2}" /proc/1/status)" -ne 0 &&
+          test ! -e /app/node_modules/jest &&
+          test ! -e /app/node_modules/prisma &&
+          test ! -e /app/node_modules/tsx &&
+          test ! -e /app/node_modules/typescript
+        '
+    } "non-root production-only server runtime check"
+
+    Invoke-Checked {
         docker compose run --rm migrate
     } "migration and seed rerun over existing database"
 
     Invoke-Checked {
-        docker compose exec -T server npx prisma migrate diff `
+        docker compose run --rm migrate npx prisma migrate diff `
             --from-schema-datasource prisma/schema.prisma `
             --to-schema-datamodel prisma/schema.prisma `
             --exit-code
@@ -125,6 +135,13 @@ try {
             const longCatalog = await json('/api/series/catalog-12')
             if (longCatalog.seasons[0]?.episodes.length !== 120) {
               throw new Error('catalog-12 expected 120 episodes')
+            }
+            const orders = await json('/api/orders')
+            const firstSeedOrder = orders.items.find(
+              order => order.providerOrderId === 'mock_seed_1'
+            )
+            if (firstSeedOrder?.season.number !== 1) {
+              throw new Error('seeded sample order must use season 1')
             }
             const firstEpisode = catalog.seasons[0]?.episodes[0]
             if (!firstEpisode) throw new Error('catalog episode not found')

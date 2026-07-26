@@ -27,6 +27,7 @@ import { RecommendationShelves } from "./recommendation-shelves";
 import { DiscoverLink } from "./discover-link";
 import {
   buildCircularRailCopies,
+  prioritizeThumbnailItems,
   useCircularRail,
 } from "./use-circular-rail";
 
@@ -114,12 +115,15 @@ function LivePopularRail({
 }: {
   items: LivePopularResponse["items"];
 }) {
+  const prioritizedItems = prioritizeThumbnailItems(items, ({ series }) =>
+    Boolean(series.coverUrl),
+  );
   const { loopEnabled, railRef, scroll } =
     useCircularRail<HTMLUListElement>({
       cardWidth: getLivePopularCardWidth,
-      itemCount: items.length,
+      itemCount: prioritizedItems.length,
     });
-  const railCopies = buildCircularRailCopies(items);
+  const railCopies = buildCircularRailCopies(prioritizedItems);
 
   return (
     <section className="live-popular" aria-labelledby="live-popular-title">
@@ -178,7 +182,7 @@ function LivePopularRail({
                   tabIndex={duplicate ? -1 : undefined}
                 >
                   <span className="live-popular-card__rank">
-                    {(index % items.length) + 1}
+                    {(index % prioritizedItems.length) + 1}
                   </span>
                   <div className="live-popular-card__cover">
                     <SeriesCover

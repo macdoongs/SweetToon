@@ -19,6 +19,7 @@ import {
 import type { SeriesSummary } from "@/lib/reader-types";
 import {
   buildCircularRailCopies,
+  prioritizeThumbnailItems,
   useCircularRail,
 } from "./use-circular-rail";
 
@@ -78,12 +79,16 @@ function RecommendationCard({
 
 function Shelf({ shelf }: { shelf: RecommendationShelf }) {
   const railId = `recommendation-${shelf.id}`;
+  const prioritizedItems = prioritizeThumbnailItems(
+    shelf.items,
+    (series) => Boolean(series.coverUrl),
+  );
   const { loopEnabled, railRef, scroll } =
     useCircularRail<HTMLUListElement>({
       cardWidth: getRecommendationCardWidth,
-      itemCount: shelf.items.length,
+      itemCount: prioritizedItems.length,
     });
-  const railCopies = buildCircularRailCopies(shelf.items);
+  const railCopies = buildCircularRailCopies(prioritizedItems);
 
   return (
     <section

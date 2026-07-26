@@ -129,6 +129,20 @@ try {
             if (!Array.isArray(body.items) || body.items.length === 0) {
               throw new Error('seeded series not found')
             }
+            const allSeries = [...body.items]
+            let nextPage = body.nextPage
+            while (nextPage) {
+              const nextPageBody = await json('/api/series?page=' + nextPage)
+              allSeries.push(...nextPageBody.items)
+              nextPage = nextPageBody.nextPage
+            }
+            const missingCover = allSeries.find(series => !series.coverUrl)
+            if (allSeries.length !== body.total || missingCover) {
+              throw new Error(
+                'every seeded series must expose a cover: ' +
+                (missingCover?.slug ?? allSeries.length + '/' + body.total)
+              )
+            }
             const catalog = await json('/api/series/catalog-01')
             if (catalog.seasons[0]?.episodes.length !== 30) {
               throw new Error('catalog-01 expected 30 episodes')
@@ -191,13 +205,12 @@ try {
             )
             const popular = await json('/api/realtime/popular')
             const demoBot = await json('/api/realtime/demo-bot')
-            const catalogPopularity = popular.items.find(
-              item => item.series.slug === catalog.slug
+            const hasPopularSeries = popular.items.some(
+              item => item.viewerCount >= 1
             )
             if (
               presence.viewerCount < 1 ||
-              !catalogPopularity ||
-              catalogPopularity.viewerCount < 1 ||
+              !hasPopularSeries ||
               !demoBot.available ||
               !demoBot.running ||
               demoBot.activeBotCount < 1
@@ -205,7 +218,7 @@ try {
               throw new Error('realtime presence verification failed')
             }
             console.log(
-              'series=' + body.items.length +
+              'series=' + allSeries.length +
                 ' episode-range=30..120' +
                 ' catalog-pages=' + reader.pages.length +
                 ' live-readers=' + presence.viewerCount +

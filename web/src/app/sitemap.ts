@@ -18,11 +18,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const list = await getAllSeries();
-    const details = await Promise.all(
+    const detailResults = await Promise.allSettled(
       list.items.map((series) => getSeriesDetail(series.slug)),
     );
 
-    for (const series of details) {
+    for (const detailResult of detailResults) {
+      if (detailResult.status === "rejected") continue;
+      const series = detailResult.value;
       const episodes = series.seasons.flatMap((season) => season.episodes);
       const latestPublishedAt = episodes.at(-1)?.publishedAt;
 

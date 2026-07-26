@@ -15,6 +15,7 @@ import {
 import { createSharedRateLimitStore } from "./security/rate-limit-store";
 import { createMalwareScanner } from "./security/malware-scanner";
 import { PrismaSecurityAuditLogger } from "./security/audit-logger";
+import { resolveAuditHashSecret } from "./security/audit-hash-secret";
 import { PrismaCandyRepository } from "./repositories/candy-repository";
 import { CandyService } from "./services/candy-service";
 import { createRealtimeService } from "./realtime/realtime-service";
@@ -32,17 +33,10 @@ async function main() {
   const studioStorage = createStudioStorage(UPLOAD_DIR);
   const malwareScanner = createMalwareScanner();
   const securityMode = parseApiSecurityMode(process.env.API_SECURITY_MODE);
-  const configuredAuditHashSecret = process.env.AUDIT_HASH_SECRET;
-  const auditHashSecret =
-    configuredAuditHashSecret ?? "sweettoon-local-audit-hash-secret";
-  if (
-    securityMode === "strict" &&
-    (!configuredAuditHashSecret || configuredAuditHashSecret.length < 32)
-  ) {
-    throw new Error(
-      "AUDIT_HASH_SECRET must contain at least 32 characters in strict mode",
-    );
-  }
+  const auditHashSecret = resolveAuditHashSecret(
+    securityMode,
+    process.env.AUDIT_HASH_SECRET,
+  );
   const rateLimitStore = await createSharedRateLimitStore(
     process.env.REDIS_URL,
   );

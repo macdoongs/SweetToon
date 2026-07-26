@@ -137,7 +137,10 @@ export function EpisodeReaderPage({
   const chromeHideTimer = useRef<number | null>(null);
   const lastScrollY = useRef(0);
   const lastSavedPercent = useRef(-10);
-  const restoredEpisode = useRef<string | null>(null);
+  const restoredProgressKey = useRef<string | null>(null);
+  const suppressDoubleProgressSave = useRef(false);
+  const suppressWebtoonProgressSave = useRef(false);
+  const progressRestorationKey = episode ? `${episode.id}:${mode}` : null;
 
   const retry = useCallback(() => {
     setError(null);
@@ -291,6 +294,38 @@ export function EpisodeReaderPage({
 
   useEffect(() => {
     if (mode !== "webtoon") return;
+    const allowProgressSave = () => {
+      suppressWebtoonProgressSave.current = false;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        [
+          "ArrowDown",
+          "ArrowUp",
+          "End",
+          "Home",
+          "PageDown",
+          "PageUp",
+          " ",
+        ].includes(event.key)
+      ) {
+        allowProgressSave();
+      }
+    };
+    window.addEventListener("wheel", allowProgressSave, { passive: true });
+    window.addEventListener("touchmove", allowProgressSave, {
+      passive: true,
+    });
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("wheel", allowProgressSave);
+      window.removeEventListener("touchmove", allowProgressSave);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "webtoon") return;
     const updateProgress = () => {
       const scrollable =
         document.documentElement.scrollHeight - window.innerHeight;
@@ -305,7 +340,8 @@ export function EpisodeReaderPage({
       if (
         episode &&
         episode.access.state !== "locked" &&
-        (restoredEpisode.current === episode.id ||
+        !suppressWebtoonProgressSave.current &&
+        (restoredProgressKey.current === progressRestorationKey ||
           !getEpisodeProgress(episode.id)) &&
         (Math.abs(nextProgress - lastSavedPercent.current) >= 5 ||
           nextProgress === 100)
@@ -338,7 +374,7 @@ export function EpisodeReaderPage({
       window.removeEventListener("scroll", updateProgress);
       window.removeEventListener("resize", updateProgress);
     };
-  }, [episode, mode]);
+  }, [episode, mode, progressRestorationKey]);
 
   useEffect(() => {
     if (!episode || mode !== "double") return;
@@ -450,6 +486,13 @@ export function EpisodeReaderPage({
     ) {
       return;
     }
+    if (
+      restoredProgressKey.current !== progressRestorationKey &&
+      getEpisodeProgress(episode.id)
+    ) {
+      return;
+    }
+    if (suppressDoubleProgressSave.current) return;
     const currentPage = spreads[spreadIndex]?.[0];
     const nextProgress = Math.round(
       ((spreadIndex + 1) / spreads.length) * 100,
@@ -464,19 +507,20 @@ export function EpisodeReaderPage({
       completed: nextProgress >= 100,
       updatedAt: new Date().toISOString(),
     });
-  }, [episode, mode, spreadIndex, spreads]);
+  }, [episode, mode, progressRestorationKey, spreadIndex, spreads]);
 
   useEffect(() => {
     if (
       !episode ||
       episode.access.state === "locked" ||
-      restoredEpisode.current === episode.id
+      !progressRestorationKey ||
+      restoredProgressKey.current === progressRestorationKey
     ) {
       return;
     }
     const saved = getEpisodeProgress(episode.id);
     if (!saved || saved.completed) {
-      restoredEpisode.current = episode.id;
+      restoredProgressKey.current = progressRestorationKey;
       return;
     }
     if (mode === "double" && spreads.length > 0) {
@@ -484,20 +528,24 @@ export function EpisodeReaderPage({
         spread.some((page) => page.order === saved.pageOrder),
       );
       const frame = requestAnimationFrame(() => {
-        if (index >= 0) setSpreadIndex(index);
-        restoredEpisode.current = episode.id;
+        if (index >= 0) {
+          suppressDoubleProgressSave.current = true;
+          setSpreadIndex(index);
+        }
+        restoredProgressKey.current = progressRestorationKey;
       });
       return () => cancelAnimationFrame(frame);
     } else if (mode === "webtoon") {
       const frame = requestAnimationFrame(() => {
+        suppressWebtoonProgressSave.current = true;
         document
           .getElementById(`page-${saved.pageOrder}`)
           ?.scrollIntoView({ block: "start" });
-        restoredEpisode.current = episode.id;
+        restoredProgressKey.current = progressRestorationKey;
       });
       return () => cancelAnimationFrame(frame);
     }
-  }, [episode, mode, spreads]);
+  }, [episode, mode, progressRestorationKey, spreads]);
 
   const bookmark = useCallback(() => {
     if (!episode || episode.access.state === "locked") return;
@@ -528,6 +576,7 @@ export function EpisodeReaderPage({
 
   const goToSpread = useCallback(
     (index: number) => {
+      suppressDoubleProgressSave.current = false;
       setSpreadIndex(Math.max(0, Math.min(spreads.length - 1, index)));
     },
     [spreads.length],
@@ -631,6 +680,9 @@ export function EpisodeReaderPage({
           <button
             aria-pressed={mode === "webtoon"}
             onClick={() => {
+              if (mode === "webtoon") return;
+              restoredProgressKey.current = null;
+              suppressWebtoonProgressSave.current = true;
               setMode("webtoon");
               setSpreadIndex(0);
             }}
@@ -640,6 +692,8 @@ export function EpisodeReaderPage({
           <button
             aria-pressed={mode === "double"}
             onClick={() => {
+              if (mode === "double") return;
+              restoredProgressKey.current = null;
               setMode("double");
               window.scrollTo({ top: 0 });
             }}
@@ -883,6 +937,7 @@ export function EpisodeReaderPage({
                 key={page.id}
                 onClick={() => {
                   if (mode === "webtoon") {
+                    suppressWebtoonProgressSave.current = false;
                     document
                       .getElementById(`page-${page.order}`)
                       ?.scrollIntoView({ behavior: "smooth" });

@@ -141,6 +141,95 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   ).toBeVisible();
 });
 
+test("저장된 페이지를 양면 모드에서 복원한 뒤 모드 전환에도 진행도를 보존한다", async ({
+  page,
+}) => {
+  const seriesResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  expect(seriesResponse.ok()).toBeTruthy();
+  const series = await seriesResponse.json();
+  const episode = series.seasons[0].episodes[0] as {
+    id: string;
+    number: number;
+    title: string;
+  };
+
+  await page.addInitScript(
+    ({ episodeId, episodeNumber, episodeTitle }) => {
+      localStorage.setItem(
+        "sweettoon:reader-settings",
+        JSON.stringify({
+          mode: "double",
+          scale: "screen",
+          background: "black",
+          direction: "ltr",
+        }),
+      );
+      localStorage.setItem(
+        "sweettoon:reading-progress",
+        JSON.stringify({
+          [episodeId]: {
+            seriesSlug: "moonlight-laundry",
+            episodeId,
+            episodeNumber,
+            episodeTitle,
+            pageOrder: 5,
+            percent: 50,
+            completed: false,
+            updatedAt: "2026-07-26T00:00:00.000Z",
+          },
+        }),
+      );
+    },
+    {
+      episodeId: episode.id,
+      episodeNumber: episode.number,
+      episodeTitle: episode.title,
+    },
+  );
+
+  await page.goto(`/read/${episode.id}`);
+  await expect(page.locator(".reader-paged")).toBeVisible();
+  await expect(page.locator(".reader-paged__counter")).not.toHaveText(/^1 \//);
+  await expect
+    .poll(() =>
+      page.evaluate((episodeId) => {
+        const saved = JSON.parse(
+          localStorage.getItem("sweettoon:reading-progress") ?? "{}",
+        ) as Record<string, { pageOrder?: number }>;
+        return saved[episodeId]?.pageOrder;
+      }, episode.id),
+    )
+    .toBe(5);
+
+  await page.getByRole("button", { name: "세로 스크롤" }).click();
+  await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator(".webtoon-strip__cut").evaluateAll((elements) => {
+        const active = [...elements]
+          .reverse()
+          .find((element) => element.getBoundingClientRect().top <= 180);
+        return active?.id;
+      }),
+    )
+    .toBe("page-5");
+
+  await page.getByRole("button", { name: "양면 보기" }).click();
+  await expect(page.locator(".reader-paged__counter")).not.toHaveText(/^1 \//);
+  await expect
+    .poll(() =>
+      page.evaluate((episodeId) => {
+        const saved = JSON.parse(
+          localStorage.getItem("sweettoon:reading-progress") ?? "{}",
+        ) as Record<string, { pageOrder?: number }>;
+        return saved[episodeId]?.pageOrder;
+      }, episode.id),
+    )
+    .toBe(5);
+});
+
 test("Swagger UI와 OpenAPI 계약을 같은 웹 주소에서 확인한다", async ({
   page,
 }) => {

@@ -1,7 +1,8 @@
 import type { CreateEpisodeRequest } from "../contracts/studio";
-import type {
-  StudioRepository,
-  StudioSeason,
+import {
+  StudioRepositoryError,
+  type StudioRepository,
+  type StudioSeason,
 } from "../repositories/studio-repository";
 import type {
   StudioStorage,
@@ -67,6 +68,12 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
     setEpisodeVisibility: jest.fn().mockResolvedValue(null),
     updateEpisodeTitle: jest.fn().mockResolvedValue(null),
     updateSeriesInfo: jest.fn().mockResolvedValue(null),
+    createSeries: jest.fn().mockResolvedValue({
+      seriesId: "series-2",
+      slug: "night-market",
+      title: "야시장",
+      seasonId: "season-2",
+    }),
     findEpisode: jest.fn().mockResolvedValue({
       id: "episode-12",
       number: 12,
@@ -364,5 +371,46 @@ describe("StudioService", () => {
     await expect(
       service.updateSeriesInfo("missing", { title: "새 제목" }),
     ).rejects.toMatchObject({ code: "SERIES_NOT_FOUND", status: 404 });
+  });
+
+  it("maps duplicate slugs to a conflict when creating a series", async () => {
+    const { service, repository } = makeDependencies();
+    repository.createSeries.mockRejectedValue(
+      new StudioRepositoryError("SERIES_SLUG_EXISTS"),
+    );
+
+    await expect(
+      service.createSeries({
+        slug: "moonlight-laundry",
+        title: "달빛 세탁소",
+        synopsis: "줄거리",
+        genre: "일상",
+        weekday: "mon",
+        authorName: "새 작가",
+      }),
+    ).rejects.toMatchObject({ code: "SERIES_SLUG_EXISTS", status: 409 });
+  });
+
+  it("deletes an episode and cleans up its manuscript files", async () => {
+    const { service, repository, storage } = makeDependencies();
+
+    await service.deleteEpisode("episode-12");
+
+    expect(repository.deleteEpisode).toHaveBeenCalledWith("episode-12");
+    expect(storage.removePublished).toHaveBeenCalledWith(
+      "C:\\old-manuscript",
+    );
+  });
+
+  it("rejects deleting an unknown episode", async () => {
+    const { service, repository, storage } = makeDependencies();
+    repository.findEpisode.mockResolvedValue(null);
+
+    await expect(service.deleteEpisode("missing")).rejects.toMatchObject({
+      code: "EPISODE_NOT_FOUND",
+      status: 404,
+    });
+    expect(repository.deleteEpisode).not.toHaveBeenCalled();
+    expect(storage.removePublished).not.toHaveBeenCalled();
   });
 });

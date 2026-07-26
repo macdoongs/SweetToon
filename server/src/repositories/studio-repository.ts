@@ -1,6 +1,8 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import type {
   AccessPolicyResponse,
+  CreateSeriesRequest,
+  CreateSeriesResponse,
   DraftEpisode,
   EpisodeVisibility,
   PackagingRequest,
@@ -60,7 +62,9 @@ export type CreatedStudioEpisode = {
 };
 
 export class StudioRepositoryError extends Error {
-  constructor(readonly code: "EPISODE_NUMBER_EXISTS") {
+  constructor(
+    readonly code: "EPISODE_NUMBER_EXISTS" | "SERIES_SLUG_EXISTS",
+  ) {
     super(code);
     this.name = "StudioRepositoryError";
   }
@@ -90,6 +94,7 @@ export interface StudioRepository {
     seriesId: string,
     input: UpdateSeriesInfoRequest,
   ): Promise<SeriesInfoResponse | null>;
+  createSeries(input: CreateSeriesRequest): Promise<CreateSeriesResponse>;
   replaceEpisodePages(
     episodeId: string,
     imageUrls: string[],
@@ -208,6 +213,52 @@ export class PrismaStudioRepository implements StudioRepository {
       })
       .catch(() => null);
     return updated ? toDraftEpisode(updated) : null;
+  }
+
+  async createSeries(
+    input: CreateSeriesRequest,
+  ): Promise<CreateSeriesResponse> {
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const author =
+          (await transaction.author.findFirst({
+            where: { name: input.authorName },
+            select: { id: true },
+          })) ??
+          (await transaction.author.create({
+            data: { name: input.authorName },
+            select: { id: true },
+          }));
+        const series = await transaction.series.create({
+          data: {
+            slug: input.slug,
+            authorId: author.id,
+            title: input.title,
+            synopsis: input.synopsis,
+            genre: input.genre,
+            weekday: input.weekday,
+            seasons: {
+              create: { number: 1, status: "ongoing" },
+            },
+          },
+          include: { seasons: true },
+        });
+        return {
+          seriesId: series.id,
+          slug: series.slug,
+          title: series.title,
+          seasonId: series.seasons[0].id,
+        };
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new StudioRepositoryError("SERIES_SLUG_EXISTS");
+      }
+      throw error;
+    }
   }
 
   async updateSeriesInfo(

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChangeEvent,
   DragEvent,
@@ -26,6 +27,8 @@ import type {
   CreatedEpisode,
   CreateEpisodeRequest,
   CreatePackagingRequest,
+  CreateSeriesRequest,
+  CreateSeriesResponse,
   DraftEpisode,
   PackagingBookSize,
   PackagingCoverType,
@@ -73,7 +76,27 @@ const PACKAGING_STATUS_LABEL: Record<PackagingRequest["status"], string> = {
   canceled: "취소됨",
 };
 
+const EMPTY_NEW_SERIES: CreateSeriesRequest = {
+  slug: "",
+  title: "",
+  synopsis: "",
+  genre: "",
+  weekday: "mon",
+  authorName: "",
+};
+
+const WEEKDAY_LABEL: Record<CreateSeriesRequest["weekday"], string> = {
+  mon: "월",
+  tue: "화",
+  wed: "수",
+  thu: "목",
+  fri: "금",
+  sat: "토",
+  sun: "일",
+};
+
 export function StudioPage({ series }: { series: SeriesDetail[] }) {
+  const router = useRouter();
   const [accessKey, setAccessKey] = useState(() =>
     loadSecurityAccessKey("studio"),
   );
@@ -111,6 +134,17 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [seriesEditBusy, setSeriesEditBusy] = useState(false);
   const [seriesEditMessage, setSeriesEditMessage] = useState<string | null>(
     null,
+  );
+  const [newSeries, setNewSeries] =
+    useState<CreateSeriesRequest>(EMPTY_NEW_SERIES);
+  const [newSeriesBusy, setNewSeriesBusy] = useState(false);
+  const [newSeriesMessage, setNewSeriesMessage] = useState<string | null>(
+    null,
+  );
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const [deletedEpisodeIds, setDeletedEpisodeIds] = useState<Set<string>>(
+    () => new Set(),
   );
   const selectedSeries =
     availableSeries.find((item) => item.id === seriesId) ??
@@ -472,6 +506,79 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     }
   }
 
+  async function createNewSeries() {
+    const payload: CreateSeriesRequest = {
+      slug: newSeries.slug.trim(),
+      title: newSeries.title.trim(),
+      synopsis: newSeries.synopsis.trim(),
+      genre: newSeries.genre.trim(),
+      weekday: newSeries.weekday,
+      authorName: newSeries.authorName.trim(),
+    };
+    if (
+      !payload.slug ||
+      !payload.title ||
+      !payload.synopsis ||
+      !payload.genre ||
+      !payload.authorName
+    ) {
+      setNewSeriesMessage("모든 항목을 입력해 주세요.");
+      return;
+    }
+    setNewSeriesBusy(true);
+    setNewSeriesMessage(null);
+    try {
+      const created = await postJson<
+        CreateSeriesRequest,
+        CreateSeriesResponse
+      >("/api/studio/series", payload, undefined, mutationHeaders);
+      setNewSeries(EMPTY_NEW_SERIES);
+      setNewSeriesMessage(
+        `《${created.title}》 시즌 1이 준비됐어요. 이제 원고를 올릴 수 있습니다.`,
+      );
+      setSeriesId(created.seriesId);
+      setSeasonId(created.seasonId);
+      // 서버 컴포넌트 데이터를 다시 받아 드롭다운에 새 작품을 반영한다.
+      router.refresh();
+    } catch (reason) {
+      setNewSeriesMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "작품을 만들지 못했습니다.",
+      );
+    } finally {
+      setNewSeriesBusy(false);
+    }
+  }
+
+  async function removeEpisode(episodeId: string) {
+    setDeleteBusyId(episodeId);
+    try {
+      await deleteRequest(
+        `/api/studio/episodes/${encodeURIComponent(episodeId)}`,
+        mutationHeaders,
+      );
+      setDeletedEpisodeIds((current) => {
+        const next = new Set(current);
+        next.add(episodeId);
+        return next;
+      });
+      setDrafts((current) =>
+        current.filter((draft) => draft.id !== episodeId),
+      );
+      setRenameMessage("에피소드와 원고 파일을 삭제했어요.");
+    } catch (reason) {
+      setRenameMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "에피소드를 삭제하지 못했습니다.",
+      );
+    } finally {
+      setDeleteBusyId(null);
+      setDeleteConfirmId(null);
+    }
+  }
+
   function startReplace(episode: {
     id: string;
     number: number;
@@ -641,6 +748,113 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
               </label>
             ))}
           </fieldset>
+          <details className="studio-security-access studio-new-series">
+            <summary>새 작품 만들기</summary>
+            <label className="field">
+              <span>주소(slug)</span>
+              <input
+                maxLength={80}
+                onChange={(event) =>
+                  setNewSeries((current) => ({
+                    ...current,
+                    slug: event.target.value.toLowerCase(),
+                  }))
+                }
+                placeholder="night-market"
+                value={newSeries.slug}
+              />
+            </label>
+            <label className="field">
+              <span>새 작품 제목</span>
+              <input
+                maxLength={80}
+                onChange={(event) =>
+                  setNewSeries((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+                value={newSeries.title}
+              />
+            </label>
+            <label className="field">
+              <span>줄거리</span>
+              <textarea
+                maxLength={1000}
+                onChange={(event) =>
+                  setNewSeries((current) => ({
+                    ...current,
+                    synopsis: event.target.value,
+                  }))
+                }
+                rows={3}
+                value={newSeries.synopsis}
+              />
+            </label>
+            <div className="studio-number-title">
+              <label className="field">
+                <span>장르</span>
+                <input
+                  maxLength={40}
+                  onChange={(event) =>
+                    setNewSeries((current) => ({
+                      ...current,
+                      genre: event.target.value,
+                    }))
+                  }
+                  value={newSeries.genre}
+                />
+              </label>
+              <label className="field">
+                <span>연재 요일</span>
+                <select
+                  onChange={(event) =>
+                    setNewSeries((current) => ({
+                      ...current,
+                      weekday: event.target
+                        .value as CreateSeriesRequest["weekday"],
+                    }))
+                  }
+                  value={newSeries.weekday}
+                >
+                  {(
+                    Object.keys(WEEKDAY_LABEL) as Array<
+                      CreateSeriesRequest["weekday"]
+                    >
+                  ).map((weekday) => (
+                    <option key={weekday} value={weekday}>
+                      {WEEKDAY_LABEL[weekday]}요일
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="field">
+              <span>작가 이름</span>
+              <input
+                maxLength={40}
+                onChange={(event) =>
+                  setNewSeries((current) => ({
+                    ...current,
+                    authorName: event.target.value,
+                  }))
+                }
+                value={newSeries.authorName}
+              />
+            </label>
+            <button
+              className="button button--primary button--wide"
+              disabled={newSeriesBusy}
+              onClick={() => void createNewSeries()}
+              type="button"
+            >
+              {newSeriesBusy ? "만드는 중…" : "작품 만들기"}
+            </button>
+            <p aria-live="polite">
+              {newSeriesMessage ??
+                "시즌 1이 함께 만들어져 바로 연재를 시작할 수 있어요."}
+            </p>
+          </details>
           <details className="studio-security-access">
             <summary>운영 보안 설정</summary>
             <label className="field">
@@ -1238,7 +1452,9 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           </header>
           {renameMessage ? <p aria-live="polite">{renameMessage}</p> : null}
           <ul>
-            {selectedSeason.episodes.map((episode) => (
+            {selectedSeason.episodes
+              .filter((episode) => !deletedEpisodeIds.has(episode.id))
+              .map((episode) => (
               <li key={episode.id}>
                 {renameTarget?.id === episode.id ? (
                   <>
@@ -1315,6 +1531,22 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                         type="button"
                       >
                         제목 수정
+                      </button>
+                      <button
+                        className="button button--danger"
+                        disabled={deleteBusyId !== null}
+                        onClick={() =>
+                          deleteConfirmId === episode.id
+                            ? void removeEpisode(episode.id)
+                            : setDeleteConfirmId(episode.id)
+                        }
+                        type="button"
+                      >
+                        {deleteBusyId === episode.id
+                          ? "삭제 중…"
+                          : deleteConfirmId === episode.id
+                            ? "정말 삭제"
+                            : "삭제"}
                       </button>
                     </div>
                   </>
@@ -1420,6 +1652,22 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                         type="button"
                       >
                         {draftBusyId === draft.id ? "공개 중…" : "공개하기"}
+                      </button>
+                      <button
+                        className="button button--danger"
+                        disabled={deleteBusyId !== null}
+                        onClick={() =>
+                          deleteConfirmId === draft.id
+                            ? void removeEpisode(draft.id)
+                            : setDeleteConfirmId(draft.id)
+                        }
+                        type="button"
+                      >
+                        {deleteBusyId === draft.id
+                          ? "삭제 중…"
+                          : deleteConfirmId === draft.id
+                            ? "정말 삭제"
+                            : "삭제"}
                       </button>
                     </div>
                   </>

@@ -69,6 +69,13 @@ function studioService(): jest.Mocked<StudioUseCases> {
       title: "달빛 세탁소 리마스터",
       synopsis: "새 줄거리",
     }),
+    createSeries: jest.fn().mockResolvedValue({
+      seriesId: "series-2",
+      slug: "night-market",
+      title: "야시장",
+      seasonId: "season-2",
+    }),
+    deleteEpisode: jest.fn().mockResolvedValue(undefined),
     updateEpisodeTitle: jest.fn().mockResolvedValue({
       id: "episode-12",
       number: 12,
@@ -245,6 +252,49 @@ describe("studio routes", () => {
       .expect(400);
 
     expect(response.body.code).toBe("INVALID_EPISODE_VISIBILITY");
+  });
+
+  it("creates a new series with its first season", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .post("/api/studio/series")
+      .send({
+        slug: "night-market",
+        title: "야시장",
+        synopsis: "밤에만 열리는 시장 이야기",
+        genre: "판타지",
+        weekday: "fri",
+        authorName: "새 작가",
+      })
+      .expect(201);
+
+    expect(service.createSeries).toHaveBeenCalled();
+    expect(response.body.seasonId).toBe("season-2");
+  });
+
+  it("rejects a series with an invalid slug", async () => {
+    const response = await request(app())
+      .post("/api/studio/series")
+      .send({
+        slug: "한글주소",
+        title: "야시장",
+        synopsis: "줄거리",
+        genre: "판타지",
+        weekday: "fri",
+        authorName: "새 작가",
+      })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_SERIES");
+  });
+
+  it("deletes an episode", async () => {
+    const service = studioService();
+    await request(app(service))
+      .delete("/api/studio/episodes/episode-12")
+      .expect(204);
+
+    expect(service.deleteEpisode).toHaveBeenCalledWith("episode-12");
   });
 
   it("updates series display info", async () => {

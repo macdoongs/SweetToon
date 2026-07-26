@@ -9,7 +9,9 @@ FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG API_INTERNAL_URL=http://server:4000
+ARG SITE_URL=http://localhost:3000
 ENV API_INTERNAL_URL=$API_INTERNAL_URL
+ENV SITE_URL=$SITE_URL
 
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .

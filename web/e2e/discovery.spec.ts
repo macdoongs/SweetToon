@@ -437,5 +437,17 @@ test("최신 회차 RSS를 발견하고 구독할 수 있다", async ({ page }) 
   expect(feed).toContain('<rss version="2.0"');
   expect(feed).toContain("<language>ko-KR</language>");
   expect(feed).toContain("<item>");
-  expect(feed).toContain("https://sweettoon.katsuranbo.com/read/");
+  expect(feed).toContain(
+    `${process.env.SITE_URL ?? "http://localhost:3000"}/read/`,
+  );
+
+  const sitemapResponse = await page.request.get("/sitemap.xml");
+  expect(sitemapResponse.ok()).toBeTruthy();
+  const sitemap = await sitemapResponse.text();
+  const expectedSiteUrl =
+    process.env.SITE_URL ?? "http://localhost:3000";
+  expect(sitemap).toContain(
+    `<loc>${expectedSiteUrl}/series/moonlight-laundry</loc>`,
+  );
+  expect(sitemap).toContain(`<loc>${expectedSiteUrl}/read/`);
 });

@@ -163,6 +163,22 @@ describe("reader routes", () => {
     expect(response.body.code).toBe("INVALID_SERIES_FILTER");
   });
 
+  it("accepts a larger page for summary-only recommendation reads", async () => {
+    const repository = makeRepository();
+    const app = createApp({
+      readerRepository: repository,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+    });
+
+    await request(app).get("/api/series?pageSize=100").expect(200);
+
+    expect(repository.listSeries).toHaveBeenCalledWith({
+      filter: "all",
+      page: 1,
+      pageSize: 100,
+    });
+  });
+
   it("returns a series with seasons and episodes", async () => {
     const response = await request(makeApp())
       .get("/api/series/moonlight-laundry")

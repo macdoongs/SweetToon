@@ -9,8 +9,6 @@ import {
 } from "@/lib/series-filter";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
-export const dynamic = "force-dynamic";
-
 export const metadata: Metadata = {
   title: "웹툰을 읽고 단행본으로 소장하는 곳",
   description: SITE_DESCRIPTION,

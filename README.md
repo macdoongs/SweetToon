@@ -190,6 +190,8 @@ API로 전달하기 전에 거부합니다.
 기본 `API_SECURITY_MODE=demo`는 심사자가 로그인 없이 전체 흐름을 확인하기 위한
 과제 모드입니다. 운영에서는 `strict`로 바꾸고 `STUDIO_API_KEY`,
 `OPERATIONS_API_KEY`, 32자 이상의 `AUDIT_HASH_SECRET`을 secret으로 주입합니다.
+demo에서 감사 해시 secret을 비워 두면 서버가 기동할 때 임의 값을 생성하며,
+strict에서는 빈 값이나 32자 미만의 값을 허용하지 않습니다.
 이 경우 스튜디오 변경 요청과 주문 상태 변경은 각각 전용 헤더 없이는 `401`로
 거부됩니다. 업로드와 상태 변경 결과는 원문 IP 대신 HMAC 해시와 최소 사용자
 에이전트만 PostgreSQL 감사 로그에 기록합니다.

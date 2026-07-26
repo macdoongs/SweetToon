@@ -1,5 +1,7 @@
 import os from "node:os";
 import path from "node:path";
+import type { AddressInfo } from "node:net";
+import http from "node:http";
 import request from "supertest";
 import { createApp } from "../app";
 import type { OrderDetail } from "../contracts/order";
@@ -207,5 +209,45 @@ describe("order routes", () => {
       .expect(400);
 
     expect(response.body.code).toBe("INVALID_ORDER_STATUS");
+  });
+
+  it("releases a delayed realtime subscription after the client disconnects", async () => {
+    const realtime = makeRealtime();
+    let resolveSubscription:
+      | ((unsubscribe: () => Promise<void>) => void)
+      | undefined;
+    const subscriptionStarted = new Promise<void>((resolve) => {
+      realtime.subscribeOrder.mockImplementation(
+        () =>
+          new Promise((resolveSubscribe) => {
+            resolveSubscription = resolveSubscribe;
+            resolve();
+          }),
+      );
+    });
+    const unsubscribe = jest.fn().mockResolvedValue(undefined);
+    const server = makeApp(undefined, realtime).listen(0);
+
+    try {
+      const { port } = server.address() as AddressInfo;
+      const client = http.get(
+        `http://127.0.0.1:${port}/api/orders/${order.id}/events`,
+      );
+      client.on("error", () => undefined);
+
+      await subscriptionStarted;
+      client.destroy();
+      await new Promise<void>((resolve) => client.once("close", resolve));
+      resolveSubscription?.(unsubscribe);
+
+      for (let attempt = 0; attempt < 20 && !unsubscribe.mock.calls.length; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 });

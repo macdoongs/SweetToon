@@ -83,7 +83,30 @@ export function createOrderRouter(
       });
       return;
     }
+
+    let closed = false;
+    let keepAlive: NodeJS.Timeout | null = null;
+    let unsubscribe: (() => Promise<void>) | null = null;
+    const releaseSubscription = async () => {
+      if (!unsubscribe) return;
+      const release = unsubscribe;
+      unsubscribe = null;
+      await release();
+    };
+    req.once("close", () => {
+      closed = true;
+      if (keepAlive) {
+        clearInterval(keepAlive);
+        keepAlive = null;
+      }
+      void releaseSubscription().catch((error) => {
+        console.error("[sweettoon-order-stream-cleanup]", error);
+      });
+    });
+
     const initialOrder = OrderDetailSchema.parse(await service.get(id.data));
+    if (closed) return;
+
     res.status(200);
     res.set({
       "Cache-Control": "no-cache, no-transform",
@@ -100,23 +123,22 @@ export function createOrderRouter(
     };
     send(initialOrder);
 
-    let unsubscribe: () => Promise<void> = async () => undefined;
     try {
       unsubscribe = realtime
         ? await realtime.subscribeOrder(id.data, send)
         : async () => undefined;
+      if (closed) {
+        await releaseSubscription();
+        return;
+      }
     } catch (error) {
       console.error("[sweettoon-order-stream]", error);
       res.end();
       return;
     }
-    const keepAlive = setInterval(() => {
+    keepAlive = setInterval(() => {
       res.write(": keep-alive\n\n");
     }, 15_000);
-    req.once("close", () => {
-      clearInterval(keepAlive);
-      void unsubscribe();
-    });
   });
 
   router.patch(

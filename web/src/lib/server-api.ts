@@ -78,8 +78,13 @@ export function getEpisode(episodeId: string): Promise<EpisodeReader> {
   });
 }
 
-export function getOrders(): Promise<OrderListResponse> {
-  return serverGetJson("/api/orders", { fresh: true });
+export function getOrders(
+  cursor?: string,
+  limit = 20,
+): Promise<OrderListResponse> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
+  return serverGetJson(`/api/orders?${query.toString()}`, { fresh: true });
 }
 
 export function getOrder(orderId: string): Promise<OrderDetail> {

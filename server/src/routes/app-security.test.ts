@@ -4,6 +4,8 @@ import type { ReaderRepository } from "../repositories/reader-repository";
 
 const readerRepository = {
   listSeries: jest.fn(),
+  listRealtimeSeries: jest.fn(),
+  seriesExists: jest.fn(),
   findSeriesBySlug: jest.fn(),
   findEpisodeById: jest.fn(),
 } as unknown as ReaderRepository;
@@ -19,6 +21,15 @@ describe("HTTP security boundary", () => {
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["x-frame-options"]).toBe("SAMEORIGIN");
     expect(response.headers["referrer-policy"]).toBe("no-referrer");
+    expect(response.headers).toHaveProperty("content-security-policy");
+  });
+
+  it("relaxes CSP only for the inline Swagger bootstrap", async () => {
+    const docs = await request(app).get("/api-docs/").expect(200);
+    const api = await request(app).get("/openapi.json").expect(200);
+
+    expect(docs.headers).not.toHaveProperty("content-security-policy");
+    expect(api.headers).toHaveProperty("content-security-policy");
   });
 
   it("allows only configured cross-origin callers", async () => {

@@ -185,19 +185,7 @@ export class DemoBotService implements DemoBotController {
   }
 
   private async loadSeriesSlugs(): Promise<string[]> {
-    const first = await this.readerRepository.listSeries({
-      filter: "all",
-      page: 1,
-      pageSize: 24,
-    });
-    const second = first.nextPage
-      ? await this.readerRepository.listSeries({
-          filter: "all",
-          page: first.nextPage,
-          pageSize: 24,
-        })
-      : null;
-    return [...first.items, ...(second?.items ?? [])]
+    return (await this.readerRepository.listRealtimeSeries())
       .filter((item) => Boolean(item.coverUrl))
       .map((item) => item.slug);
   }
@@ -235,13 +223,7 @@ export class DemoBotService implements DemoBotController {
   }
 
   private async tickOrder(slugs: string[]): Promise<void> {
-    const { items } = await this.orderService.list();
-    const active = items.find(
-      (order) =>
-        order.isDemo &&
-        order.status !== "completed" &&
-        order.status !== "canceled",
-    );
+    const active = await this.orderService.findActiveDemo();
     if (active) {
       const status = nextOrderStatus[active.status];
       if (!status) return;

@@ -140,7 +140,16 @@ export function EpisodeReaderPage({
   const restoredProgressKey = useRef<string | null>(null);
   const suppressDoubleProgressSave = useRef(false);
   const suppressWebtoonProgressSave = useRef(false);
+  const requestedDimensionPageIds = useRef(new Set<string>());
+  const readerMounted = useRef(true);
   const progressRestorationKey = episode ? `${episode.id}:${mode}` : null;
+
+  useEffect(() => {
+    readerMounted.current = true;
+    return () => {
+      readerMounted.current = false;
+    };
+  }, []);
 
   const retry = useCallback(() => {
     setError(null);
@@ -378,10 +387,13 @@ export function EpisodeReaderPage({
 
   useEffect(() => {
     if (!episode || mode !== "double") return;
+    const requestedPageIds = requestedDimensionPageIds.current;
     for (const page of episode.pages) {
-      if (dimensions[page.id]) continue;
+      if (requestedPageIds.has(page.id)) continue;
+      requestedPageIds.add(page.id);
       const image = new window.Image();
       image.onload = () => {
+        if (!readerMounted.current) return;
         setDimensions((current) => ({
           ...current,
           [page.id]: {
@@ -390,9 +402,12 @@ export function EpisodeReaderPage({
           },
         }));
       };
+      image.onerror = () => {
+        requestedPageIds.delete(page.id);
+      };
       image.src = page.imageUrl;
     }
-  }, [dimensions, episode, mode]);
+  }, [episode, mode]);
 
   const spreads = useMemo(
     () => buildSpreads(episode?.pages ?? [], dimensions),
@@ -651,7 +666,7 @@ export function EpisodeReaderPage({
       <header className="reader-toolbar">
         <Link
           className="reader-toolbar__back"
-          href={`/series/${episode.series.slug}`}
+          href={`/series/${encodeURIComponent(episode.series.slug)}`}
           aria-label="작품으로 돌아가기"
         >
           ←
@@ -840,7 +855,7 @@ export function EpisodeReaderPage({
           </Link>
           <Link
             className="reader-finish__back"
-            href={`/series/${episode.series.slug}#episodes`}
+            href={`/series/${encodeURIComponent(episode.series.slug)}#episodes`}
           >
             무료 회차 목록으로
           </Link>
@@ -850,7 +865,7 @@ export function EpisodeReaderPage({
           <h2>아직 등록된 원고가 없어요.</h2>
           <Link
             className="button button--light"
-            href={`/series/${episode.series.slug}`}
+            href={`/series/${encodeURIComponent(episode.series.slug)}`}
           >
             에피소드 목록으로
           </Link>
@@ -981,7 +996,7 @@ export function EpisodeReaderPage({
             {episode.navigation.previousEpisodeId ? (
               <Link
                 className="button button--dark-ghost"
-                href={`/read/${episode.navigation.previousEpisodeId}`}
+                href={`/read/${encodeURIComponent(episode.navigation.previousEpisodeId)}`}
               >
                 ← 이전 화
               </Link>
@@ -991,14 +1006,14 @@ export function EpisodeReaderPage({
             {episode.navigation.nextEpisodeId ? (
               <Link
                 className="button button--light"
-                href={`/read/${episode.navigation.nextEpisodeId}`}
+                href={`/read/${encodeURIComponent(episode.navigation.nextEpisodeId)}`}
               >
                 다음 화 이어보기 →
               </Link>
             ) : (
               <Link
                 className="button button--light"
-                href={`/series/${episode.series.slug}#edition`}
+                href={`/series/${encodeURIComponent(episode.series.slug)}#edition`}
               >
                 소장본 알아보기 →
               </Link>
@@ -1006,7 +1021,7 @@ export function EpisodeReaderPage({
           </div>
           <Link
             className="reader-finish__back"
-            href={`/series/${episode.series.slug}`}
+            href={`/series/${encodeURIComponent(episode.series.slug)}`}
           >
             에피소드 목록으로 돌아가기
           </Link>

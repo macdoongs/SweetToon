@@ -8,7 +8,7 @@ import type {
   BookSize,
   CoverType,
   CreateOrderRequest,
-  OrderDetail,
+  OrderReceipt,
   PrintQuoteRequest,
   PrintQuoteResponse,
 } from "@/lib/order-types";
@@ -98,7 +98,7 @@ export function OrderFormPage({
     setBusy("order");
     setError(null);
     try {
-      const created = await postJson<CreateOrderRequest, OrderDetail>(
+      const created = await postJson<CreateOrderRequest, OrderReceipt>(
         "/api/orders",
         {
           ...specification,
@@ -108,9 +108,11 @@ export function OrderFormPage({
           memo: memo.trim() || null,
         },
       );
-      if (volumeNumber > 1) {
-        saveDemoEntitlement(season.id, volumeNumber, requestKey.current);
-      }
+      saveDemoEntitlement(
+        season.id,
+        volumeNumber,
+        created.entitlementToken,
+      );
       if (created.candyBonus > 0) notifyCandyUpdated();
       router.push(`/orders/${encodeURIComponent(created.id)}`);
     } catch (reason) {

@@ -174,7 +174,7 @@ function LivePopularRail({
                 key={`${copyIndex}-${series.id}`}
               >
                 <Link
-                  href={`/series/${series.slug}`}
+                  href={`/series/${encodeURIComponent(series.slug)}`}
                   tabIndex={duplicate ? -1 : undefined}
                 >
                   <span className="live-popular-card__rank">
@@ -354,7 +354,7 @@ export function HomePage({
         {featured ? (
           <Link
             className="featured-book"
-            href={`/series/${featured.slug}`}
+            href={`/series/${encodeURIComponent(featured.slug)}`}
             aria-label={`${featured.title} 작품 보기`}
           >
             <div className="featured-book__halo" />
@@ -492,7 +492,7 @@ export function HomePage({
                 <article className="series-card" key={series.id}>
                   <Link
                     className="series-card__image"
-                    href={`/series/${series.slug}`}
+                    href={`/series/${encodeURIComponent(series.slug)}`}
                   >
                     <SeriesCover series={series} />
                     <span
@@ -504,7 +504,7 @@ export function HomePage({
                   <div className="series-card__body">
                     <span className="series-card__genre">{series.genre}</span>
                     <h3>
-                      <Link href={`/series/${series.slug}`}>
+                      <Link href={`/series/${encodeURIComponent(series.slug)}`}>
                         {series.title}
                       </Link>
                     </h3>
@@ -515,7 +515,7 @@ export function HomePage({
                     ) ? (
                       <Link
                         className="series-card__continue"
-                        href={`/read/${getSeriesProgressFromStore(readingProgress, series.slug)?.episodeId}`}
+                        href={`/read/${encodeURIComponent(getSeriesProgressFromStore(readingProgress, series.slug)?.episodeId ?? "")}`}
                       >
                         <span>
                           이어보기 ·{" "}
@@ -541,7 +541,7 @@ export function HomePage({
                     {series.latestEpisode ? (
                       <Link
                         className="series-card__latest"
-                        href={`/read/${series.latestEpisode.id}`}
+                        href={`/read/${encodeURIComponent(series.latestEpisode.id)}`}
                         aria-label={`${series.title} 최신 ${series.latestEpisode.number}화 ${series.latestEpisode.title} 읽기`}
                       >
                         <span>최신 {series.latestEpisode.number}화</span>

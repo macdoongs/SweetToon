@@ -91,6 +91,8 @@ function dependencies() {
       total: 1,
       facets: { genres: ["힐링"], weekdays: ["mon"] },
     }),
+    listRealtimeSeries: jest.fn().mockResolvedValue([summary]),
+    seriesExists: jest.fn().mockResolvedValue(true),
     findSeriesBySlug: jest.fn().mockResolvedValue(detail),
     findEpisodeById: jest.fn().mockResolvedValue(null),
   };
@@ -99,7 +101,8 @@ function dependencies() {
     create: jest.fn(),
     createDemo: jest.fn().mockResolvedValue(demoOrder),
     get: jest.fn(),
-    list: jest.fn().mockResolvedValue({ items: [] }),
+    list: jest.fn().mockResolvedValue({ items: [], nextCursor: null }),
+    findActiveDemo: jest.fn().mockResolvedValue(null),
     transition: jest.fn(),
     pruneCompletedDemos: jest.fn().mockResolvedValue(undefined),
     clearDemos: jest.fn().mockResolvedValue(undefined),
@@ -151,16 +154,10 @@ describe("DemoBotService", () => {
 
   it("only assigns virtual readers to series that have a thumbnail", async () => {
     const { readerRepository, orderService, realtime } = dependencies();
-    readerRepository.listSeries.mockResolvedValue({
-      items: [
-        { ...summary, slug: "without-cover", coverUrl: null },
-        summary,
-      ],
-      page: 1,
-      nextPage: null,
-      total: 2,
-      facets: { genres: ["힐링"], weekdays: ["mon"] },
-    });
+    readerRepository.listRealtimeSeries.mockResolvedValue([
+      { ...summary, slug: "without-cover", coverUrl: null },
+      summary,
+    ]);
     const bot = new DemoBotService(
       readerRepository,
       orderService,

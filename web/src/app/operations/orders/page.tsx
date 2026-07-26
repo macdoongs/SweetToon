@@ -9,6 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  const { items } = await getOrders();
-  return <OperationsOrderPage initialOrders={items} />;
+  const initialOrders = await getOrders();
+  return <OperationsOrderPage initialResponse={initialOrders} />;
 }

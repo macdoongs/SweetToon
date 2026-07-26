@@ -18,6 +18,8 @@ function readerRepository(): ReaderRepository {
       total: 0,
       facets: { genres: [], weekdays: [] },
     }),
+    listRealtimeSeries: jest.fn().mockResolvedValue([]),
+    seriesExists: jest.fn().mockResolvedValue(false),
     findSeriesBySlug: jest.fn().mockResolvedValue(null),
     findEpisodeById: jest.fn().mockResolvedValue(null),
   };

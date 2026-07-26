@@ -3,7 +3,9 @@ import {
   CreateOrderRequestSchema,
   OrderDetailSchema,
   OrderIdParamSchema,
+  OrderListQuerySchema,
   OrderListResponseSchema,
+  OrderReceiptSchema,
   OrderTransitionRequestSchema,
   PrintQuoteRequestSchema,
   PrintQuoteResponseSchema,
@@ -55,11 +57,19 @@ export function createOrderRouter(
       });
       return;
     }
-    res.status(201).json(OrderDetailSchema.parse(await service.create(input.data)));
+    res.status(201).json(OrderReceiptSchema.parse(await service.create(input.data)));
   });
 
-  router.get("/orders", async (_req, res) => {
-    res.json(OrderListResponseSchema.parse(await service.list()));
+  router.get("/orders", async (req, res) => {
+    const query = OrderListQuerySchema.safeParse(req.query);
+    if (!query.success) {
+      res.status(400).json({
+        code: "INVALID_ORDER_LIST_QUERY",
+        message: "주문 목록 조회 조건을 다시 확인해 주세요.",
+      });
+      return;
+    }
+    res.json(OrderListResponseSchema.parse(await service.list(query.data)));
   });
 
   router.get("/orders/:id", async (req, res) => {

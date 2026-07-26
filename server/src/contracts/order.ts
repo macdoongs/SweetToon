@@ -55,6 +55,11 @@ export const OrderTransitionRequestSchema = z.object({
   status: z.enum(["processing", "shipped", "completed"]),
 });
 
+export const OrderListQuerySchema = z.object({
+  cursor: OrderIdParamSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
 export const OrderEventSchema = z.object({
   id: z.string(),
   status: OrderStatusSchema,
@@ -94,14 +99,24 @@ export const OrderDetailSchema = z.object({
   events: z.array(OrderEventSchema),
 });
 
+export const OrderReceiptSchema = OrderDetailSchema.extend({
+  entitlementToken: z.string().uuid(),
+});
+
+export const OrderSummarySchema = OrderDetailSchema.omit({ events: true });
+
 export const OrderListResponseSchema = z.object({
-  items: z.array(OrderDetailSchema),
+  items: z.array(OrderSummarySchema),
+  nextCursor: OrderIdParamSchema.nullable(),
 });
 
 export type PrintQuoteRequest = z.infer<typeof PrintQuoteRequestSchema>;
 export type PrintQuoteResponse = z.infer<typeof PrintQuoteResponseSchema>;
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
 export type OrderDetail = z.infer<typeof OrderDetailSchema>;
+export type OrderReceipt = z.infer<typeof OrderReceiptSchema>;
+export type OrderListQuery = z.infer<typeof OrderListQuerySchema>;
+export type OrderSummary = z.infer<typeof OrderSummarySchema>;
 export type OrderListResponse = z.infer<typeof OrderListResponseSchema>;
 export type OrderStatus = z.infer<typeof OrderStatusSchema>;
 export type OrderTransitionRequest = z.infer<

@@ -56,6 +56,10 @@ export interface StudioUseCases {
     episodeId: string,
     visibility: EpisodeVisibility,
   ): Promise<DraftEpisode>;
+  updateEpisodeTitle(
+    episodeId: string,
+    title: string,
+  ): Promise<DraftEpisode>;
   listDraftEpisodes(): Promise<DraftEpisode[]>;
   createPackagingRequest(
     input: CreatePackagingRequest,
@@ -242,6 +246,24 @@ export class StudioService implements StudioUseCases {
       throw new StudioServiceError(
         "EPISODE_NOT_FOUND",
         "공개 상태를 바꿀 에피소드를 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return updated;
+  }
+
+  async updateEpisodeTitle(
+    episodeId: string,
+    title: string,
+  ): Promise<DraftEpisode> {
+    const updated = await this.repository.updateEpisodeTitle(
+      episodeId,
+      title,
+    );
+    if (!updated) {
+      throw new StudioServiceError(
+        "EPISODE_NOT_FOUND",
+        "제목을 바꿀 에피소드를 찾을 수 없습니다.",
         404,
       );
     }

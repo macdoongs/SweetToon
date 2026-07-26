@@ -40,6 +40,10 @@ export const UpdateEpisodeVisibilityRequestSchema = z.object({
   visibility: EpisodeVisibilitySchema,
 });
 
+export const UpdateEpisodeTitleRequestSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+});
+
 export const DraftEpisodeSchema = z.object({
   id: z.string(),
   number: z.number().int().positive(),

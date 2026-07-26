@@ -117,6 +117,14 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [drafts, setDrafts] = useState<DraftEpisode[]>([]);
   const [draftBusyId, setDraftBusyId] = useState<string | null>(null);
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<
+    { id: string; title: string } | null
+  >(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameMessage, setRenameMessage] = useState<string | null>(null);
+  const [renamedTitles, setRenamedTitles] = useState<Record<string, string>>(
+    {},
+  );
   const [packagingRequests, setPackagingRequests] = useState<
     PackagingRequest[]
   >([]);
@@ -294,10 +302,8 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
 
   async function publishEpisode() {
     if (!preview || !selectedSeason) return;
-    if (title.trim().length === 0) {
-      setError("에피소드 제목을 입력해 주세요.");
-      return;
-    }
+    // 제목을 비워 두면 회차 번호로 자동 지정한다. 등록 뒤에도 수정할 수 있다.
+    const resolvedTitle = title.trim() || `${episodeNumber}화`;
     const visibility = purpose === "draft" ? "private" : "public";
     setBusy("publish");
     setError(null);
@@ -308,7 +314,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           sessionId: preview.sessionId,
           seasonId: selectedSeason.id,
           number: episodeNumber,
-          title: title.trim(),
+          title: resolvedTitle,
           pageIds: preview.pages.map((page) => page.id),
           visibility,
         },
@@ -322,7 +328,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           {
             id: result.episodeId,
             number: episodeNumber,
-            title: title.trim(),
+            title: resolvedTitle,
             publishedAt: new Date().toISOString(),
             season: {
               id: selectedSeason.id,
@@ -391,6 +397,45 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       );
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function saveRename() {
+    if (!renameTarget) return;
+    const nextTitle = renameTarget.title.trim();
+    if (nextTitle.length === 0) {
+      setRenameMessage("제목을 한 글자 이상 입력해 주세요.");
+      return;
+    }
+    setRenameBusy(true);
+    setRenameMessage(null);
+    try {
+      const updated = await patchJson<{ title: string }, DraftEpisode>(
+        `/api/studio/episodes/${encodeURIComponent(renameTarget.id)}/title`,
+        { title: nextTitle },
+        mutationHeaders,
+      );
+      setRenamedTitles((current) => ({
+        ...current,
+        [updated.id]: updated.title,
+      }));
+      setDrafts((current) =>
+        current.map((draft) =>
+          draft.id === updated.id
+            ? { ...draft, title: updated.title }
+            : draft,
+        ),
+      );
+      setRenameTarget(null);
+      setRenameMessage("에피소드 제목을 수정했어요.");
+    } catch (reason) {
+      setRenameMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "제목을 수정하지 못했습니다.",
+      );
+    } finally {
+      setRenameBusy(false);
     }
   }
 
@@ -596,7 +641,9 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                   />
                 </label>
                 <label className="field">
-                  <span>제목</span>
+                  <span>
+                    제목 <small>비우면 “{episodeNumber}화”로 저장돼요</small>
+                  </span>
                   <input
                     maxLength={80}
                     onChange={(event) => setTitle(event.target.value)}
@@ -941,6 +988,94 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
         </section>
       </div>
 
+      {selectedSeries && selectedSeason && selectedSeason.episodes.length > 0 ? (
+        <section className="studio-drafts studio-episodes" aria-label="등록된 회차 관리">
+          <header>
+            <div>
+              <p className="eyebrow">Episodes</p>
+              <h2>등록된 회차 관리</h2>
+            </div>
+            <p>
+              {selectedSeries.title} · 시즌 {selectedSeason.number} — 압축
+              파일명은 페이지 정렬에만 쓰이며, 제목은 여기서 언제든 고칠 수
+              있어요.
+            </p>
+          </header>
+          {renameMessage ? <p aria-live="polite">{renameMessage}</p> : null}
+          <ul>
+            {selectedSeason.episodes.map((episode) => (
+              <li key={episode.id}>
+                {renameTarget?.id === episode.id ? (
+                  <>
+                    <label className="field studio-rename-field">
+                      <span>{episode.number}화 제목</span>
+                      <input
+                        maxLength={80}
+                        onChange={(event) =>
+                          setRenameTarget({
+                            id: episode.id,
+                            title: event.target.value,
+                          })
+                        }
+                        value={renameTarget.title}
+                      />
+                    </label>
+                    <div className="studio-drafts__actions">
+                      <button
+                        className="button button--ghost"
+                        disabled={renameBusy}
+                        onClick={() => setRenameTarget(null)}
+                        type="button"
+                      >
+                        취소
+                      </button>
+                      <button
+                        className="button button--primary"
+                        disabled={renameBusy}
+                        onClick={() => void saveRename()}
+                        type="button"
+                      >
+                        {renameBusy ? "저장 중…" : "저장"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <strong>{episode.number}화</strong>
+                      <span>
+                        {renamedTitles[episode.id] ?? episode.title}
+                      </span>
+                    </div>
+                    <div className="studio-drafts__actions">
+                      <Link
+                        className="button button--ghost"
+                        href={`/read/${encodeURIComponent(episode.id)}`}
+                      >
+                        보기
+                      </Link>
+                      <button
+                        className="button button--primary"
+                        onClick={() =>
+                          setRenameTarget({
+                            id: episode.id,
+                            title:
+                              renamedTitles[episode.id] ?? episode.title,
+                          })
+                        }
+                        type="button"
+                      >
+                        제목 수정
+                      </button>
+                    </div>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {drafts.length > 0 ? (
         <section className="studio-drafts" aria-label="비공개 보관함">
           <header>
@@ -954,29 +1089,79 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           <ul>
             {drafts.map((draft) => (
               <li key={draft.id}>
-                <div>
-                  <strong>
-                    {draft.series.title} · 시즌 {draft.season.number} ·{" "}
-                    {draft.number}화
-                  </strong>
-                  <span>{draft.title}</span>
-                </div>
-                <div className="studio-drafts__actions">
-                  <Link
-                    className="button button--ghost"
-                    href={`/read/${encodeURIComponent(draft.id)}`}
-                  >
-                    미리보기
-                  </Link>
-                  <button
-                    className="button button--primary"
-                    disabled={draftBusyId !== null}
-                    onClick={() => void publishDraft(draft.id)}
-                    type="button"
-                  >
-                    {draftBusyId === draft.id ? "공개 중…" : "공개하기"}
-                  </button>
-                </div>
+                {renameTarget?.id === draft.id ? (
+                  <>
+                    <label className="field studio-rename-field">
+                      <span>{draft.number}화 제목</span>
+                      <input
+                        maxLength={80}
+                        onChange={(event) =>
+                          setRenameTarget({
+                            id: draft.id,
+                            title: event.target.value,
+                          })
+                        }
+                        value={renameTarget.title}
+                      />
+                    </label>
+                    <div className="studio-drafts__actions">
+                      <button
+                        className="button button--ghost"
+                        disabled={renameBusy}
+                        onClick={() => setRenameTarget(null)}
+                        type="button"
+                      >
+                        취소
+                      </button>
+                      <button
+                        className="button button--primary"
+                        disabled={renameBusy}
+                        onClick={() => void saveRename()}
+                        type="button"
+                      >
+                        {renameBusy ? "저장 중…" : "저장"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <strong>
+                        {draft.series.title} · 시즌 {draft.season.number} ·{" "}
+                        {draft.number}화
+                      </strong>
+                      <span>{draft.title}</span>
+                    </div>
+                    <div className="studio-drafts__actions">
+                      <Link
+                        className="button button--ghost"
+                        href={`/read/${encodeURIComponent(draft.id)}`}
+                      >
+                        미리보기
+                      </Link>
+                      <button
+                        className="button button--ghost"
+                        onClick={() =>
+                          setRenameTarget({
+                            id: draft.id,
+                            title: draft.title,
+                          })
+                        }
+                        type="button"
+                      >
+                        제목 수정
+                      </button>
+                      <button
+                        className="button button--primary"
+                        disabled={draftBusyId !== null}
+                        onClick={() => void publishDraft(draft.id)}
+                        type="button"
+                      >
+                        {draftBusyId === draft.id ? "공개 중…" : "공개하기"}
+                      </button>
+                    </div>
+                  </>
+                )}
               </li>
             ))}
           </ul>

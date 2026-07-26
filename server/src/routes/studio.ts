@@ -13,6 +13,7 @@ import {
   DraftEpisodeSchema,
   PackagingRequestListSchema,
   PackagingRequestSchema,
+  UpdateEpisodeTitleRequestSchema,
   UpdateEpisodeVisibilityRequestSchema,
   UploadPageIdSchema,
   UploadPreviewSchema,
@@ -158,6 +159,32 @@ export function createStudioRouter(
       const updated = await service.setEpisodeVisibility(
         episodeId.data,
         input.data.visibility,
+      );
+      res.json(DraftEpisodeSchema.parse(updated));
+    },
+  );
+
+  router.patch(
+    "/studio/episodes/:episodeId/title",
+    auditSecurityAction(auditLogger, "studio.episode.rename"),
+    mutationGuard,
+    async (req, res) => {
+      const episodeId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.episodeId);
+      const input = UpdateEpisodeTitleRequestSchema.safeParse(req.body);
+      if (!episodeId.success || !input.success) {
+        res.status(400).json({
+          code: "INVALID_EPISODE_TITLE",
+          message: "에피소드 제목은 1자 이상 80자 이하로 입력해 주세요.",
+        });
+        return;
+      }
+      const updated = await service.updateEpisodeTitle(
+        episodeId.data,
+        input.data.title,
       );
       res.json(DraftEpisodeSchema.parse(updated));
     },

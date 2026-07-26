@@ -677,6 +677,39 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/studio/episodes/{episodeId}/title": {
+      patch: {
+        tags: ["Studio"],
+        summary: "등록된 에피소드의 제목을 수정합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["title"],
+                properties: {
+                  title: { type: "string", minLength: 1, maxLength: 80 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "수정된 에피소드 요약" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
     "/api/studio/drafts": {
       get: {
         tags: ["Studio"],

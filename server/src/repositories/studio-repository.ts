@@ -62,6 +62,10 @@ export interface StudioRepository {
     episodeId: string,
     visibility: EpisodeVisibility,
   ): Promise<DraftEpisode | null>;
+  updateEpisodeTitle(
+    episodeId: string,
+    title: string,
+  ): Promise<DraftEpisode | null>;
   listDraftEpisodes(): Promise<DraftEpisode[]>;
   createPackagingRequest(
     input: CreatePackagingRequestInput,
@@ -156,6 +160,20 @@ export class PrismaStudioRepository implements StudioRepository {
       .update({
         where: { id: episodeId },
         data: { visibility },
+        include: { season: { include: { series: true } } },
+      })
+      .catch(() => null);
+    return updated ? toDraftEpisode(updated) : null;
+  }
+
+  async updateEpisodeTitle(
+    episodeId: string,
+    title: string,
+  ): Promise<DraftEpisode | null> {
+    const updated = await this.prisma.episode
+      .update({
+        where: { id: episodeId },
+        data: { title },
         include: { season: { include: { series: true } } },
       })
       .catch(() => null);

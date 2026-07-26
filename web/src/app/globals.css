@@ -2835,7 +2835,13 @@ button {
 
 .studio-drafts__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.studio-rename-field {
+  flex: 1;
+  min-width: 200px;
 }
 
 .studio-drafts > p {

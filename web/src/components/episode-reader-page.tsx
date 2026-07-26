@@ -505,38 +505,45 @@ export function EpisodeReaderPage({
       lastScrollY.current = window.scrollY;
       revealChrome();
     };
+    // 터치 스크롤 제스처가 헤더를 되살리지 않도록 마우스 이동만 취급한다.
+    const onMousePointerMove = (event: PointerEvent) => {
+      if (event.pointerType && event.pointerType !== "mouse") return;
+      onPointerActivity();
+    };
     const onFocus = () => revealChrome();
     const onScroll = () => {
       const nextScrollY = window.scrollY;
-      if (
-        mode === "webtoon" &&
-        !chromePinned &&
-        nextScrollY > Math.max(48, lastScrollY.current + 8)
-      ) {
-        if (chromeHideTimer.current) {
-          window.clearTimeout(chromeHideTimer.current);
+      if (nextScrollY <= 24) {
+        revealChrome();
+      } else if (mode === "webtoon" && !chromePinned) {
+        // 스크롤 감상 중에는 방향과 무관하게 이미지만 남기고 숨긴다.
+        if (Math.abs(nextScrollY - lastScrollY.current) > 8) {
+          if (chromeHideTimer.current) {
+            window.clearTimeout(chromeHideTimer.current);
+          }
+          setChromeVisible(false);
         }
-        setChromeVisible(false);
-      } else if (
-        nextScrollY <= 24 ||
-        nextScrollY < lastScrollY.current - 8
-      ) {
+      } else if (nextScrollY < lastScrollY.current - 8) {
         revealChrome();
       }
       lastScrollY.current = nextScrollY;
     };
-    window.addEventListener("pointermove", onPointerActivity, {
+    window.addEventListener("pointermove", onMousePointerMove, {
       passive: true,
     });
-    window.addEventListener("mousemove", onPointerActivity, { passive: true });
-    window.addEventListener("pointerdown", onPointerActivity, {
-      passive: true,
-    });
+    if (mode === "webtoon") {
+      // 스크롤 모드에서는 탭(클릭)으로만 다시 활성화한다.
+      window.addEventListener("click", onPointerActivity);
+    } else {
+      window.addEventListener("pointerdown", onPointerActivity, {
+        passive: true,
+      });
+    }
     window.addEventListener("focusin", onFocus);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      window.removeEventListener("pointermove", onPointerActivity);
-      window.removeEventListener("mousemove", onPointerActivity);
+      window.removeEventListener("pointermove", onMousePointerMove);
+      window.removeEventListener("click", onPointerActivity);
       window.removeEventListener("pointerdown", onPointerActivity);
       window.removeEventListener("focusin", onFocus);
       window.removeEventListener("scroll", onScroll);

@@ -63,6 +63,14 @@ function studioService(): jest.Mocked<StudioUseCases> {
       season: { id: "season-1", number: 1 },
       series: { slug: "moonlight-laundry", title: "달빛 세탁소" },
     }),
+    updateEpisodeTitle: jest.fn().mockResolvedValue({
+      id: "episode-12",
+      number: 12,
+      title: "고친 제목",
+      publishedAt: "2026-07-24T00:00:00.000Z",
+      season: { id: "season-1", number: 1 },
+      series: { slug: "moonlight-laundry", title: "달빛 세탁소" },
+    }),
     listDraftEpisodes: jest.fn().mockResolvedValue([]),
     createPackagingRequest: jest.fn().mockResolvedValue({
       id: "packaging-1",
@@ -224,6 +232,29 @@ describe("studio routes", () => {
       .expect(400);
 
     expect(response.body.code).toBe("INVALID_EPISODE_VISIBILITY");
+  });
+
+  it("renames a published episode", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .patch("/api/studio/episodes/episode-12/title")
+      .send({ title: "고친 제목" })
+      .expect(200);
+
+    expect(service.updateEpisodeTitle).toHaveBeenCalledWith(
+      "episode-12",
+      "고친 제목",
+    );
+    expect(response.body.title).toBe("고친 제목");
+  });
+
+  it("rejects an empty episode title", async () => {
+    const response = await request(app())
+      .patch("/api/studio/episodes/episode-12/title")
+      .send({ title: "   " })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_EPISODE_TITLE");
   });
 
   it("accepts a packaging service request", async () => {

@@ -65,6 +65,7 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
       previewEpisodeCount: 2,
     }),
     setEpisodeVisibility: jest.fn().mockResolvedValue(null),
+    updateEpisodeTitle: jest.fn().mockResolvedValue(null),
     listDraftEpisodes: jest.fn().mockResolvedValue([]),
     createPackagingRequest: jest.fn().mockImplementation(
       async (request) => ({
@@ -255,6 +256,14 @@ describe("StudioService", () => {
 
     await expect(
       service.setEpisodeVisibility("missing", "public"),
+    ).rejects.toMatchObject({ code: "EPISODE_NOT_FOUND", status: 404 });
+  });
+
+  it("rejects title changes for unknown episodes", async () => {
+    const { service } = makeDependencies();
+
+    await expect(
+      service.updateEpisodeTitle("missing", "새 제목"),
     ).rejects.toMatchObject({ code: "EPISODE_NOT_FOUND", status: 404 });
   });
 });

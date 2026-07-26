@@ -1,5 +1,7 @@
 "use client";
 
+import { writeLocalStorage } from "./local-storage";
+
 const STORAGE_KEY = "sweettoon:favorites";
 export const FAVORITES_UPDATED_EVENT = "sweettoon:favorites-updated";
 
@@ -50,13 +52,18 @@ export function toggleFavorite(
   const next = existing
     ? favorites.filter((item) => item.slug !== series.slug)
     : [{ ...series, addedAt: new Date().toISOString() }, ...favorites];
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  if (!writeLocalStorage(STORAGE_KEY, JSON.stringify(next))) {
+    return existing;
+  }
   window.dispatchEvent(new Event(FAVORITES_UPDATED_EVENT));
   return !existing;
 }
 
-export function removeFavorite(slug: string): void {
+export function removeFavorite(slug: string): boolean {
   const next = getFavorites().filter((item) => item.slug !== slug);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  if (!writeLocalStorage(STORAGE_KEY, JSON.stringify(next))) {
+    return false;
+  }
   window.dispatchEvent(new Event(FAVORITES_UPDATED_EVENT));
+  return true;
 }

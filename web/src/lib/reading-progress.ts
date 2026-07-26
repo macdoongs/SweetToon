@@ -1,4 +1,7 @@
+import { writeLocalStorage } from "./local-storage";
+
 const STORAGE_KEY = "sweettoon:reading-progress";
+const MAX_PROGRESS_ENTRIES = 300;
 
 export type ReadingProgress = {
   seriesSlug: string;
@@ -22,11 +25,22 @@ function readStore(): ProgressStore {
   }
 }
 
-export function saveReadingProgress(progress: ReadingProgress) {
+export function saveReadingProgress(progress: ReadingProgress): boolean {
   const store = readStore();
   store[progress.episodeId] = progress;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  const recentStore = Object.fromEntries(
+    Object.entries(store)
+      .sort(
+        ([, left], [, right]) =>
+          Date.parse(right.updatedAt) - Date.parse(left.updatedAt),
+      )
+      .slice(0, MAX_PROGRESS_ENTRIES),
+  );
+  if (!writeLocalStorage(STORAGE_KEY, JSON.stringify(recentStore))) {
+    return false;
+  }
   window.dispatchEvent(new CustomEvent("sweettoon:progress"));
+  return true;
 }
 
 export function getEpisodeProgress(

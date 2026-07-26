@@ -306,7 +306,7 @@ export function SeriesDetailPage({
                               ? `${readingProgress[episode.id].percent}% 읽음`
                               : episode.access === "free"
                                 ? "무료"
-                                : "소장본 이용권"}
+                                : "캔디 1개 또는 소장본 이용권"}
                         </span>
                         <span className="episode-list__arrow">→</span>
                       </Link>

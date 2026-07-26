@@ -211,15 +211,20 @@ export class RedisRealtimeService implements RealtimeService {
   async getViewerCounts(
     seriesSlugs: string[],
   ): Promise<Record<string, number>> {
+    if (seriesSlugs.length === 0) return {};
     const cutoff = Date.now() - PRESENCE_TTL_SECONDS * 1_000;
-    const entries = await Promise.all(
-      seriesSlugs.map(async (slug) => {
-        const key = presenceKey(slug);
-        await this.command.zRemRangeByScore(key, 0, cutoff);
-        return [slug, await this.command.zCard(key)] as const;
-      }),
+    const transaction = this.command.multi();
+    for (const slug of seriesSlugs) {
+      const key = presenceKey(slug);
+      transaction.zRemRangeByScore(key, 0, cutoff).zCard(key);
+    }
+    const results = await transaction.exec();
+    return Object.fromEntries(
+      seriesSlugs.map((slug, index) => [
+        slug,
+        Number(results[index * 2 + 1] ?? 0),
+      ]),
     );
-    return Object.fromEntries(entries);
   }
 
   async removePresence(sessionIds: string[]): Promise<void> {

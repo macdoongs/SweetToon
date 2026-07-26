@@ -91,6 +91,9 @@ function dependencies() {
       total: 1,
       facets: { genres: ["힐링"], weekdays: ["mon"] },
     }),
+    listRealtimeSeriesKeys: jest
+      .fn()
+      .mockResolvedValue([{ slug: summary.slug, title: summary.title }]),
     listRealtimeSeries: jest.fn().mockResolvedValue([summary]),
     seriesExists: jest.fn().mockResolvedValue(true),
     findSeriesBySlug: jest.fn().mockResolvedValue(detail),
@@ -154,9 +157,8 @@ describe("DemoBotService", () => {
 
   it("only assigns virtual readers to series that have a thumbnail", async () => {
     const { readerRepository, orderService, realtime } = dependencies();
-    readerRepository.listRealtimeSeries.mockResolvedValue([
-      { ...summary, slug: "without-cover", coverUrl: null },
-      summary,
+    readerRepository.listRealtimeSeriesKeys.mockResolvedValue([
+      { slug: summary.slug, title: summary.title },
     ]);
     const bot = new DemoBotService(
       readerRepository,
@@ -201,9 +203,9 @@ describe("DemoBotService", () => {
         },
       ],
     };
-    readerRepository.listRealtimeSeries.mockResolvedValue([
-      summary,
-      secondSummary,
+    readerRepository.listRealtimeSeriesKeys.mockResolvedValue([
+      { slug: summary.slug, title: summary.title },
+      { slug: secondSummary.slug, title: secondSummary.title },
     ]);
     readerRepository.findSeriesBySlug.mockImplementation(async (slug) =>
       slug === secondSummary.slug ? secondDetail : detail,

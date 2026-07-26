@@ -72,6 +72,10 @@ Manifest와 서비스 워커를 제공해 홈 화면 설치가 가능하며, 네
 탐색 요청은 전용 오프라인 안내 화면으로 전환합니다. 최신 회차는
 `/feed.xml` RSS 2.0 피드로 구독할 수 있습니다.
 
+`SITE_URL`은 canonical, Open Graph, `robots.txt`, sitemap과 RSS의 기준
+주소입니다. `robots.txt`는 web 이미지 빌드 시 생성되므로 배포 주소를 바꾸면
+`SITE_URL`과 `SITE_HOST`를 함께 갱신한 뒤 web 이미지를 다시 빌드해야 합니다.
+
 ## 완성한 레벨과 구현 범위
 
 **Lv3까지 완성했습니다.** 각 레벨에서 구현한 범위는 다음과 같습니다.

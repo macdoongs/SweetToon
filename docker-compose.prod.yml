@@ -23,11 +23,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-net"
-      - "traefik.http.routers.sweettoon.rule=Host(`sweettoon.katsuranbo.com`)"
+      - "traefik.http.routers.sweettoon.rule=Host(`${SITE_HOST:?SITE_HOST is required}`)"
       - "traefik.http.routers.sweettoon.entrypoints=web"
       - "traefik.http.routers.sweettoon.service=sweettoon"
       - "traefik.http.routers.sweettoon.middlewares=sweettoon-upload-buffer"
-      - "traefik.http.routers.sweettoon-sse.rule=Host(`sweettoon.katsuranbo.com`) && PathRegexp(`^/api/orders/[^/]+/events`)"
+      - "traefik.http.routers.sweettoon-sse.rule=Host(`${SITE_HOST:?SITE_HOST is required}`) && PathRegexp(`^/api/orders/[^/]+/events`)"
       - "traefik.http.routers.sweettoon-sse.entrypoints=web"
       - "traefik.http.routers.sweettoon-sse.service=sweettoon"
       - "traefik.http.routers.sweettoon-sse.priority=100"

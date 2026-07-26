@@ -55,20 +55,28 @@ export function getSeriesList(
 }
 
 export async function getAllSeries(): Promise<SeriesListResponse> {
+  const pageSize = 100;
   let page = 1;
-  let result = await getSeriesList({ filter: "all" }, page);
+  let result = await serverGetJson<SeriesListResponse>(
+    seriesFilterQuery({ filter: "all" }, page, pageSize),
+  );
   const items = [...result.items];
   while (result.nextPage) {
     page = result.nextPage;
-    result = await getSeriesList({ filter: "all" }, page);
+    result = await serverGetJson<SeriesListResponse>(
+      seriesFilterQuery({ filter: "all" }, page, pageSize),
+    );
     items.push(...result.items);
   }
   return { ...result, items, page: 1, nextPage: null };
 }
 
-export function getSeriesDetail(slug: string): Promise<SeriesDetail> {
+export function getSeriesDetail(
+  slug: string,
+  options: { fresh?: boolean } = { fresh: true },
+): Promise<SeriesDetail> {
   return serverGetJson(`/api/series/${encodeURIComponent(slug)}`, {
-    fresh: true,
+    fresh: options.fresh,
   });
 }
 

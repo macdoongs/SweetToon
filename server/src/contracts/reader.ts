@@ -17,7 +17,7 @@ export const SeriesListQuerySchema = z.object({
   genre: z.string().trim().min(1).max(40).optional(),
   weekday: WeekdaySchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(24).default(12),
+  pageSize: z.coerce.number().int().min(1).max(100).default(12),
 });
 
 export const EpisodeSummarySchema = z.object({

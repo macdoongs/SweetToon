@@ -11,6 +11,13 @@ vi.mock("@/lib/server-api", () => ({
   getSeriesDetail: vi.fn(),
 }));
 
+vi.mock("next/cache", () => ({
+  unstable_cache:
+    (callback: (...args: never[]) => unknown) =>
+    (...args: never[]) =>
+      callback(...args),
+}));
+
 vi.mock("@/lib/site", () => ({
   absoluteUrl: (path: string) => `https://sweettoon.example${path}`,
 }));
@@ -124,5 +131,46 @@ describe("sitemap", () => {
         priority: 1,
       },
     ]);
+  });
+
+  it("uses the newest publication date when older episodes are backfilled", async () => {
+    vi.mocked(getAllSeries).mockResolvedValue({
+      ...list,
+      items: [list.items[0]],
+      total: 1,
+    });
+    vi.mocked(getSeriesDetail).mockResolvedValue({
+      ...availableSeries,
+      seasons: [
+        {
+          ...availableSeries.seasons[0],
+          episodes: [
+            {
+              ...availableSeries.seasons[0].episodes[0],
+              publishedAt: "2026-07-30T00:00:00.000Z",
+            },
+            {
+              ...availableSeries.seasons[0].episodes[0],
+              id: "episode-2",
+              number: 2,
+              publishedAt: "2026-07-20T00:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await sitemap();
+
+    expect(
+      result.find(
+        (entry) =>
+          entry.url ===
+          "https://sweettoon.example/series/available-series",
+      )?.lastModified,
+    ).toBe("2026-07-30T00:00:00.000Z");
+    expect(getSeriesDetail).toHaveBeenCalledWith("available-series", {
+      fresh: false,
+    });
   });
 });

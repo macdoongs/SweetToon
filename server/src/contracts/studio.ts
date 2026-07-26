@@ -67,6 +67,30 @@ export const SeriesInfoResponseSchema = z.object({
   synopsis: z.string(),
 });
 
+export const CreateSeriesRequestSchema = z.object({
+  slug: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      "slug는 영문 소문자, 숫자, 하이픈만 쓸 수 있어요.",
+    ),
+  title: z.string().trim().min(1).max(80),
+  synopsis: z.string().trim().min(1).max(1000),
+  genre: z.string().trim().min(1).max(40),
+  weekday: z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]),
+  authorName: z.string().trim().min(1).max(40),
+});
+
+export const CreateSeriesResponseSchema = z.object({
+  seriesId: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  seasonId: z.string(),
+});
+
 export const DraftEpisodeSchema = z.object({
   id: z.string(),
   number: z.number().int().positive(),
@@ -140,6 +164,10 @@ export type UpdateSeriesInfoRequest = z.infer<
   typeof UpdateSeriesInfoRequestSchema
 >;
 export type SeriesInfoResponse = z.infer<typeof SeriesInfoResponseSchema>;
+export type CreateSeriesRequest = z.infer<typeof CreateSeriesRequestSchema>;
+export type CreateSeriesResponse = z.infer<
+  typeof CreateSeriesResponseSchema
+>;
 export type DraftEpisode = z.infer<typeof DraftEpisodeSchema>;
 export type CreatePackagingRequest = z.infer<
   typeof CreatePackagingRequestSchema

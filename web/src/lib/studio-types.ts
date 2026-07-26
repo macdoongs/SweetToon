@@ -86,6 +86,22 @@ export type SeriesInfoResponse = {
   synopsis: string;
 };
 
+export type CreateSeriesRequest = {
+  slug: string;
+  title: string;
+  synopsis: string;
+  genre: string;
+  weekday: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+  authorName: string;
+};
+
+export type CreateSeriesResponse = {
+  seriesId: string;
+  slug: string;
+  title: string;
+  seasonId: string;
+};
+
 export type AccessPolicy = {
   freeVolumeCount: number;
   previewEpisodeCount: number;

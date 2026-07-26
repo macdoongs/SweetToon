@@ -9,6 +9,8 @@ import {
   CreatedEpisodeSchema,
   CreateEpisodeRequestSchema,
   CreatePackagingRequestSchema,
+  CreateSeriesRequestSchema,
+  CreateSeriesResponseSchema,
   DraftEpisodeListSchema,
   DraftEpisodeSchema,
   PackagingRequestListSchema,
@@ -252,6 +254,47 @@ export function createStudioRouter(
       }),
     );
   });
+
+  router.post(
+    "/studio/series",
+    auditSecurityAction(auditLogger, "studio.series.create"),
+    mutationGuard,
+    async (req, res) => {
+      const input = CreateSeriesRequestSchema.safeParse(req.body);
+      if (!input.success) {
+        res.status(400).json({
+          code: "INVALID_SERIES",
+          message:
+            "slug(영문 소문자·숫자·하이픈), 제목, 줄거리, 장르, 요일, 작가 이름을 다시 확인해 주세요.",
+        });
+        return;
+      }
+      const created = await service.createSeries(input.data);
+      res.status(201).json(CreateSeriesResponseSchema.parse(created));
+    },
+  );
+
+  router.delete(
+    "/studio/episodes/:episodeId",
+    auditSecurityAction(auditLogger, "studio.episode.delete"),
+    mutationGuard,
+    async (req, res) => {
+      const episodeId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.episodeId);
+      if (!episodeId.success) {
+        res.status(400).json({
+          code: "INVALID_EPISODE_ID",
+          message: "에피소드 주소가 올바르지 않습니다.",
+        });
+        return;
+      }
+      await service.deleteEpisode(episodeId.data);
+      res.status(204).end();
+    },
+  );
 
   router.patch(
     "/studio/series/:seriesId",

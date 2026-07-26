@@ -5,6 +5,8 @@ import type {
   CreatedEpisode,
   CreateEpisodeRequest,
   CreatePackagingRequest,
+  CreateSeriesRequest,
+  CreateSeriesResponse,
   DraftEpisode,
   EpisodeVisibility,
   PackagingRequest,
@@ -59,6 +61,8 @@ export interface StudioUseCases {
     seriesId: string,
     input: UpdateSeriesInfoRequest,
   ): Promise<SeriesInfoResponse>;
+  createSeries(input: CreateSeriesRequest): Promise<CreateSeriesResponse>;
+  deleteEpisode(episodeId: string): Promise<void>;
   setEpisodeVisibility(
     episodeId: string,
     visibility: EpisodeVisibility,
@@ -259,6 +263,44 @@ export class StudioService implements StudioUseCases {
       );
     }
     return updated;
+  }
+
+  async createSeries(
+    input: CreateSeriesRequest,
+  ): Promise<CreateSeriesResponse> {
+    try {
+      return await this.repository.createSeries(input);
+    } catch (error) {
+      if (
+        error instanceof StudioRepositoryError &&
+        error.code === "SERIES_SLUG_EXISTS"
+      ) {
+        throw new StudioServiceError(
+          error.code,
+          "같은 주소(slug)의 작품이 이미 있어요. 다른 slug를 입력해 주세요.",
+          409,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async deleteEpisode(episodeId: string): Promise<void> {
+    const episode = await this.repository.findEpisode(episodeId);
+    if (!episode) {
+      throw new StudioServiceError(
+        "EPISODE_NOT_FOUND",
+        "삭제할 에피소드를 찾을 수 없습니다.",
+        404,
+      );
+    }
+    await this.repository.deleteEpisode(episode.id);
+    // DB에서 지워진 뒤 남은 발행 파일을 정리한다. 시드 원고는 대상이 아니다.
+    if (episode.manuscriptDir) {
+      await this.storage
+        .removePublished(episode.manuscriptDir)
+        .catch(() => undefined);
+    }
   }
 
   async setEpisodeVisibility(

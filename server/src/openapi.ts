@@ -811,6 +811,68 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/studio/series": {
+      post: {
+        tags: ["Studio"],
+        summary: "새 작품과 첫 연재 시즌을 만듭니다.",
+        security: [{ studioApiKey: [] }, {}],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: [
+                  "slug",
+                  "title",
+                  "synopsis",
+                  "genre",
+                  "weekday",
+                  "authorName",
+                ],
+                properties: {
+                  slug: {
+                    type: "string",
+                    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  },
+                  title: { type: "string", maxLength: 80 },
+                  synopsis: { type: "string", maxLength: 1000 },
+                  genre: { type: "string", maxLength: 40 },
+                  weekday: {
+                    type: "string",
+                    enum: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+                  },
+                  authorName: { type: "string", maxLength: 40 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "만들어진 작품과 시즌 1" },
+          "409": { description: "slug 중복" },
+        },
+      },
+    },
+    "/api/studio/episodes/{episodeId}": {
+      delete: {
+        tags: ["Studio"],
+        summary: "에피소드와 발행 원고 파일을 삭제합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "204": { description: "삭제 완료" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
     "/api/studio/series/{seriesId}": {
       patch: {
         tags: ["Studio"],

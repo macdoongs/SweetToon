@@ -94,30 +94,48 @@ export class PrismaReaderRepository implements ReaderRepository {
       ...(query.weekday ? { weekday: query.weekday } : {}),
     };
     const skip = (query.page - 1) * query.pageSize;
-    const [series, total, genres, weekdays] = await this.prisma.$transaction([
-      this.prisma.series.findMany({
-      where,
-      skip,
-      take: query.pageSize,
-      orderBy: [
-        { coverUrl: { sort: "asc", nulls: "last" } },
-        { status: "asc" },
-        { createdAt: "desc" },
-        { id: "desc" },
-      ],
-      include: seriesSummaryInclude,
-      }),
-      this.prisma.series.count({ where }),
-      this.prisma.series.findMany({
-        select: { genre: true },
-        distinct: ["genre"],
-        orderBy: { genre: "asc" },
-      }),
-      this.prisma.series.findMany({
-        select: { weekday: true },
-        distinct: ["weekday"],
-      }),
-    ]);
+    const [coveredCount, total, genres, weekdays] =
+      await this.prisma.$transaction([
+        this.prisma.series.count({
+          where: { ...where, coverUrl: { not: null } },
+        }),
+        this.prisma.series.count({ where }),
+        this.prisma.series.findMany({
+          select: { genre: true },
+          distinct: ["genre"],
+          orderBy: { genre: "asc" },
+        }),
+        this.prisma.series.findMany({
+          select: { weekday: true },
+          distinct: ["weekday"],
+        }),
+      ]);
+    const coveredTake = Math.min(
+      query.pageSize,
+      Math.max(0, coveredCount - skip),
+    );
+    const covered =
+      coveredTake > 0
+        ? await this.prisma.series.findMany({
+            where: { ...where, coverUrl: { not: null } },
+            skip,
+            take: coveredTake,
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            include: seriesSummaryInclude,
+          })
+        : [];
+    const uncoveredTake = query.pageSize - covered.length;
+    const uncovered =
+      uncoveredTake > 0
+        ? await this.prisma.series.findMany({
+            where: { ...where, coverUrl: null },
+            skip: Math.max(0, skip - coveredCount),
+            take: uncoveredTake,
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            include: seriesSummaryInclude,
+          })
+        : [];
+    const series = [...covered, ...uncovered];
 
     return {
       items: series.map(toSeriesSummary),

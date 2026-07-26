@@ -177,6 +177,87 @@ describe("DemoBotService", () => {
     await bot.close();
   });
 
+  it("rotates completed series and volume numbers between demo purchases", async () => {
+    const { readerRepository, orderService, realtime } = dependencies();
+    const secondSummary = {
+      ...summary,
+      id: "series-2",
+      slug: "corner-store",
+      title: "골목 끝 편의점",
+    };
+    const secondDetail: SeriesDetail = {
+      ...detail,
+      id: secondSummary.id,
+      slug: secondSummary.slug,
+      title: secondSummary.title,
+      seasons: [
+        {
+          ...detail.seasons[0],
+          id: "cmseason00000000000000002",
+          episodes: [
+            { ...detail.seasons[0].episodes[0], id: "episode-2", volumeNumber: 1 },
+            { ...detail.seasons[0].episodes[0], id: "episode-3", number: 6, volumeNumber: 2 },
+          ],
+        },
+      ],
+    };
+    readerRepository.listRealtimeSeries.mockResolvedValue([
+      summary,
+      secondSummary,
+    ]);
+    readerRepository.findSeriesBySlug.mockImplementation(async (slug) =>
+      slug === secondSummary.slug ? secondDetail : detail,
+    );
+    orderService.findActiveDemo
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: demoOrder.id,
+        isDemo: true,
+        status: "pending",
+      })
+      .mockResolvedValueOnce({
+        id: demoOrder.id,
+        isDemo: true,
+        status: "processing",
+      })
+      .mockResolvedValueOnce({
+        id: demoOrder.id,
+        isDemo: true,
+        status: "shipped",
+      })
+      .mockResolvedValueOnce(null);
+    orderService.transition.mockImplementation(async (_id, input) => ({
+      ...demoOrder,
+      status: input.status,
+    }));
+    const bot = new DemoBotService(
+      readerRepository,
+      orderService,
+      realtime,
+      { available: true, autoStart: false, readerCount: 2, speed: "fast" },
+    );
+
+    await bot.update({ running: true });
+    for (let tick = 1; tick < 15; tick += 1) {
+      await bot.update({ readerCount: 2 });
+    }
+
+    expect(orderService.createDemo).toHaveBeenCalledTimes(2);
+    expect(orderService.createDemo.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        seasonId: detail.seasons[0].id,
+        volumeNumber: 1,
+      }),
+    );
+    expect(orderService.createDemo.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        seasonId: secondDetail.seasons[0].id,
+        volumeNumber: 2,
+      }),
+    );
+    await bot.close();
+  });
+
   it("clears only bot presence and demo orders when reset", async () => {
     const { readerRepository, orderService, realtime } = dependencies();
     const bot = new DemoBotService(

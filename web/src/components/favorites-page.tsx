@@ -12,6 +12,7 @@ import {
 import { DiscoverLink } from "./discover-link";
 import {
   buildCircularRailCopies,
+  prioritizeThumbnailItems,
   useCircularRail,
 } from "./use-circular-rail";
 
@@ -79,7 +80,10 @@ function FavoriteCard({
 
 export function FavoritesPage() {
   const [favorites, setFavorites] = useState<FavoriteSeries[] | null>(null);
-  const favoriteItems = favorites ?? [];
+  const favoriteItems = prioritizeThumbnailItems(
+    favorites ?? [],
+    (series) => Boolean(series.coverUrl),
+  );
   const { loopEnabled, railRef, scroll } =
     useCircularRail<HTMLUListElement>({
       cardWidth: getFavoriteCardWidth,

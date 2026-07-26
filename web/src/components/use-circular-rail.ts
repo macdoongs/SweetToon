@@ -22,6 +22,16 @@ export type CircularRailCopy<T> = {
   item: T;
 };
 
+export function prioritizeThumbnailItems<T>(
+  items: readonly T[],
+  hasThumbnail: (item: T) => boolean,
+): T[] {
+  return [...items].sort(
+    (left, right) =>
+      Number(hasThumbnail(right)) - Number(hasThumbnail(left)),
+  );
+}
+
 function getContentLeft(
   rail: HTMLElement,
   item: HTMLElement,

@@ -79,15 +79,25 @@ try {
         "
     } "server health and mock provider check"
 
-    Invoke-Checked {
-        docker compose exec -T server sh -c '
-          test "$(id -u)" -ne 0 &&
-          test ! -e /app/node_modules/jest &&
-          test ! -e /app/node_modules/prisma &&
-          test ! -e /app/node_modules/tsx &&
-          test ! -e /app/node_modules/typescript
-        '
-    } "non-root production-only server runtime check"
+    $runtimeUidLine = docker compose exec -T server grep "^Uid:" /proc/1/status
+    if (
+        $LASTEXITCODE -ne 0 -or
+        $runtimeUidLine -notmatch "^Uid:\s+([0-9]+)" -or
+        [int]$Matches[1] -eq 0
+    ) {
+        throw "server runtime must use a non-root user."
+    }
+    foreach ($developmentDependency in @(
+        "jest",
+        "prisma",
+        "tsx",
+        "typescript"
+    )) {
+        Invoke-Checked {
+            docker compose exec -T server test ! -e `
+                "/app/node_modules/$developmentDependency"
+        } "production runtime excludes $developmentDependency"
+    }
 
     $seedPagePath = "/app/data/uploads/catalog-01/s1/ep001/001.svg"
     $seedPageMtimeBefore = docker compose exec -T server `

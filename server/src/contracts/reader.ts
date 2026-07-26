@@ -90,6 +90,7 @@ export const EpisodeReaderSchema = z.object({
   id: z.string(),
   number: z.number().int().positive(),
   title: z.string(),
+  visibility: z.enum(["public", "private"]).default("public"),
   publishedAt: z.string().datetime(),
   series: z.object({
     id: z.string(),

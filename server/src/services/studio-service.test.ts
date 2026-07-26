@@ -51,6 +51,7 @@ const input: CreateEpisodeRequest = {
   number: 12,
   title: "새벽의 손님",
   pageIds: session.pages.map((page) => page.id),
+  visibility: "public",
 };
 
 function makeDependencies(malwareScanner?: MalwareScanner) {
@@ -63,6 +64,23 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
       freeVolumeCount: 1,
       previewEpisodeCount: 2,
     }),
+    setEpisodeVisibility: jest.fn().mockResolvedValue(null),
+    listDraftEpisodes: jest.fn().mockResolvedValue([]),
+    createPackagingRequest: jest.fn().mockImplementation(
+      async (request) => ({
+        id: "packaging-1",
+        applicantName: request.applicantName,
+        bookTitle: request.bookTitle,
+        bookSize: request.bookSize,
+        coverType: request.coverType,
+        quantity: request.quantity,
+        memo: request.memo,
+        pageCount: request.pageCount,
+        status: "received",
+        createdAt: "2026-07-27T00:00:00.000Z",
+      }),
+    ),
+    listPackagingRequests: jest.fn().mockResolvedValue([]),
   };
   const storage: jest.Mocked<StudioStorage> = {
     createSession: jest.fn().mockResolvedValue(session),
@@ -121,8 +139,25 @@ describe("StudioService", () => {
       number: 12,
       title: "새벽의 손님",
       imageUrls: ["/api/images/1.png", "/api/images/2.png"],
+      visibility: "public",
     });
     expect(storage.removeSession).toHaveBeenCalledWith(session.id);
+    expect(created.readerUrl).toBe("/read/episode-12");
+    expect(created.visibility).toBe("public");
+  });
+
+  it("keeps a private upload out of the public flow but readable by link", async () => {
+    const { service, repository } = makeDependencies();
+
+    const created = await service.createEpisode({
+      ...input,
+      visibility: "private",
+    });
+
+    expect(repository.createEpisode).toHaveBeenCalledWith(
+      expect.objectContaining({ visibility: "private" }),
+    );
+    expect(created.visibility).toBe("private");
     expect(created.readerUrl).toBe("/read/episode-12");
   });
 
@@ -160,5 +195,66 @@ describe("StudioService", () => {
     await expect(service.createEpisode(input)).rejects.toThrow("database down");
     expect(storage.removePublished).toHaveBeenCalledWith("C:\\published");
     expect(storage.removeSession).not.toHaveBeenCalled();
+  });
+
+  it("accepts a packaging request and consumes the upload session", async () => {
+    const { service, repository, storage } = makeDependencies();
+
+    const created = await service.createPackagingRequest({
+      sessionId: session.id,
+      pageIds: session.pages.map((page) => page.id),
+      applicantName: "박야근",
+      bookTitle: "야근의 기록",
+      bookSize: "A5",
+      coverType: "softcover",
+      quantity: 30,
+      memo: "독립출판 마켓용",
+    });
+
+    expect(storage.publish).toHaveBeenCalledWith(
+      session,
+      ["packaging", expect.any(String)],
+      session.pages.map((page) => page.id),
+    );
+    expect(repository.createPackagingRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        applicantName: "박야근",
+        bookTitle: "야근의 기록",
+        pageCount: 2,
+        manuscriptDir: "C:\\published",
+      }),
+    );
+    expect(storage.removeSession).toHaveBeenCalledWith(session.id);
+    expect(created.status).toBe("received");
+  });
+
+  it("removes packaging files if the request record fails", async () => {
+    const { service, repository, storage } = makeDependencies();
+    repository.createPackagingRequest.mockRejectedValue(
+      new Error("database down"),
+    );
+
+    await expect(
+      service.createPackagingRequest({
+        sessionId: session.id,
+        pageIds: session.pages.map((page) => page.id),
+        applicantName: "박야근",
+        bookTitle: "야근의 기록",
+        bookSize: "B5",
+        coverType: "hardcover",
+        quantity: 1,
+        memo: null,
+      }),
+    ).rejects.toThrow("database down");
+    expect(storage.removePublished).toHaveBeenCalledWith("C:\\published");
+    expect(storage.removeSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects visibility changes for unknown episodes", async () => {
+    const { service } = makeDependencies();
+
+    await expect(
+      service.setEpisodeVisibility("missing", "public"),
+    ).rejects.toMatchObject({ code: "EPISODE_NOT_FOUND", status: 404 });
   });
 });

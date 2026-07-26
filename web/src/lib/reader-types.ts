@@ -68,6 +68,7 @@ export type EpisodeReader = {
   id: string;
   number: number;
   title: string;
+  visibility?: "public" | "private";
   publishedAt: string;
   series: { id: string; slug: string; title: string };
   season: { id: string; number: number; title: string | null };

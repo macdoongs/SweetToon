@@ -47,6 +47,7 @@ function studioService(): jest.Mocked<StudioUseCases> {
       seriesSlug: "moonlight-laundry",
       pageCount: 1,
       readerUrl: "/read/episode-12",
+      visibility: "public",
     }),
     cancelUpload: jest.fn().mockResolvedValue(undefined),
     updateAccessPolicy: jest.fn().mockResolvedValue({
@@ -54,6 +55,28 @@ function studioService(): jest.Mocked<StudioUseCases> {
       freeVolumeCount: 1,
       previewEpisodeCount: 2,
     }),
+    setEpisodeVisibility: jest.fn().mockResolvedValue({
+      id: "episode-12",
+      number: 12,
+      title: "새벽의 손님",
+      publishedAt: "2026-07-24T00:00:00.000Z",
+      season: { id: "season-1", number: 1 },
+      series: { slug: "moonlight-laundry", title: "달빛 세탁소" },
+    }),
+    listDraftEpisodes: jest.fn().mockResolvedValue([]),
+    createPackagingRequest: jest.fn().mockResolvedValue({
+      id: "packaging-1",
+      applicantName: "박야근",
+      bookTitle: "야근의 기록",
+      bookSize: "A5",
+      coverType: "softcover",
+      quantity: 30,
+      memo: null,
+      pageCount: 1,
+      status: "received",
+      createdAt: "2026-07-27T00:00:00.000Z",
+    }),
+    listPackagingRequests: jest.fn().mockResolvedValue([]),
   };
 }
 
@@ -159,6 +182,91 @@ describe("studio routes", () => {
 
     expect(service.createEpisode).toHaveBeenCalled();
     expect(response.body.readerUrl).toBe("/read/episode-12");
+  });
+
+  it("forwards the requested visibility when publishing an episode", async () => {
+    const service = studioService();
+    await request(app(service))
+      .post("/api/studio/episodes")
+      .send({
+        sessionId,
+        seasonId: "season-1",
+        number: 12,
+        title: "새벽의 손님",
+        pageIds: [pageId],
+        visibility: "private",
+      })
+      .expect(201);
+
+    expect(service.createEpisode).toHaveBeenCalledWith(
+      expect.objectContaining({ visibility: "private" }),
+    );
+  });
+
+  it("toggles episode visibility", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .patch("/api/studio/episodes/episode-12/visibility")
+      .send({ visibility: "public" })
+      .expect(200);
+
+    expect(service.setEpisodeVisibility).toHaveBeenCalledWith(
+      "episode-12",
+      "public",
+    );
+    expect(response.body.id).toBe("episode-12");
+  });
+
+  it("rejects unknown visibility values", async () => {
+    const response = await request(app())
+      .patch("/api/studio/episodes/episode-12/visibility")
+      .send({ visibility: "secret" })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_EPISODE_VISIBILITY");
+  });
+
+  it("accepts a packaging service request", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .post("/api/studio/packaging-requests")
+      .send({
+        sessionId,
+        pageIds: [pageId],
+        applicantName: "박야근",
+        bookTitle: "야근의 기록",
+        bookSize: "A5",
+        coverType: "softcover",
+        quantity: 30,
+        memo: "독립출판 마켓용",
+      })
+      .expect(201);
+
+    expect(service.createPackagingRequest).toHaveBeenCalled();
+    expect(response.body.status).toBe("received");
+  });
+
+  it("rejects a packaging request without book details", async () => {
+    const response = await request(app())
+      .post("/api/studio/packaging-requests")
+      .send({ sessionId, pageIds: [pageId] })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_PACKAGING_REQUEST");
+  });
+
+  it("lists drafts and packaging requests for the studio", async () => {
+    const service = studioService();
+    const application = app(service);
+    const drafts = await request(application)
+      .get("/api/studio/drafts")
+      .expect(200);
+    const packaging = await request(application)
+      .get("/api/studio/packaging-requests")
+      .expect(200);
+
+    expect(drafts.body).toEqual({ items: [] });
+    expect(packaging.body).toEqual({ items: [] });
   });
 
   it("cleans up a canceled upload session", async () => {

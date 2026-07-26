@@ -81,7 +81,7 @@ try {
 
     Invoke-Checked {
         docker compose exec -T server sh -c '
-          test "$(awk "/^Uid:/{print \$2}" /proc/1/status)" -ne 0 &&
+          test "$(id -u)" -ne 0 &&
           test ! -e /app/node_modules/jest &&
           test ! -e /app/node_modules/prisma &&
           test ! -e /app/node_modules/tsx &&

@@ -25,6 +25,35 @@ describe("HTTP security boundary", () => {
     expect(response.headers).toHaveProperty("content-security-policy");
   });
 
+  it("separates liveness from dependency readiness", async () => {
+    const errorLog = jest.spyOn(console, "error").mockImplementation();
+    const readinessCheck = jest
+      .fn<Promise<void>, []>()
+      .mockRejectedValue(new Error("database unavailable"));
+    const checkedApp = createApp({
+      readerRepository,
+      readinessCheck,
+    });
+
+    await request(checkedApp).get("/health/live").expect(200);
+    const unavailable = await request(checkedApp)
+      .get("/health/ready")
+      .expect(503);
+
+    expect(unavailable.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        dependencies: "unavailable",
+      }),
+    );
+    expect(readinessCheck).toHaveBeenCalledTimes(1);
+    expect(errorLog).toHaveBeenCalledWith(
+      "[sweettoon-readiness]",
+      expect.any(Error),
+    );
+    errorLog.mockRestore();
+  });
+
   it("relaxes CSP only for the inline Swagger bootstrap", async () => {
     const docs = await request(app).get("/api-docs/").expect(200);
     const api = await request(app).get("/openapi.json").expect(200);

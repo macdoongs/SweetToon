@@ -24,6 +24,7 @@ import {
 } from "@/lib/reading-progress";
 import type { LivePopularResponse } from "@/lib/realtime";
 import { RecommendationShelves } from "./recommendation-shelves";
+import type { RecommendationSeries } from "@/lib/recommendations";
 import { DiscoverLink } from "./discover-link";
 import {
   buildCircularRailCopies,
@@ -83,10 +84,12 @@ function formatLatestDate(value: string) {
 function SeriesCover({
   series,
   priority = false,
+  loading,
   sizes = "(max-width: 700px) calc(100vw - 28px), (max-width: 960px) calc((100vw - 70px) / 2), 360px",
 }: {
   series: SeriesSummary;
   priority?: boolean;
+  loading?: "eager" | "lazy";
   sizes?: string;
 }) {
   return series.coverUrl ? (
@@ -94,6 +97,7 @@ function SeriesCover({
       alt={`${series.title} 표지`}
       className="series-cover"
       height={840}
+      loading={loading}
       preload={priority}
       sizes={sizes}
       src={series.coverUrl}
@@ -254,7 +258,7 @@ function LivePopularRail({
                   </span>
                   <div className="live-popular-card__cover">
                     <SeriesCover
-                      priority={eager}
+                      loading={eager ? "eager" : undefined}
                       series={series}
                       sizes="(max-width: 700px) 72px, 84px"
                     />
@@ -284,7 +288,7 @@ export function HomePage({
 }: {
   activeFilters: CatalogFilters;
   initialData?: SeriesListResponse | null;
-  recommendationSeries?: SeriesSummary[];
+  recommendationSeries?: RecommendationSeries[];
 }) {
   const [data, setData] = useState<SeriesListResponse | null>(initialData);
   const [error, setError] = useState<string | null>(null);

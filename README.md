@@ -120,7 +120,9 @@ docker compose up --build
 ```
 
 - 웹: http://localhost:3000
-- API 상태 확인: http://localhost:4000/health
+- API 생존 확인: http://localhost:4000/health/live
+- API 준비 상태(DB·Redis): http://localhost:4000/health/ready
+- Web 상태 확인: http://localhost:3000/health
 - Swagger UI: http://localhost:4000/api-docs
 - OpenAPI JSON: http://localhost:4000/openapi.json
 - PostgreSQL: localhost:5432
@@ -130,6 +132,8 @@ docker compose up --build
 첫 실행에서는 PostgreSQL과 내부 전용 Redis가 준비된 뒤 Prisma 마이그레이션과
 데모 데이터 생성이 자동으로 수행됩니다. Redis는 호스트 포트를 열지 않으며 업로드
 제한 횟수만 공유합니다. 이후 재시작에서는 기존 콘텐츠와 주문 데이터를 보존합니다.
+Compose는 DB·Redis 준비, migration 완료, API 준비, Web 준비 순서로 기동하며,
+프로덕션 오버레이는 장기 실행 서비스에 `restart: unless-stopped`를 적용합니다.
 
 기본 파일 저장소 대신 로컬 S3 호환 경계를 검증하려면 MinIO 오버레이를 함께
 실행합니다. API `9000`, 관리 콘솔 `9001`을 사용하며 별도 자격증명 없이 데모용

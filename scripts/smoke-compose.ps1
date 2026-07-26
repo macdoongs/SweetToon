@@ -64,7 +64,7 @@ try {
 
     Invoke-Checked {
         docker compose exec -T server node -e "
-          fetch('http://localhost:4000/health')
+          fetch('http://localhost:4000/health/ready')
             .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
             .then(body => {
               if (body.ok !== true || body.printProvider !== 'mock') {
@@ -77,7 +77,7 @@ try {
               process.exit(1)
             })
         "
-    } "server health and mock provider check"
+    } "server readiness and mock provider check"
 
     $runtimeUidLine = docker compose exec -T server grep "^Uid:" /proc/1/status
     if (

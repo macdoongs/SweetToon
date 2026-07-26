@@ -14,9 +14,9 @@ import {
 } from "@/lib/reading-progress";
 import {
   buildRecommendationShelves,
+  type RecommendationSeries,
   type RecommendationShelf,
 } from "@/lib/recommendations";
-import type { SeriesSummary } from "@/lib/reader-types";
 import {
   buildCircularRailCopies,
   prioritizeThumbnailItems,
@@ -40,7 +40,7 @@ function RecommendationCard({
 }: {
   duplicate?: boolean;
   eager?: boolean;
-  series: SeriesSummary;
+  series: RecommendationSeries;
 }) {
   return (
     <li
@@ -140,7 +140,7 @@ function Shelf({ shelf }: { shelf: RecommendationShelf }) {
 export function RecommendationShelves({
   series,
 }: {
-  series: SeriesSummary[];
+  series: RecommendationSeries[];
 }) {
   const [favorites, setFavorites] = useState<FavoriteSeries[]>([]);
   const [progress, setProgress] = useState<

@@ -85,14 +85,18 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
   await expect(page.locator(".webtoon-strip")).toBeVisible();
   await expect(page.locator(".webtoon-strip img")).toHaveCount(3);
 
-  const publishedUrl = await page
+  const renderedUrl = await page
     .locator(".webtoon-strip img")
     .first()
     .getAttribute("src");
   const objectStorage = process.env.E2E_ASSET_STORAGE === "r2";
+  const publishedUrl = objectStorage
+    ? renderedUrl
+    : new URL(renderedUrl!, "http://sweettoon.local").searchParams.get("url");
   if (objectStorage) {
     expect(publishedUrl).toMatch(/^http:\/\/localhost:\d+\/sweettoon-assets\//);
   } else {
+    expect(renderedUrl).toContain("/_next/image?");
     expect(publishedUrl).toContain("/api/images/studio/");
   }
   expect(publishedUrl).toContain("/reader/001.webp");

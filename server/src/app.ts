@@ -34,6 +34,27 @@ import type { DemoBotController } from "./realtime/demo-bot-service";
 import { DemoBotUnavailableError } from "./realtime/demo-bot-service";
 import { createDemoBotRouter } from "./routes/demo-bot";
 
+const READINESS_TIMEOUT_MS = 2_000;
+
+async function checkReadiness(
+  readinessCheck: () => Promise<void>,
+): Promise<void> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      readinessCheck(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("readiness check timed out")),
+          READINESS_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export type AppOptions = {
   readerRepository: ReaderRepository;
   printProvider?: PrintProvider;
@@ -48,6 +69,7 @@ export type AppOptions = {
   auditLogger?: SecurityAuditLogger;
   realtime?: RealtimeService;
   demoBot?: DemoBotController;
+  readinessCheck?: () => Promise<void>;
 };
 
 export function createApp({
@@ -64,6 +86,7 @@ export function createApp({
   auditLogger,
   realtime,
   demoBot,
+  readinessCheck,
 }: AppOptions): Express {
   const app = express();
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -96,8 +119,26 @@ export function createApp({
   );
   app.use(express.json());
 
-  app.get("/health", (_req, res) => {
+  const live = (_req: express.Request, res: express.Response) => {
     res.json({ ok: true, printProvider: printProvider.name });
+  };
+  app.get(["/health", "/health/live"], live);
+  app.get("/health/ready", async (_req, res) => {
+    try {
+      if (readinessCheck) await checkReadiness(readinessCheck);
+      res.json({
+        ok: true,
+        dependencies: readinessCheck ? "ready" : "not-configured",
+        printProvider: printProvider.name,
+      });
+    } catch (error) {
+      console.error("[sweettoon-readiness]", error);
+      res.status(503).json({
+        ok: false,
+        dependencies: "unavailable",
+        printProvider: printProvider.name,
+      });
+    }
   });
   app.get("/openapi.json", (_req, res) => {
     res.json(openApiDocument);

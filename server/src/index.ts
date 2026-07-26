@@ -88,6 +88,12 @@ async function main() {
     uploadRateLimitStore: rateLimitStore.store,
     realtime,
     demoBot,
+    readinessCheck: async () => {
+      await Promise.all([
+        prisma.$queryRaw`SELECT 1`,
+        realtime.checkHealth(),
+      ]);
+    },
     studioMutationGuard: createApiKeyGuard({
       mode: securityMode,
       expectedKey: process.env.STUDIO_API_KEY,

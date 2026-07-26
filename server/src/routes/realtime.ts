@@ -70,8 +70,10 @@ export function createRealtimeRouter(
         slug.data,
         input.data.sessionId,
       );
-      popularVersion += 1;
-      popularCache = undefined;
+      if (viewerCount === 1) {
+        popularVersion += 1;
+        popularCache = undefined;
+      }
       res.json(
         PresenceResponseSchema.parse({
           seriesSlug: slug.data,

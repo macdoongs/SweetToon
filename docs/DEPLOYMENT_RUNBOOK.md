@@ -57,7 +57,8 @@ SSE를 검증한다.
 - 현재 DB를 별도로 다시 백업했다.
 - 격리 DB에서 `pg_restore --clean --if-exists` 복원 검증을 완료했다.
 
-복구 후에는 `prisma migrate deploy`를 다시 실행하고 API health, 주문 목록,
+복구 후에는 `prisma migrate deploy`를 다시 실행하고 API
+`/health/ready`(DB·Redis 포함), Web `/health`, 주문 목록,
 캔디 잔액·원장, 실시간 주문 이벤트를 순서대로 확인한다.
 
 ## 자동화 전제

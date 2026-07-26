@@ -91,6 +91,19 @@ export const CreateSeriesResponseSchema = z.object({
   seasonId: z.string(),
 });
 
+export const SeasonStatusSchema = z.enum(["ongoing", "completed"]);
+
+export const UpdateSeasonStatusRequestSchema = z.object({
+  status: SeasonStatusSchema,
+});
+
+export const StudioSeasonResponseSchema = z.object({
+  seasonId: z.string(),
+  seriesId: z.string(),
+  number: z.number().int().positive(),
+  status: SeasonStatusSchema,
+});
+
 export const DraftEpisodeSchema = z.object({
   id: z.string(),
   number: z.number().int().positive(),
@@ -147,6 +160,11 @@ export const PackagingRequestListSchema = z.object({
   items: z.array(PackagingRequestSchema),
 });
 
+// received는 접수 시 시작 상태이므로 전이 대상에서 제외한다.
+export const UpdatePackagingStatusRequestSchema = z.object({
+  status: z.enum(["reviewing", "completed", "canceled"]),
+});
+
 export const AccessPolicySchema = z.object({
   freeVolumeCount: z.number().int().min(0).max(20),
   previewEpisodeCount: z.number().int().min(0).max(4),
@@ -167,6 +185,10 @@ export type SeriesInfoResponse = z.infer<typeof SeriesInfoResponseSchema>;
 export type CreateSeriesRequest = z.infer<typeof CreateSeriesRequestSchema>;
 export type CreateSeriesResponse = z.infer<
   typeof CreateSeriesResponseSchema
+>;
+export type SeasonStatus = z.infer<typeof SeasonStatusSchema>;
+export type StudioSeasonResponse = z.infer<
+  typeof StudioSeasonResponseSchema
 >;
 export type DraftEpisode = z.infer<typeof DraftEpisodeSchema>;
 export type CreatePackagingRequest = z.infer<

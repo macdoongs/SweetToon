@@ -75,6 +75,30 @@ function studioService(): jest.Mocked<StudioUseCases> {
       title: "야시장",
       seasonId: "season-2",
     }),
+    updateSeasonStatus: jest.fn().mockResolvedValue({
+      seasonId: "season-1",
+      seriesId: "series-1",
+      number: 1,
+      status: "completed",
+    }),
+    createSeason: jest.fn().mockResolvedValue({
+      seasonId: "season-2",
+      seriesId: "series-1",
+      number: 2,
+      status: "ongoing",
+    }),
+    updatePackagingStatus: jest.fn().mockResolvedValue({
+      id: "packaging-1",
+      applicantName: "박야근",
+      bookTitle: "야근의 기록",
+      bookSize: "A5",
+      coverType: "softcover",
+      quantity: 30,
+      memo: null,
+      pageCount: 1,
+      status: "reviewing",
+      createdAt: "2026-07-27T00:00:00.000Z",
+    }),
     deleteEpisode: jest.fn().mockResolvedValue(undefined),
     updateEpisodeTitle: jest.fn().mockResolvedValue({
       id: "episode-12",
@@ -252,6 +276,57 @@ describe("studio routes", () => {
       .expect(400);
 
     expect(response.body.code).toBe("INVALID_EPISODE_VISIBILITY");
+  });
+
+  it("completes a season and starts the next one", async () => {
+    const service = studioService();
+    const application = app(service);
+    const completed = await request(application)
+      .patch("/api/studio/seasons/season-1/status")
+      .send({ status: "completed" })
+      .expect(200);
+    const created = await request(application)
+      .post("/api/studio/series/series-1/seasons")
+      .expect(201);
+
+    expect(completed.body.status).toBe("completed");
+    expect(service.updateSeasonStatus).toHaveBeenCalledWith(
+      "season-1",
+      "completed",
+    );
+    expect(created.body.number).toBe(2);
+  });
+
+  it("rejects unknown season status values", async () => {
+    const response = await request(app())
+      .patch("/api/studio/seasons/season-1/status")
+      .send({ status: "paused" })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_SEASON_STATUS");
+  });
+
+  it("moves a packaging request to the next operator step", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .patch("/api/studio/packaging-requests/packaging-1/status")
+      .send({ status: "reviewing" })
+      .expect(200);
+
+    expect(service.updatePackagingStatus).toHaveBeenCalledWith(
+      "packaging-1",
+      "reviewing",
+    );
+    expect(response.body.status).toBe("reviewing");
+  });
+
+  it("rejects setting a packaging request back to received", async () => {
+    const response = await request(app())
+      .patch("/api/studio/packaging-requests/packaging-1/status")
+      .send({ status: "received" })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_PACKAGING_STATUS");
   });
 
   it("creates a new series with its first season", async () => {

@@ -6,7 +6,9 @@ import type {
   DraftEpisode,
   EpisodeVisibility,
   PackagingRequest,
+  SeasonStatus,
   SeriesInfoResponse,
+  StudioSeasonResponse,
   UpdateSeriesInfoRequest,
 } from "../contracts/studio";
 
@@ -95,6 +97,11 @@ export interface StudioRepository {
     input: UpdateSeriesInfoRequest,
   ): Promise<SeriesInfoResponse | null>;
   createSeries(input: CreateSeriesRequest): Promise<CreateSeriesResponse>;
+  updateSeasonStatus(
+    seasonId: string,
+    status: SeasonStatus,
+  ): Promise<StudioSeasonResponse | null>;
+  createSeason(seriesId: string): Promise<StudioSeasonResponse | null>;
   replaceEpisodePages(
     episodeId: string,
     imageUrls: string[],
@@ -105,6 +112,11 @@ export interface StudioRepository {
     input: CreatePackagingRequestInput,
   ): Promise<PackagingRequest>;
   listPackagingRequests(): Promise<PackagingRequest[]>;
+  findPackagingRequest(id: string): Promise<PackagingRequest | null>;
+  updatePackagingStatus(
+    id: string,
+    status: string,
+  ): Promise<PackagingRequest | null>;
 }
 
 export class PrismaStudioRepository implements StudioRepository {
@@ -261,6 +273,45 @@ export class PrismaStudioRepository implements StudioRepository {
     }
   }
 
+  async updateSeasonStatus(
+    seasonId: string,
+    status: SeasonStatus,
+  ): Promise<StudioSeasonResponse | null> {
+    const updated = await this.prisma.season
+      .update({
+        where: { id: seasonId },
+        data: { status },
+        select: { id: true, seriesId: true, number: true, status: true },
+      })
+      .catch(() => null);
+    return updated ? toStudioSeasonResponse(updated) : null;
+  }
+
+  async createSeason(
+    seriesId: string,
+  ): Promise<StudioSeasonResponse | null> {
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const latest = await transaction.season.findFirst({
+          where: { seriesId },
+          orderBy: { number: "desc" },
+          select: { number: true },
+        });
+        const created = await transaction.season.create({
+          data: {
+            seriesId,
+            number: (latest?.number ?? 0) + 1,
+            status: "ongoing",
+          },
+          select: { id: true, seriesId: true, number: true, status: true },
+        });
+        return toStudioSeasonResponse(created);
+      });
+    } catch {
+      return null;
+    }
+  }
+
   async updateSeriesInfo(
     seriesId: string,
     input: UpdateSeriesInfoRequest,
@@ -356,6 +407,39 @@ export class PrismaStudioRepository implements StudioRepository {
     });
     return requests.map(toPackagingRequest);
   }
+
+  async findPackagingRequest(
+    id: string,
+  ): Promise<PackagingRequest | null> {
+    const request = await this.prisma.packagingRequest.findUnique({
+      where: { id },
+    });
+    return request ? toPackagingRequest(request) : null;
+  }
+
+  async updatePackagingStatus(
+    id: string,
+    status: string,
+  ): Promise<PackagingRequest | null> {
+    const updated = await this.prisma.packagingRequest
+      .update({ where: { id }, data: { status } })
+      .catch(() => null);
+    return updated ? toPackagingRequest(updated) : null;
+  }
+}
+
+function toStudioSeasonResponse(season: {
+  id: string;
+  seriesId: string;
+  number: number;
+  status: string;
+}): StudioSeasonResponse {
+  return {
+    seasonId: season.id,
+    seriesId: season.seriesId,
+    number: season.number,
+    status: season.status === "completed" ? "completed" : "ongoing",
+  };
 }
 
 function toDraftEpisode(

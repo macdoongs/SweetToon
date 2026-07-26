@@ -74,6 +74,44 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
       title: "야시장",
       seasonId: "season-2",
     }),
+    updateSeasonStatus: jest.fn().mockResolvedValue({
+      seasonId: "season-1",
+      seriesId: "series-1",
+      number: 1,
+      status: "completed",
+    }),
+    createSeason: jest.fn().mockResolvedValue({
+      seasonId: "season-2",
+      seriesId: "series-1",
+      number: 2,
+      status: "ongoing",
+    }),
+    findPackagingRequest: jest.fn().mockResolvedValue({
+      id: "packaging-1",
+      applicantName: "박야근",
+      bookTitle: "야근의 기록",
+      bookSize: "A5",
+      coverType: "softcover",
+      quantity: 30,
+      memo: null,
+      pageCount: 2,
+      status: "received",
+      createdAt: "2026-07-27T00:00:00.000Z",
+    }),
+    updatePackagingStatus: jest.fn().mockImplementation(
+      async (_id, status) => ({
+        id: "packaging-1",
+        applicantName: "박야근",
+        bookTitle: "야근의 기록",
+        bookSize: "A5",
+        coverType: "softcover",
+        quantity: 30,
+        memo: null,
+        pageCount: 2,
+        status,
+        createdAt: "2026-07-27T00:00:00.000Z",
+      }),
+    ),
     findEpisode: jest.fn().mockResolvedValue({
       id: "episode-12",
       number: 12,
@@ -400,6 +438,58 @@ describe("StudioService", () => {
     expect(storage.removePublished).toHaveBeenCalledWith(
       "C:\\old-manuscript",
     );
+  });
+
+  it("moves a packaging request along the allowed transitions", async () => {
+    const { service } = makeDependencies();
+
+    const updated = await service.updatePackagingStatus(
+      "packaging-1",
+      "reviewing",
+    );
+
+    expect(updated.status).toBe("reviewing");
+  });
+
+  it("rejects skipping ahead in the packaging flow", async () => {
+    const { service, repository } = makeDependencies();
+
+    await expect(
+      service.updatePackagingStatus("packaging-1", "completed"),
+    ).rejects.toMatchObject({
+      code: "PACKAGING_TRANSITION_INVALID",
+      status: 409,
+    });
+    expect(repository.updatePackagingStatus).not.toHaveBeenCalled();
+  });
+
+  it("rejects reopening a canceled packaging request", async () => {
+    const { service, repository } = makeDependencies();
+    repository.findPackagingRequest.mockResolvedValue({
+      id: "packaging-1",
+      applicantName: "박야근",
+      bookTitle: "야근의 기록",
+      bookSize: "A5",
+      coverType: "softcover",
+      quantity: 30,
+      memo: null,
+      pageCount: 2,
+      status: "canceled",
+      createdAt: "2026-07-27T00:00:00.000Z",
+    });
+
+    await expect(
+      service.updatePackagingStatus("packaging-1", "reviewing"),
+    ).rejects.toMatchObject({ code: "PACKAGING_TRANSITION_INVALID" });
+  });
+
+  it("rejects season status changes for unknown seasons", async () => {
+    const { service, repository } = makeDependencies();
+    repository.updateSeasonStatus.mockResolvedValue(null);
+
+    await expect(
+      service.updateSeasonStatus("missing", "completed"),
+    ).rejects.toMatchObject({ code: "SEASON_NOT_FOUND", status: 404 });
   });
 
   it("rejects deleting an unknown episode", async () => {

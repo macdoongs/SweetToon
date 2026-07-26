@@ -748,6 +748,100 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/studio/seasons/{seasonId}/status": {
+      patch: {
+        tags: ["Studio"],
+        summary:
+          "시즌을 완결 처리하거나 연재로 되돌립니다. 완결 시즌만 소장본 주문이 가능합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "seasonId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["status"],
+                properties: {
+                  status: {
+                    type: "string",
+                    enum: ["ongoing", "completed"],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "변경된 시즌" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/studio/series/{seriesId}/seasons": {
+      post: {
+        tags: ["Studio"],
+        summary: "작품에 다음 번호의 연재 시즌을 추가합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "seriesId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "201": { description: "만들어진 시즌" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/studio/packaging-requests/{requestId}/status": {
+      patch: {
+        tags: ["Studio"],
+        summary:
+          "운영자가 패키징 신청을 접수→검토→제작 완료(또는 취소) 순서로 진행합니다.",
+        security: [{ operationsApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "requestId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["status"],
+                properties: {
+                  status: {
+                    type: "string",
+                    enum: ["reviewing", "completed", "canceled"],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "변경된 패키징 신청" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { description: "허용되지 않는 진행 순서" },
+        },
+      },
+    },
     "/api/studio/drafts": {
       get: {
         tags: ["Studio"],

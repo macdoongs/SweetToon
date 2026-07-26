@@ -201,6 +201,7 @@ export function createApp({
       "/api",
       createStudioRouter(studioService, {
         mutationGuard: studioMutationGuard,
+        operationsGuard,
         rateLimitStore: uploadRateLimitStore,
         auditLogger,
       }),

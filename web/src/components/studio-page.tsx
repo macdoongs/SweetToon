@@ -34,6 +34,7 @@ import type {
   PackagingCoverType,
   PackagingRequest,
   SeriesInfoResponse,
+  StudioSeasonResponse,
   UpdateSeriesInfoRequest,
   UploadPreview,
   UploadPurpose,
@@ -141,6 +142,9 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [newSeriesMessage, setNewSeriesMessage] = useState<string | null>(
     null,
   );
+  const [manageSeriesId, setManageSeriesId] = useState(series[0]?.id ?? "");
+  const [seasonBusyId, setSeasonBusyId] = useState<string | null>(null);
+  const [seasonMessage, setSeasonMessage] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
   const [deletedEpisodeIds, setDeletedEpisodeIds] = useState<Set<string>>(
@@ -506,6 +510,68 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     }
   }
 
+  const manageSeries =
+    series.find((item) => item.id === manageSeriesId) ?? series[0];
+
+  async function changeSeasonStatus(
+    seasonId: string,
+    status: "ongoing" | "completed",
+  ) {
+    setSeasonBusyId(seasonId);
+    setSeasonMessage(null);
+    try {
+      const updated = await patchJson<
+        { status: "ongoing" | "completed" },
+        StudioSeasonResponse
+      >(
+        `/api/studio/seasons/${encodeURIComponent(seasonId)}/status`,
+        { status },
+        mutationHeaders,
+      );
+      setSeasonMessage(
+        updated.status === "completed"
+          ? `시즌 ${updated.number}을 완결 처리했어요. 이제 독자가 소장본을 주문할 수 있습니다.`
+          : `시즌 ${updated.number} 연재를 다시 시작했어요.`,
+      );
+      router.refresh();
+    } catch (reason) {
+      setSeasonMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "시즌 상태를 바꾸지 못했습니다.",
+      );
+    } finally {
+      setSeasonBusyId(null);
+    }
+  }
+
+  async function startNextSeason() {
+    if (!manageSeries) return;
+    setSeasonBusyId("new");
+    setSeasonMessage(null);
+    try {
+      const created = await postJson<
+        Record<string, never>,
+        StudioSeasonResponse
+      >(
+        `/api/studio/series/${encodeURIComponent(manageSeries.id)}/seasons`,
+        {},
+        undefined,
+        mutationHeaders,
+      );
+      setSeasonMessage(`시즌 ${created.number} 연재를 시작했어요.`);
+      router.refresh();
+    } catch (reason) {
+      setSeasonMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "새 시즌을 만들지 못했습니다.",
+      );
+    } finally {
+      setSeasonBusyId(null);
+    }
+  }
+
   async function createNewSeries() {
     const payload: CreateSeriesRequest = {
       slug: newSeries.slug.trim(),
@@ -855,6 +921,68 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                 "시즌 1이 함께 만들어져 바로 연재를 시작할 수 있어요."}
             </p>
           </details>
+          {manageSeries ? (
+            <details className="studio-security-access studio-season-manage">
+              <summary>시즌 관리</summary>
+              <label className="field">
+                <span>관리할 작품</span>
+                <select
+                  onChange={(event) => {
+                    setManageSeriesId(event.target.value);
+                    setSeasonMessage(null);
+                  }}
+                  value={manageSeries.id}
+                >
+                  {series.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {seriesOverrides[item.id]?.title ?? item.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <ul className="studio-season-manage__list">
+                {manageSeries.seasons.map((season) => (
+                  <li key={season.id}>
+                    <span>
+                      시즌 {season.number} ·{" "}
+                      {season.status === "completed" ? "완결" : "연재 중"}
+                    </span>
+                    <button
+                      className="button button--ghost"
+                      disabled={seasonBusyId !== null}
+                      onClick={() =>
+                        void changeSeasonStatus(
+                          season.id,
+                          season.status === "completed"
+                            ? "ongoing"
+                            : "completed",
+                        )
+                      }
+                      type="button"
+                    >
+                      {seasonBusyId === season.id
+                        ? "변경 중…"
+                        : season.status === "completed"
+                          ? "연재 재개"
+                          : "완결 처리"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                className="button button--ghost button--wide"
+                disabled={seasonBusyId !== null}
+                onClick={() => void startNextSeason()}
+                type="button"
+              >
+                {seasonBusyId === "new" ? "만드는 중…" : "새 시즌 시작"}
+              </button>
+              <p aria-live="polite">
+                {seasonMessage ??
+                  "완결된 시즌만 소장본 주문이 가능하고, 새 회차는 연재 중인 시즌에만 올릴 수 있어요."}
+              </p>
+            </details>
+          ) : null}
           <details className="studio-security-access">
             <summary>운영 보안 설정</summary>
             <label className="field">

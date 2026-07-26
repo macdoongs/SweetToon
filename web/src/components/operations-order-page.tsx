@@ -15,6 +15,7 @@ import type {
   OrderSummary,
   OrderTransitionRequest,
 } from "@/lib/order-types";
+import type { PackagingRequest } from "@/lib/studio-types";
 import {
   loadSecurityAccessKey,
   saveSecurityAccessKey,
@@ -39,6 +40,23 @@ const nextAction: Partial<
   shipped: { status: "completed", label: "완료 처리" },
 };
 
+const packagingStatusLabel: Record<PackagingRequest["status"], string> = {
+  received: "접수됨",
+  reviewing: "검토 중",
+  completed: "제작 완료",
+  canceled: "취소됨",
+};
+
+const packagingNextAction: Partial<
+  Record<
+    PackagingRequest["status"],
+    { status: "reviewing" | "completed"; label: string }
+  >
+> = {
+  received: { status: "reviewing", label: "검토 시작" },
+  reviewing: { status: "completed", label: "제작 완료 처리" },
+};
+
 export function OperationsOrderPage({
   initialResponse,
 }: {
@@ -48,6 +66,12 @@ export function OperationsOrderPage({
   const [nextCursor, setNextCursor] = useState(initialResponse.nextCursor);
   const [loadingMore, setLoadingMore] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [packagingRequests, setPackagingRequests] = useState<
+    PackagingRequest[]
+  >([]);
+  const [packagingBusyId, setPackagingBusyId] = useState<string | null>(
+    null,
+  );
   const [botBusy, setBotBusy] = useState(false);
   const [botStatus, setBotStatus] = useState<DemoBotStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,11 +83,16 @@ export function OperationsOrderPage({
     let active = true;
     const refresh = async () => {
       try {
-        const [orderResponse, nextBotStatus] = await Promise.all([
-          getJson<OrderListResponse>("/api/orders"),
-          getJson<DemoBotStatus>("/api/realtime/demo-bot"),
-        ]);
+        const [orderResponse, nextBotStatus, packagingResponse] =
+          await Promise.all([
+            getJson<OrderListResponse>("/api/orders"),
+            getJson<DemoBotStatus>("/api/realtime/demo-bot"),
+            getJson<{ items: PackagingRequest[] }>(
+              "/api/studio/packaging-requests",
+            ),
+          ]);
         if (!active) return;
+        setPackagingRequests(packagingResponse.items);
         setOrders((current) => {
           const refreshedIds = new Set(
             orderResponse.items.map((order) => order.id),
@@ -160,6 +189,35 @@ export function OperationsOrderPage({
       );
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function advancePackaging(
+    request: PackagingRequest,
+    status: "reviewing" | "completed" | "canceled",
+  ) {
+    setPackagingBusyId(request.id);
+    setError(null);
+    try {
+      const updated = await patchJson<
+        { status: "reviewing" | "completed" | "canceled" },
+        PackagingRequest
+      >(
+        `/api/studio/packaging-requests/${encodeURIComponent(request.id)}/status`,
+        { status },
+        operationHeaders,
+      );
+      setPackagingRequests((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "패키징 상태를 변경하지 못했습니다.",
+      );
+    } finally {
+      setPackagingBusyId(null);
     }
   }
 
@@ -375,6 +433,83 @@ export function OperationsOrderPage({
         >
           {loadingMore ? "불러오는 중…" : "이전 주문 더 보기"}
         </button>
+      ) : null}
+
+      {packagingRequests.length > 0 ? (
+        <section
+          className="operations-list operations-packaging"
+          aria-label="패키징 신청 목록"
+        >
+          <header className="operations-packaging__header">
+            <p className="eyebrow">Packaging intake</p>
+            <h2>책 패키징 신청 관리</h2>
+            <p>
+              창작자가 스튜디오에서 접수한 원고 묶음입니다. 접수 → 검토 →
+              제작 완료 순서로만 진행할 수 있어요.
+            </p>
+          </header>
+          {packagingRequests.map((request) => {
+            const action = packagingNextAction[request.status];
+            const terminal =
+              request.status === "completed" ||
+              request.status === "canceled";
+            return (
+              <article className="operations-card" key={request.id}>
+                <div>
+                  <span
+                    className={`studio-packaging-status studio-packaging-status--${request.status}`}
+                  >
+                    {packagingStatusLabel[request.status]}
+                  </span>
+                  <h2>《{request.bookTitle}》</h2>
+                  <p>
+                    {request.applicantName} · 내지 {request.pageCount}쪽 ·{" "}
+                    {request.bookSize} ·{" "}
+                    {request.coverType === "hardcover"
+                      ? "하드커버"
+                      : "소프트커버"}{" "}
+                    · {request.quantity}부
+                  </p>
+                  {request.memo ? <small>{request.memo}</small> : null}
+                </div>
+                <div className="operations-card__actions">
+                  {action ? (
+                    <>
+                      <button
+                        className="button button--ghost"
+                        disabled={packagingBusyId === request.id}
+                        onClick={() =>
+                          void advancePackaging(request, "canceled")
+                        }
+                        type="button"
+                      >
+                        취소
+                      </button>
+                      <button
+                        className="button button--primary"
+                        disabled={packagingBusyId === request.id}
+                        onClick={() =>
+                          void advancePackaging(request, action.status)
+                        }
+                        type="button"
+                      >
+                        {packagingBusyId === request.id
+                          ? "변경 중…"
+                          : action.label}
+                      </button>
+                    </>
+                  ) : (
+                    <span className="operations-card__done">
+                      {terminal && request.status === "canceled"
+                        ? "취소됨"
+                        : "처리 완료"}
+                    </span>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </section>
       ) : null}
     </main>
   );

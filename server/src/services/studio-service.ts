@@ -11,7 +11,9 @@ import type {
   EpisodeVisibility,
   PackagingRequest,
   ReplaceEpisodePagesRequest,
+  SeasonStatus,
   SeriesInfoResponse,
+  StudioSeasonResponse,
   UpdateSeriesInfoRequest,
   UploadPreview,
 } from "../contracts/studio";
@@ -62,6 +64,11 @@ export interface StudioUseCases {
     input: UpdateSeriesInfoRequest,
   ): Promise<SeriesInfoResponse>;
   createSeries(input: CreateSeriesRequest): Promise<CreateSeriesResponse>;
+  updateSeasonStatus(
+    seasonId: string,
+    status: SeasonStatus,
+  ): Promise<StudioSeasonResponse>;
+  createSeason(seriesId: string): Promise<StudioSeasonResponse>;
   deleteEpisode(episodeId: string): Promise<void>;
   setEpisodeVisibility(
     episodeId: string,
@@ -80,7 +87,19 @@ export interface StudioUseCases {
     input: CreatePackagingRequest,
   ): Promise<PackagingRequest>;
   listPackagingRequests(): Promise<PackagingRequest[]>;
+  updatePackagingStatus(
+    id: string,
+    status: "reviewing" | "completed" | "canceled",
+  ): Promise<PackagingRequest>;
 }
+
+// 접수(received)에서 시작해 검토를 거쳐 종료 상태로만 진행한다.
+const PACKAGING_TRANSITIONS: Record<string, string[]> = {
+  received: ["reviewing", "canceled"],
+  reviewing: ["completed", "canceled"],
+  completed: [],
+  canceled: [],
+};
 
 export class StudioService implements StudioUseCases {
   constructor(
@@ -285,6 +304,36 @@ export class StudioService implements StudioUseCases {
     }
   }
 
+  async updateSeasonStatus(
+    seasonId: string,
+    status: SeasonStatus,
+  ): Promise<StudioSeasonResponse> {
+    const updated = await this.repository.updateSeasonStatus(
+      seasonId,
+      status,
+    );
+    if (!updated) {
+      throw new StudioServiceError(
+        "SEASON_NOT_FOUND",
+        "상태를 바꿀 시즌을 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return updated;
+  }
+
+  async createSeason(seriesId: string): Promise<StudioSeasonResponse> {
+    const created = await this.repository.createSeason(seriesId);
+    if (!created) {
+      throw new StudioServiceError(
+        "SERIES_NOT_FOUND",
+        "새 시즌을 만들 작품을 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return created;
+  }
+
   async deleteEpisode(episodeId: string): Promise<void> {
     const episode = await this.repository.findEpisode(episodeId);
     if (!episode) {
@@ -443,6 +492,36 @@ export class StudioService implements StudioUseCases {
 
   async listPackagingRequests(): Promise<PackagingRequest[]> {
     return this.repository.listPackagingRequests();
+  }
+
+  async updatePackagingStatus(
+    id: string,
+    status: "reviewing" | "completed" | "canceled",
+  ): Promise<PackagingRequest> {
+    const current = await this.repository.findPackagingRequest(id);
+    if (!current) {
+      throw new StudioServiceError(
+        "PACKAGING_NOT_FOUND",
+        "상태를 바꿀 패키징 신청을 찾을 수 없습니다.",
+        404,
+      );
+    }
+    if (!PACKAGING_TRANSITIONS[current.status]?.includes(status)) {
+      throw new StudioServiceError(
+        "PACKAGING_TRANSITION_INVALID",
+        "이미 종료됐거나 허용되지 않는 진행 순서예요.",
+        409,
+      );
+    }
+    const updated = await this.repository.updatePackagingStatus(id, status);
+    if (!updated) {
+      throw new StudioServiceError(
+        "PACKAGING_NOT_FOUND",
+        "상태를 바꿀 패키징 신청을 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return updated;
   }
 }
 

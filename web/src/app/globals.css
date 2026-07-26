@@ -2844,6 +2844,47 @@ button {
   min-width: 200px;
 }
 
+.studio-season-manage__list {
+  margin: 14px 0 10px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.studio-season-manage__list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.78rem;
+}
+
+.operations-packaging {
+  margin-top: 34px;
+}
+
+.operations-packaging__header {
+  margin-bottom: 14px;
+}
+
+.operations-packaging__header h2 {
+  margin: 4px 0 6px;
+  font-size: 1.1rem;
+}
+
+.operations-packaging__header p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.operations-packaging .operations-card small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+}
+
 .button--danger {
   border: 1px solid rgba(201, 75, 48, 0.35);
   background: transparent;

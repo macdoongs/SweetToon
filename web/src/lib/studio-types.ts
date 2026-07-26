@@ -102,6 +102,13 @@ export type CreateSeriesResponse = {
   seasonId: string;
 };
 
+export type StudioSeasonResponse = {
+  seasonId: string;
+  seriesId: string;
+  number: number;
+  status: "ongoing" | "completed";
+};
+
 export type AccessPolicy = {
   freeVolumeCount: number;
   previewEpisodeCount: number;

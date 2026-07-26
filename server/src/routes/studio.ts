@@ -17,8 +17,11 @@ import {
   PackagingRequestSchema,
   ReplaceEpisodePagesRequestSchema,
   SeriesInfoResponseSchema,
+  StudioSeasonResponseSchema,
   UpdateEpisodeTitleRequestSchema,
   UpdateEpisodeVisibilityRequestSchema,
+  UpdatePackagingStatusRequestSchema,
+  UpdateSeasonStatusRequestSchema,
   UpdateSeriesInfoRequestSchema,
   UploadPageIdSchema,
   UploadPreviewSchema,
@@ -43,6 +46,7 @@ const archiveUpload = multer({
 
 type StudioRouterOptions = {
   mutationGuard?: RequestHandler;
+  operationsGuard?: RequestHandler;
   rateLimitStore?: Store;
   auditLogger?: SecurityAuditLogger;
 };
@@ -53,6 +57,7 @@ export function createStudioRouter(
   service: StudioUseCases,
   {
     mutationGuard = allowRequest,
+    operationsGuard = allowRequest,
     rateLimitStore,
     auditLogger = new NoopSecurityAuditLogger(),
   }: StudioRouterOptions = {},
@@ -244,6 +249,80 @@ export function createStudioRouter(
       }
       const created = await service.createPackagingRequest(input.data);
       res.status(201).json(PackagingRequestSchema.parse(created));
+    },
+  );
+
+  router.patch(
+    "/studio/seasons/:seasonId/status",
+    auditSecurityAction(auditLogger, "studio.season.status"),
+    mutationGuard,
+    async (req, res) => {
+      const seasonId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.seasonId);
+      const input = UpdateSeasonStatusRequestSchema.safeParse(req.body);
+      if (!seasonId.success || !input.success) {
+        res.status(400).json({
+          code: "INVALID_SEASON_STATUS",
+          message: "시즌과 상태 값을 다시 확인해 주세요.",
+        });
+        return;
+      }
+      const updated = await service.updateSeasonStatus(
+        seasonId.data,
+        input.data.status,
+      );
+      res.json(StudioSeasonResponseSchema.parse(updated));
+    },
+  );
+
+  router.post(
+    "/studio/series/:seriesId/seasons",
+    auditSecurityAction(auditLogger, "studio.season.create"),
+    mutationGuard,
+    async (req, res) => {
+      const seriesId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.seriesId);
+      if (!seriesId.success) {
+        res.status(400).json({
+          code: "INVALID_SERIES_ID",
+          message: "작품 주소가 올바르지 않습니다.",
+        });
+        return;
+      }
+      const created = await service.createSeason(seriesId.data);
+      res.status(201).json(StudioSeasonResponseSchema.parse(created));
+    },
+  );
+
+  router.patch(
+    "/studio/packaging-requests/:requestId/status",
+    auditSecurityAction(auditLogger, "studio.packaging.status"),
+    operationsGuard,
+    async (req, res) => {
+      const requestId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.requestId);
+      const input = UpdatePackagingStatusRequestSchema.safeParse(req.body);
+      if (!requestId.success || !input.success) {
+        res.status(400).json({
+          code: "INVALID_PACKAGING_STATUS",
+          message: "신청과 상태 값을 다시 확인해 주세요.",
+        });
+        return;
+      }
+      const updated = await service.updatePackagingStatus(
+        requestId.data,
+        input.data.status,
+      );
+      res.json(PackagingRequestSchema.parse(updated));
     },
   );
 

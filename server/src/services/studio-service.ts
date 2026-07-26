@@ -9,6 +9,8 @@ import type {
   EpisodeVisibility,
   PackagingRequest,
   ReplaceEpisodePagesRequest,
+  SeriesInfoResponse,
+  UpdateSeriesInfoRequest,
   UploadPreview,
 } from "../contracts/studio";
 import {
@@ -53,6 +55,10 @@ export interface StudioUseCases {
     seriesId: string,
     input: AccessPolicy,
   ): Promise<AccessPolicyResponse>;
+  updateSeriesInfo(
+    seriesId: string,
+    input: UpdateSeriesInfoRequest,
+  ): Promise<SeriesInfoResponse>;
   setEpisodeVisibility(
     episodeId: string,
     visibility: EpisodeVisibility,
@@ -234,6 +240,21 @@ export class StudioService implements StudioUseCases {
       throw new StudioServiceError(
         "SERIES_NOT_FOUND",
         "공개 정책을 바꿀 작품을 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return updated;
+  }
+
+  async updateSeriesInfo(
+    seriesId: string,
+    input: UpdateSeriesInfoRequest,
+  ): Promise<SeriesInfoResponse> {
+    const updated = await this.repository.updateSeriesInfo(seriesId, input);
+    if (!updated) {
+      throw new StudioServiceError(
+        "SERIES_NOT_FOUND",
+        "정보를 바꿀 작품을 찾을 수 없습니다.",
         404,
       );
     }

@@ -74,6 +74,18 @@ export type PackagingRequest = {
   createdAt: string;
 };
 
+export type UpdateSeriesInfoRequest = {
+  title?: string;
+  synopsis?: string;
+};
+
+export type SeriesInfoResponse = {
+  seriesId: string;
+  slug: string;
+  title: string;
+  synopsis: string;
+};
+
 export type AccessPolicy = {
   freeVolumeCount: number;
   previewEpisodeCount: number;

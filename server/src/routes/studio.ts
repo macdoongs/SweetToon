@@ -14,8 +14,10 @@ import {
   PackagingRequestListSchema,
   PackagingRequestSchema,
   ReplaceEpisodePagesRequestSchema,
+  SeriesInfoResponseSchema,
   UpdateEpisodeTitleRequestSchema,
   UpdateEpisodeVisibilityRequestSchema,
+  UpdateSeriesInfoRequestSchema,
   UploadPageIdSchema,
   UploadPreviewSchema,
   UploadSessionIdSchema,
@@ -250,6 +252,33 @@ export function createStudioRouter(
       }),
     );
   });
+
+  router.patch(
+    "/studio/series/:seriesId",
+    auditSecurityAction(auditLogger, "studio.series.update"),
+    mutationGuard,
+    async (req, res) => {
+      const seriesId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.seriesId);
+      const input = UpdateSeriesInfoRequestSchema.safeParse(req.body);
+      if (!seriesId.success || !input.success) {
+        res.status(400).json({
+          code: "INVALID_SERIES_INFO",
+          message:
+            "작품 제목(80자 이하)이나 줄거리(1000자 이하)를 다시 확인해 주세요.",
+        });
+        return;
+      }
+      const updated = await service.updateSeriesInfo(
+        seriesId.data,
+        input.data,
+      );
+      res.json(SeriesInfoResponseSchema.parse(updated));
+    },
+  );
 
   router.patch(
     "/studio/series/:seriesId/access-policy",

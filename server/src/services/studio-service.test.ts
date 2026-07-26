@@ -66,6 +66,7 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
     }),
     setEpisodeVisibility: jest.fn().mockResolvedValue(null),
     updateEpisodeTitle: jest.fn().mockResolvedValue(null),
+    updateSeriesInfo: jest.fn().mockResolvedValue(null),
     findEpisode: jest.fn().mockResolvedValue({
       id: "episode-12",
       number: 12,
@@ -337,5 +338,31 @@ describe("StudioService", () => {
     await expect(
       service.updateEpisodeTitle("missing", "새 제목"),
     ).rejects.toMatchObject({ code: "EPISODE_NOT_FOUND", status: 404 });
+  });
+
+  it("updates series display info without touching the slug", async () => {
+    const { service, repository } = makeDependencies();
+    repository.updateSeriesInfo.mockResolvedValue({
+      seriesId: "series-1",
+      slug: "moonlight-laundry",
+      title: "달빛 세탁소 리마스터",
+      synopsis: "새 줄거리",
+    });
+
+    const updated = await service.updateSeriesInfo("series-1", {
+      title: "달빛 세탁소 리마스터",
+      synopsis: "새 줄거리",
+    });
+
+    expect(updated.slug).toBe("moonlight-laundry");
+    expect(updated.title).toBe("달빛 세탁소 리마스터");
+  });
+
+  it("rejects series info changes for unknown series", async () => {
+    const { service } = makeDependencies();
+
+    await expect(
+      service.updateSeriesInfo("missing", { title: "새 제목" }),
+    ).rejects.toMatchObject({ code: "SERIES_NOT_FOUND", status: 404 });
   });
 });

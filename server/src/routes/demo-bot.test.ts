@@ -22,6 +22,7 @@ const status = {
 function readerRepository(): ReaderRepository {
   return {
     listSeries: jest.fn(),
+    listRealtimeSeriesKeys: jest.fn(),
     listRealtimeSeries: jest.fn(),
     seriesExists: jest.fn(),
     findSeriesBySlug: jest.fn(),

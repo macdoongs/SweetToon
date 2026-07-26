@@ -115,8 +115,15 @@ function LivePopularRail({
 }: {
   items: LivePopularResponse["items"];
 }) {
-  const prioritizedItems = prioritizeThumbnailItems(items, ({ series }) =>
-    Boolean(series.coverUrl),
+  const [displayItems, setDisplayItems] = useState(items);
+  const interactingRef = useRef(false);
+  const pendingItemsRef = useRef<LivePopularResponse["items"] | null>(null);
+  const interactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const prioritizedItems = prioritizeThumbnailItems(
+    displayItems,
+    ({ series }) => Boolean(series.coverUrl),
   );
   const { loopEnabled, railRef, scroll } =
     useCircularRail<HTMLUListElement>({
@@ -124,6 +131,53 @@ function LivePopularRail({
       itemCount: prioritizedItems.length,
     });
   const railCopies = buildCircularRailCopies(prioritizedItems);
+
+  const beginInteraction = useCallback(() => {
+    interactingRef.current = true;
+    if (interactionTimerRef.current) {
+      clearTimeout(interactionTimerRef.current);
+      interactionTimerRef.current = null;
+    }
+  }, []);
+
+  const settleInteraction = useCallback(() => {
+    if (!interactingRef.current) return;
+    if (interactionTimerRef.current) {
+      clearTimeout(interactionTimerRef.current);
+    }
+    interactionTimerRef.current = setTimeout(() => {
+      if (railRef.current?.contains(document.activeElement)) {
+        interactionTimerRef.current = null;
+        return;
+      }
+      interactingRef.current = false;
+      interactionTimerRef.current = null;
+      if (pendingItemsRef.current) {
+        setDisplayItems(pendingItemsRef.current);
+        pendingItemsRef.current = null;
+      }
+    }, 250);
+  }, []);
+
+  useEffect(() => {
+    if (interactingRef.current) {
+      pendingItemsRef.current = items;
+    } else {
+      setDisplayItems(items);
+    }
+  }, [items]);
+
+  useEffect(() => {
+    window.addEventListener("pointerup", settleInteraction);
+    window.addEventListener("pointercancel", settleInteraction);
+    return () => {
+      window.removeEventListener("pointerup", settleInteraction);
+      window.removeEventListener("pointercancel", settleInteraction);
+      if (interactionTimerRef.current) {
+        clearTimeout(interactionTimerRef.current);
+      }
+    };
+  }, [settleInteraction]);
 
   return (
     <section className="live-popular" aria-labelledby="live-popular-title">
@@ -159,6 +213,20 @@ function LivePopularRail({
           }
           className="circular-content-rail horizontal-scroll-surface live-popular__rail"
           id="live-popular-rail"
+          onBlurCapture={(event) => {
+            if (
+              !event.relatedTarget ||
+              !event.currentTarget.contains(event.relatedTarget as Node)
+            ) {
+              settleInteraction();
+            }
+          }}
+          onFocusCapture={beginInteraction}
+          onPointerDown={beginInteraction}
+          onScroll={() => {
+            beginInteraction();
+            settleInteraction();
+          }}
           ref={railRef}
         >
           {railCopies.map(

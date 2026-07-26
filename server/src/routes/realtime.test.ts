@@ -51,6 +51,9 @@ function repository(): ReaderRepository {
       total: 1,
       facets: { genres: [summary.genre], weekdays: [summary.weekday] },
     }),
+    listRealtimeSeriesKeys: jest
+      .fn()
+      .mockResolvedValue([{ slug: summary.slug, title: summary.title }]),
     listRealtimeSeries: jest.fn().mockResolvedValue([summary]),
     seriesExists: jest
       .fn()
@@ -79,6 +82,9 @@ describe("realtime routes", () => {
     const popular = await request(app)
       .get("/api/realtime/popular")
       .expect(200);
+    const cachedPopular = await request(app)
+      .get("/api/realtime/popular")
+      .expect(200);
 
     expect(heartbeat.body.viewerCount).toBe(1);
     expect(popular.body.items).toEqual([
@@ -87,12 +93,45 @@ describe("realtime routes", () => {
         series: expect.objectContaining({ slug: "moonlight-laundry" }),
       }),
     ]);
+    expect(cachedPopular.body).toEqual(popular.body);
     expect(readerRepository.seriesExists).toHaveBeenCalledWith(
       "moonlight-laundry",
     );
-    expect(readerRepository.listRealtimeSeries).toHaveBeenCalledTimes(1);
+    expect(readerRepository.listRealtimeSeriesKeys).toHaveBeenCalledTimes(1);
+    expect(readerRepository.listRealtimeSeries).toHaveBeenCalledWith([
+      summary.slug,
+    ]);
     expect(readerRepository.findSeriesBySlug).not.toHaveBeenCalled();
     expect(readerRepository.listSeries).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a cached empty ranking after a reader heartbeat", async () => {
+    const realtime = new InMemoryRealtimeService();
+    const readerRepository = repository();
+    const app = createApp({
+      readerRepository,
+      realtime,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-realtime-cache-tests"),
+    });
+
+    const empty = await request(app).get("/api/realtime/popular").expect(200);
+    expect(empty.body.items).toEqual([]);
+
+    await request(app)
+      .post("/api/series/moonlight-laundry/presence")
+      .send({ sessionId: "39b85239-33d3-4789-89ad-a5785f947e6b" })
+      .expect(200);
+
+    const refreshed = await request(app)
+      .get("/api/realtime/popular")
+      .expect(200);
+    expect(refreshed.body.items).toEqual([
+      expect.objectContaining({
+        viewerCount: 1,
+        series: expect.objectContaining({ slug: "moonlight-laundry" }),
+      }),
+    ]);
+    expect(readerRepository.listRealtimeSeriesKeys).toHaveBeenCalledTimes(2);
   });
 
   it("rejects malformed or unknown reader presence", async () => {

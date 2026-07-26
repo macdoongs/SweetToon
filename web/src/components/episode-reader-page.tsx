@@ -880,7 +880,7 @@ export function EpisodeReaderPage({
               <Image
                 alt={`${episode.title} ${page.order}번째 컷`}
                 height={1200}
-                priority={page.order <= 2}
+                preload={page.order <= 2}
                 src={page.imageUrl}
                 unoptimized
                 width={800}
@@ -913,7 +913,7 @@ export function EpisodeReaderPage({
                 alt={`${episode.title} ${page.order}번째 페이지`}
                 height={1200}
                 key={page.id}
-                priority
+                preload
                 src={page.imageUrl}
                 unoptimized
                 width={800}

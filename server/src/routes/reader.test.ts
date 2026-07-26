@@ -113,6 +113,11 @@ const episode: EpisodeReader = {
 function makeRepository(): jest.Mocked<ReaderRepository> {
   return {
     listSeries: jest.fn().mockResolvedValue(seriesList),
+    listRealtimeSeriesKeys: jest
+      .fn()
+      .mockResolvedValue(
+        seriesList.items.map(({ slug, title }) => ({ slug, title })),
+      ),
     listRealtimeSeries: jest.fn().mockResolvedValue(seriesList.items),
     seriesExists: jest
       .fn()

@@ -189,9 +189,9 @@ export class DemoBotService implements DemoBotController {
   }
 
   private async loadSeriesSlugs(): Promise<string[]> {
-    return (await this.readerRepository.listRealtimeSeries())
-      .filter((item) => Boolean(item.coverUrl))
-      .map((item) => item.slug);
+    return (await this.readerRepository.listRealtimeSeriesKeys()).map(
+      (item) => item.slug,
+    );
   }
 
   private async tickReaders(slugs: string[]): Promise<void> {

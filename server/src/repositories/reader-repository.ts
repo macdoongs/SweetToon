@@ -10,7 +10,8 @@ import { WeekdaySchema } from "../contracts/reader";
 
 export interface ReaderRepository {
   listSeries(query: SeriesListQuery): Promise<SeriesListResponse>;
-  listRealtimeSeries(): Promise<SeriesSummary[]>;
+  listRealtimeSeriesKeys(): Promise<Array<{ slug: string; title: string }>>;
+  listRealtimeSeries(slugs?: string[]): Promise<SeriesSummary[]>;
   seriesExists(slug: string): Promise<boolean>;
   findSeriesBySlug(slug: string): Promise<SeriesDetail | null>;
   findEpisodeById(
@@ -32,6 +33,10 @@ const seriesSummaryInclude = {
     },
   },
 } satisfies Prisma.SeriesInclude;
+
+const WEEKDAY_ORDER = new Map(
+  WeekdaySchema.options.map((weekday, index) => [weekday, index]),
+);
 
 type SeriesSummaryRecord = Prisma.SeriesGetPayload<{
   include: typeof seriesSummaryInclude;
@@ -144,14 +149,34 @@ export class PrismaReaderRepository implements ReaderRepository {
       total,
       facets: {
         genres: genres.map((item) => item.genre),
-        weekdays: weekdays.map((item) => WeekdaySchema.parse(item.weekday)),
+        weekdays: weekdays
+          .map((item) => WeekdaySchema.parse(item.weekday))
+          .sort(
+            (left, right) =>
+              (WEEKDAY_ORDER.get(left) ?? 0) -
+              (WEEKDAY_ORDER.get(right) ?? 0),
+          ),
       },
     };
   }
 
-  async listRealtimeSeries(): Promise<SeriesSummary[]> {
+  async listRealtimeSeriesKeys(): Promise<
+    Array<{ slug: string; title: string }>
+  > {
     const series = await this.prisma.series.findMany({
       where: { coverUrl: { not: null } },
+      select: { slug: true, title: true },
+    });
+    return series;
+  }
+
+  async listRealtimeSeries(slugs?: string[]): Promise<SeriesSummary[]> {
+    if (slugs?.length === 0) return [];
+    const series = await this.prisma.series.findMany({
+      where: {
+        coverUrl: { not: null },
+        ...(slugs ? { slug: { in: slugs } } : {}),
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       include: seriesSummaryInclude,
     });

@@ -111,6 +111,7 @@ function dependencies() {
     clearDemos: jest.fn().mockResolvedValue(undefined),
   };
   const realtime: jest.Mocked<RealtimeService> = {
+    checkHealth: jest.fn().mockResolvedValue(undefined),
     publishOrder: jest.fn().mockResolvedValue(undefined),
     subscribeOrder: jest.fn(),
     heartbeatSeries: jest.fn().mockResolvedValue(1),

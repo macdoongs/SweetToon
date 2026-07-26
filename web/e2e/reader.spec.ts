@@ -79,6 +79,7 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
 
   const firstCut = page.locator(".webtoon-strip__cut img").first();
   await expect(firstCut).toBeVisible();
+  await expect(firstCut).toHaveAttribute("srcset", /\/_next\/image\?/);
   expect(
     await firstCut.evaluate((image) => {
       const strip = image.closest(".webtoon-strip");

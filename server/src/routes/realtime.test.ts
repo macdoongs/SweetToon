@@ -134,6 +134,31 @@ describe("realtime routes", () => {
     expect(readerRepository.listRealtimeSeriesKeys).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps the popular cache for repeat heartbeats in an active series", async () => {
+    const realtime = new InMemoryRealtimeService();
+    const readerRepository = repository();
+    const app = createApp({
+      readerRepository,
+      realtime,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-realtime-cache-hit-tests"),
+    });
+
+    await request(app)
+      .post("/api/series/moonlight-laundry/presence")
+      .send({ sessionId: "49b85239-33d3-4789-89ad-a5785f947e6b" })
+      .expect(200);
+    const first = await request(app).get("/api/realtime/popular").expect(200);
+
+    await request(app)
+      .post("/api/series/moonlight-laundry/presence")
+      .send({ sessionId: "59b85239-33d3-4789-89ad-a5785f947e6b" })
+      .expect(200);
+    const cached = await request(app).get("/api/realtime/popular").expect(200);
+
+    expect(cached.body).toEqual(first.body);
+    expect(readerRepository.listRealtimeSeriesKeys).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects malformed or unknown reader presence", async () => {
     const app = createApp({
       readerRepository: repository(),

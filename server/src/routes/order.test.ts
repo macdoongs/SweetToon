@@ -102,6 +102,7 @@ function makeService(): jest.Mocked<OrderUseCases> {
 
 function makeRealtime(): jest.Mocked<RealtimeService> {
   return {
+    checkHealth: jest.fn().mockResolvedValue(undefined),
     publishOrder: jest.fn().mockResolvedValue(undefined),
     subscribeOrder: jest.fn().mockResolvedValue(async () => undefined),
     heartbeatSeries: jest.fn().mockResolvedValue(0),

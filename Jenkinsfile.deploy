@@ -81,9 +81,9 @@ pipeline {
                     export SITE_HOST="$(sh scripts/resolve-site-config.sh "${DEPLOY_ENV_FILE}" host)"
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" ps
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T server \
-                      node -e "fetch('http://localhost:4000/health').then(r => { if (!r.ok) process.exit(1); console.log('api ok') }).catch(() => process.exit(1))"
+                      node -e "fetch('http://localhost:4000/health/ready').then(r => { if (!r.ok) process.exit(1); console.log('api ready') }).catch(() => process.exit(1))"
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web \
-                      node -e "fetch('http://localhost:3000').then(r => { if (!r.ok) process.exit(1); console.log('web ok') }).catch(() => process.exit(1))"
+                      node -e "fetch('http://localhost:3000/health').then(r => { if (!r.ok) process.exit(1); console.log('web ready') }).catch(() => process.exit(1))"
                     docker compose ${COMPOSE_FILES} --env-file "${DEPLOY_ENV_FILE}" exec -T web \
                       wget --quiet --output-document=/dev/null \
                         --header="Host: ${SITE_HOST}" http://traefik/

@@ -6,6 +6,7 @@ export const PRESENCE_TTL_SECONDS = 60;
 type OrderListener = (order: OrderDetail) => void;
 
 export interface RealtimeService {
+  checkHealth(): Promise<void>;
   publishOrder(order: OrderDetail): Promise<void>;
   subscribeOrder(
     orderId: string,
@@ -45,6 +46,8 @@ export class InMemoryRealtimeService implements RealtimeService {
   >();
 
   constructor(private readonly now: () => number = Date.now) {}
+
+  async checkHealth(): Promise<void> {}
 
   async publishOrder(order: OrderDetail): Promise<void> {
     for (const listener of this.listeners.get(order.id) ?? []) {
@@ -160,6 +163,10 @@ export class RedisRealtimeService implements RealtimeService {
     });
     await Promise.all([command.connect(), subscriber.connect()]);
     return new RedisRealtimeService(command, subscriber);
+  }
+
+  async checkHealth(): Promise<void> {
+    await this.command.ping();
   }
 
   async publishOrder(order: OrderDetail): Promise<void> {

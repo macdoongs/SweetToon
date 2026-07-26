@@ -39,6 +39,10 @@ type Page = EpisodeReader["pages"][number];
 const SETTINGS_KEY = "sweettoon:reader-settings";
 const READER_CHROME_HIDE_DELAY_MS = 2400;
 
+function isExternalImage(url: string) {
+  return /^https?:\/\//i.test(url);
+}
+
 function loadSettings(): {
   mode: ReaderMode;
   scale: ScaleType;
@@ -881,8 +885,9 @@ export function EpisodeReaderPage({
                 alt={`${episode.title} ${page.order}번째 컷`}
                 height={1200}
                 preload={page.order <= 2}
+                sizes="min(100vw, 800px)"
                 src={page.imageUrl}
-                unoptimized
+                unoptimized={isExternalImage(page.imageUrl)}
                 width={800}
               />
             </div>
@@ -914,8 +919,9 @@ export function EpisodeReaderPage({
                 height={1200}
                 key={page.id}
                 preload
+                sizes="(max-width: 700px) calc(100vw - 56px), min(46vw, 800px)"
                 src={page.imageUrl}
-                unoptimized
+                unoptimized={isExternalImage(page.imageUrl)}
                 width={800}
               />
             ))}
@@ -968,8 +974,9 @@ export function EpisodeReaderPage({
                 <Image
                   alt={`${page.order}쪽 미리보기`}
                   height={180}
+                  sizes="120px"
                   src={page.imageUrl}
-                  unoptimized
+                  unoptimized={isExternalImage(page.imageUrl)}
                   width={120}
                 />
                 <span>{page.order}</span>

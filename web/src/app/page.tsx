@@ -51,7 +51,17 @@ export default async function Home({
       <HomePage
         activeFilters={filters}
         initialData={data}
-        recommendationSeries={recommendations.items}
+        recommendationSeries={recommendations.items.map(
+          ({ id, slug, title, genre, coverUrl, status, author }) => ({
+            id,
+            slug,
+            title,
+            genre,
+            coverUrl,
+            status,
+            author,
+          }),
+        )}
         key={`${filters.filter}:${filters.genre ?? ""}:${filters.weekday ?? ""}`}
       />
     </>

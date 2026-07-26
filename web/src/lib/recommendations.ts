@@ -2,12 +2,17 @@ import type { FavoriteSeries } from "./favorites";
 import type { ReadingProgress } from "./reading-progress";
 import type { SeriesSummary } from "./reader-types";
 
+export type RecommendationSeries = Pick<
+  SeriesSummary,
+  "id" | "slug" | "title" | "genre" | "coverUrl" | "status" | "author"
+>;
+
 export type RecommendationShelf = {
   id: string;
   eyebrow: string;
   title: string;
   description: string;
-  items: SeriesSummary[];
+  items: RecommendationSeries[];
 };
 
 const genreCopy: Record<string, string> = {
@@ -62,7 +67,10 @@ function genreAffinity(left: string, right: string) {
   return overlap / Math.max(leftTokens.size, rightTokens.size, 1);
 }
 
-function byCoverThenTitle(left: SeriesSummary, right: SeriesSummary) {
+function byCoverThenTitle(
+  left: RecommendationSeries,
+  right: RecommendationSeries,
+) {
   if (Boolean(left.coverUrl) !== Boolean(right.coverUrl)) {
     return left.coverUrl ? -1 : 1;
   }
@@ -70,9 +78,9 @@ function byCoverThenTitle(left: SeriesSummary, right: SeriesSummary) {
 }
 
 function recommendationScore(
-  candidate: SeriesSummary,
+  candidate: RecommendationSeries,
   favoriteSeeds: FavoriteSeries[],
-  readingSeeds: SeriesSummary[],
+  readingSeeds: RecommendationSeries[],
 ) {
   const favoriteScore = favoriteSeeds.reduce((score, seed) => {
     const affinity = genreAffinity(candidate.genre, seed.genre);
@@ -90,9 +98,9 @@ function recommendationScore(
 }
 
 function personalizedShelf(
-  candidates: SeriesSummary[],
+  candidates: RecommendationSeries[],
   favoriteSeeds: FavoriteSeries[],
-  readingSeeds: SeriesSummary[],
+  readingSeeds: RecommendationSeries[],
 ): RecommendationShelf | null {
   const latestFavorite = [...favoriteSeeds].sort(
     (left, right) => Date.parse(right.addedAt) - Date.parse(left.addedAt),
@@ -131,7 +139,7 @@ function personalizedShelf(
 }
 
 function genreShelves(
-  candidates: SeriesSummary[],
+  candidates: RecommendationSeries[],
   preferredGenres: string[],
   limit: number,
 ) {
@@ -181,7 +189,7 @@ function genreShelves(
     .slice(0, limit);
 }
 
-function discoveryShelves(candidates: SeriesSummary[]) {
+function discoveryShelves(candidates: RecommendationSeries[]) {
   const shelves = discoveryGroups
     .map((group): RecommendationShelf | null => {
       const items = candidates
@@ -209,7 +217,7 @@ function discoveryShelves(candidates: SeriesSummary[]) {
 }
 
 export function buildRecommendationShelves(
-  series: SeriesSummary[],
+  series: RecommendationSeries[],
   favorites: FavoriteSeries[],
   progressStore: Record<string, ReadingProgress>,
 ): RecommendationShelf[] {
@@ -228,7 +236,7 @@ export function buildRecommendationShelves(
 
   const readingSeeds = [...latestProgressBySeries.keys()]
     .map((slug) => seriesBySlug.get(slug))
-    .filter((item): item is SeriesSummary => Boolean(item));
+    .filter((item): item is RecommendationSeries => Boolean(item));
   const excludedSlugs = new Set([
     ...favorites.map((favorite) => favorite.slug),
     ...latestProgressBySeries.keys(),

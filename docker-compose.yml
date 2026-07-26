@@ -27,6 +27,7 @@ services:
   migrate:
     build:
       context: ./server
+      target: migrate
     command: sh -c "npx prisma migrate deploy && npm run db:seed"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-sweettoon}:${POSTGRES_PASSWORD:-sweettoon}@db:5432/${POSTGRES_DB:-sweettoon}
@@ -40,6 +41,7 @@ services:
   server:
     build:
       context: ./server
+      target: runner
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-sweettoon}:${POSTGRES_PASSWORD:-sweettoon}@db:5432/${POSTGRES_DB:-sweettoon}
       PORT: 4000

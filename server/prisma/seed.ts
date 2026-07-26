@@ -292,37 +292,32 @@ async function seedSeriesSpecs(
             ),
           },
         });
-        for (
-          let pageOrder = 1;
-          pageOrder <= seasonSpec.pagesPerEp;
-          pageOrder++
-        ) {
-          const rel = path.join(
-            spec.slug,
-            `s${seasonSpec.number}`,
-            `ep${String(ep).padStart(3, "0")}`,
-            `${String(pageOrder).padStart(3, "0")}.svg`,
-          );
-          await prisma.page.upsert({
-            where: {
-              episodeId_order: {
-                episodeId: episode.id,
-                order: pageOrder,
-              },
-            },
-            update: {},
-            create: {
+        const pages = Array.from(
+          { length: seasonSpec.pagesPerEp },
+          (_, pageIndex) => {
+            const pageOrder = pageIndex + 1;
+            const rel = path.join(
+              spec.slug,
+              `s${seasonSpec.number}`,
+              `ep${String(ep).padStart(3, "0")}`,
+              `${String(pageOrder).padStart(3, "0")}.svg`,
+            );
+            return {
               episodeId: episode.id,
               order: pageOrder,
               imageUrl: writeCutSvg(
                 rel,
                 spec.title,
                 `${ep}화 · ${pageOrder} / ${seasonSpec.pagesPerEp}`,
-                (spec.hue + (pageOrder - 1) * 12) % 360,
+                (spec.hue + pageIndex * 12) % 360,
               ),
-            },
-          });
-        }
+            };
+          },
+        );
+        await prisma.page.createMany({
+          data: pages,
+          skipDuplicates: true,
+        });
       }
     }
   }
@@ -438,29 +433,32 @@ async function main() {
           },
         });
 
-        for (let pg = 1; pg <= seasonSpec.pagesPerEp; pg++) {
-          const isShowcasePage =
-            spec.slug === "moonlight-laundry" &&
-            seasonSpec.number === 1 &&
-            ep === 1;
-          const rel = path.join(
-            spec.slug,
-            `s${seasonSpec.number}`,
-            `ep${String(ep).padStart(3, "0")}`,
-            `${String(pg).padStart(3, "0")}.svg`,
-          );
-          const imageUrl = isShowcasePage
-            ? showcasePageUrls[pg - 1]
-            : writeCutSvg(
-                rel,
-                spec.title,
-                `시즌${seasonSpec.number} · ${ep}화 · ${pg}컷`,
-                spec.hue,
-              );
-          await prisma.page.create({
-            data: { episodeId: episode.id, order: pg, imageUrl },
-          });
-        }
+        const pages = Array.from(
+          { length: seasonSpec.pagesPerEp },
+          (_, pageIndex) => {
+            const pageOrder = pageIndex + 1;
+            const isShowcasePage =
+              spec.slug === "moonlight-laundry" &&
+              seasonSpec.number === 1 &&
+              ep === 1;
+            const rel = path.join(
+              spec.slug,
+              `s${seasonSpec.number}`,
+              `ep${String(ep).padStart(3, "0")}`,
+              `${String(pageOrder).padStart(3, "0")}.svg`,
+            );
+            const imageUrl = isShowcasePage
+              ? showcasePageUrls[pageIndex]
+              : writeCutSvg(
+                  rel,
+                  spec.title,
+                  `시즌${seasonSpec.number} · ${ep}화 · ${pageOrder}컷`,
+                  spec.hue,
+                );
+            return { episodeId: episode.id, order: pageOrder, imageUrl };
+          },
+        );
+        await prisma.page.createMany({ data: pages });
       }
     }
   }
@@ -468,9 +466,21 @@ async function main() {
   await seedSeriesSpecs(CATALOG_SERIES, coverUrls);
 
   // 샘플 주문 — 다양한 상태로 시드해 목록/타임라인 UI를 바로 확인 가능하게
-  const laundry = await prisma.series.findFirstOrThrow({ where: { title: "달빛 세탁소" }, include: { seasons: true } });
-  const store = await prisma.series.findFirstOrThrow({ where: { title: "골목 끝 편의점" }, include: { seasons: true } });
-  const blade = await prisma.series.findFirstOrThrow({ where: { title: "네온 검객" }, include: { seasons: true } });
+  const orderedSeasons = {
+    orderBy: { number: "asc" as const },
+  };
+  const laundry = await prisma.series.findFirstOrThrow({
+    where: { title: "달빛 세탁소" },
+    include: { seasons: orderedSeasons },
+  });
+  const store = await prisma.series.findFirstOrThrow({
+    where: { title: "골목 끝 편의점" },
+    include: { seasons: orderedSeasons },
+  });
+  const blade = await prisma.series.findFirstOrThrow({
+    where: { title: "네온 검객" },
+    include: { seasons: orderedSeasons },
+  });
 
   const ordersSpec = [
     { series: laundry, ordererName: "김소장", ordererType: "reader", coverType: "hardcover", bookSize: "A5", quantity: 1, status: "completed", memo: "1시즌 정주행 기념 소장!" },

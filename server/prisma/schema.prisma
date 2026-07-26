@@ -105,6 +105,11 @@ model Order {
   events                 OrderEvent[]
   candyWallet            CandyWallet? @relation(fields: [candyWalletToken], references: [token], onDelete: SetNull)
   candyTransaction       CandyTransaction?
+
+  @@index([createdAt])
+  @@index([isDemo, status, updatedAt])
+  @@index([seasonId])
+  @@index([seriesId])
 }
 
 // 주문 상태 변경 이력 — "내 책이 어디쯤인지" 타임라인 UI의 근거 데이터 (Lv3)
@@ -115,6 +120,8 @@ model OrderEvent {
   message   String?
   createdAt DateTime @default(now())
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
 }
 
 // 공개 데모의 익명 지갑. 브라우저가 만든 UUID 토큰으로 지갑을 다시 찾는다.

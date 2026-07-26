@@ -8,6 +8,13 @@ import {
   AccessPolicySchema,
   CreatedEpisodeSchema,
   CreateEpisodeRequestSchema,
+  CreatePackagingRequestSchema,
+  DraftEpisodeListSchema,
+  DraftEpisodeSchema,
+  PackagingRequestListSchema,
+  PackagingRequestSchema,
+  UpdateEpisodeTitleRequestSchema,
+  UpdateEpisodeVisibilityRequestSchema,
   UploadPageIdSchema,
   UploadPreviewSchema,
   UploadSessionIdSchema,
@@ -130,6 +137,92 @@ export function createStudioRouter(
       res.status(201).json(CreatedEpisodeSchema.parse(created));
     },
   );
+
+  router.patch(
+    "/studio/episodes/:episodeId/visibility",
+    auditSecurityAction(auditLogger, "studio.episode.visibility"),
+    mutationGuard,
+    async (req, res) => {
+      const episodeId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.episodeId);
+      const input = UpdateEpisodeVisibilityRequestSchema.safeParse(req.body);
+      if (!episodeId.success || !input.success) {
+        res.status(400).json({
+          code: "INVALID_EPISODE_VISIBILITY",
+          message: "에피소드와 공개 상태 값을 다시 확인해 주세요.",
+        });
+        return;
+      }
+      const updated = await service.setEpisodeVisibility(
+        episodeId.data,
+        input.data.visibility,
+      );
+      res.json(DraftEpisodeSchema.parse(updated));
+    },
+  );
+
+  router.patch(
+    "/studio/episodes/:episodeId/title",
+    auditSecurityAction(auditLogger, "studio.episode.rename"),
+    mutationGuard,
+    async (req, res) => {
+      const episodeId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.episodeId);
+      const input = UpdateEpisodeTitleRequestSchema.safeParse(req.body);
+      if (!episodeId.success || !input.success) {
+        res.status(400).json({
+          code: "INVALID_EPISODE_TITLE",
+          message: "에피소드 제목은 1자 이상 80자 이하로 입력해 주세요.",
+        });
+        return;
+      }
+      const updated = await service.updateEpisodeTitle(
+        episodeId.data,
+        input.data.title,
+      );
+      res.json(DraftEpisodeSchema.parse(updated));
+    },
+  );
+
+  router.get("/studio/drafts", async (_req, res) => {
+    res.json(
+      DraftEpisodeListSchema.parse({
+        items: await service.listDraftEpisodes(),
+      }),
+    );
+  });
+
+  router.post(
+    "/studio/packaging-requests",
+    auditSecurityAction(auditLogger, "studio.packaging.request"),
+    mutationGuard,
+    async (req, res) => {
+      const input = CreatePackagingRequestSchema.safeParse(req.body);
+      if (!input.success) {
+        res.status(400).json({
+          code: "INVALID_PACKAGING_REQUEST",
+          message: "신청자, 책 제목, 판형과 페이지 순서를 다시 확인해 주세요.",
+        });
+        return;
+      }
+      const created = await service.createPackagingRequest(input.data);
+      res.status(201).json(PackagingRequestSchema.parse(created));
+    },
+  );
+
+  router.get("/studio/packaging-requests", async (_req, res) => {
+    res.json(
+      PackagingRequestListSchema.parse({
+        items: await service.listPackagingRequests(),
+      }),
+    );
+  });
 
   router.patch(
     "/studio/series/:seriesId/access-policy",

@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   ChangeEvent,
   DragEvent,
+  useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -12,6 +14,7 @@ import {
 import {
   ApiError,
   deleteRequest,
+  getJson,
   patchJson,
   postFormData,
   postJson,
@@ -22,7 +25,13 @@ import type {
   AccessPolicyResponse,
   CreatedEpisode,
   CreateEpisodeRequest,
+  CreatePackagingRequest,
+  DraftEpisode,
+  PackagingBookSize,
+  PackagingCoverType,
+  PackagingRequest,
   UploadPreview,
+  UploadPurpose,
 } from "@/lib/studio-types";
 import {
   loadSecurityAccessKey,
@@ -32,6 +41,35 @@ import {
 function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
+
+const PURPOSE_OPTIONS: Array<{
+  value: UploadPurpose;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "publish",
+    label: "즉시 공개",
+    description: "새 에피소드를 독자에게 바로 엽니다.",
+  },
+  {
+    value: "draft",
+    label: "비공개 보관",
+    description: "링크를 아는 사람만 볼 수 있게 임시로 보관합니다.",
+  },
+  {
+    value: "packaging",
+    label: "책 패키징 신청",
+    description: "원고 묶음으로 실물 책 패키징 서비스를 신청합니다.",
+  },
+];
+
+const PACKAGING_STATUS_LABEL: Record<PackagingRequest["status"], string> = {
+  received: "접수됨",
+  reviewing: "검토 중",
+  completed: "제작 완료",
+  canceled: "취소됨",
+};
 
 export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [accessKey, setAccessKey] = useState(() =>
@@ -47,6 +85,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       ),
     [series],
   );
+  const [purpose, setPurpose] = useState<UploadPurpose>("publish");
   const [seriesId, setSeriesId] = useState(availableSeries[0]?.id ?? "");
   const [policies, setPolicies] = useState<Record<string, AccessPolicy>>(() =>
     Object.fromEntries(
@@ -74,10 +113,39 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const selectedSeason =
     ongoingSeasons.find((season) => season.id === seasonId) ??
     ongoingSeasons[0];
-  const suggestedNumber = selectedSeason
-    ? Math.max(0, ...selectedSeason.episodes.map((episode) => episode.number)) +
-      1
-    : 1;
+
+  const [drafts, setDrafts] = useState<DraftEpisode[]>([]);
+  const [draftBusyId, setDraftBusyId] = useState<string | null>(null);
+  const [draftMessage, setDraftMessage] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<
+    { id: string; title: string } | null
+  >(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameMessage, setRenameMessage] = useState<string | null>(null);
+  const [renamedTitles, setRenamedTitles] = useState<Record<string, string>>(
+    {},
+  );
+  const [packagingRequests, setPackagingRequests] = useState<
+    PackagingRequest[]
+  >([]);
+
+  const nextNumberFor = useCallback(
+    (season: SeriesDetail["seasons"][number] | undefined) => {
+      if (!season) return 1;
+      return (
+        Math.max(
+          0,
+          ...season.episodes.map((episode) => episode.number),
+          ...drafts
+            .filter((draft) => draft.season.id === season.id)
+            .map((draft) => draft.number),
+        ) + 1
+      );
+    },
+    [drafts],
+  );
+
+  const suggestedNumber = nextNumberFor(selectedSeason);
 
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<UploadPreview | null>(null);
@@ -87,6 +155,50 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [busy, setBusy] = useState<"upload" | "publish" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedEpisode | null>(null);
+
+  const [applicantName, setApplicantName] = useState("");
+  const [bookTitle, setBookTitle] = useState("");
+  const [bookSize, setBookSize] = useState<PackagingBookSize>("A5");
+  const [coverType, setCoverType] = useState<PackagingCoverType>("softcover");
+  const [quantity, setQuantity] = useState(1);
+  const [packagingMemo, setPackagingMemo] = useState("");
+  const [packagingResult, setPackagingResult] =
+    useState<PackagingRequest | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getJson<{ items: DraftEpisode[] }>(
+      "/api/studio/drafts",
+      controller.signal,
+    )
+      .then((response) => {
+        setDrafts(response.items);
+        // 비공개 보관 회차와 겹치지 않게 추천 회차 번호를 보정한다.
+        const season = selectedSeason;
+        if (!season) return;
+        const seasonDraftNumbers = response.items
+          .filter((draft) => draft.season.id === season.id)
+          .map((draft) => draft.number);
+        if (seasonDraftNumbers.length === 0) return;
+        setEpisodeNumber((current) =>
+          seasonDraftNumbers.includes(current)
+            ? Math.max(
+                0,
+                ...season.episodes.map((episode) => episode.number),
+                ...seasonDraftNumbers,
+              ) + 1
+            : current,
+        );
+      })
+      .catch(() => undefined);
+    getJson<{ items: PackagingRequest[] }>(
+      "/api/studio/packaging-requests",
+      controller.signal,
+    )
+      .then((response) => setPackagingRequests(response.items))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   function chooseSeries(nextSeriesId: string) {
     const nextSeries = availableSeries.find(
@@ -98,14 +210,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     setSeriesId(nextSeriesId);
     setPolicyMessage(null);
     setSeasonId(nextSeason?.id ?? "");
-    setEpisodeNumber(
-      nextSeason
-        ? Math.max(
-            0,
-            ...nextSeason.episodes.map((episode) => episode.number),
-          ) + 1
-        : 1,
-    );
+    setEpisodeNumber(nextNumberFor(nextSeason));
   }
 
   async function saveAccessPolicy() {
@@ -139,14 +244,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       (season) => season.id === nextSeasonId,
     );
     setSeasonId(nextSeasonId);
-    setEpisodeNumber(
-      nextSeason
-        ? Math.max(
-            0,
-            ...nextSeason.episodes.map((episode) => episode.number),
-          ) + 1
-        : 1,
-    );
+    setEpisodeNumber(nextNumberFor(nextSeason));
   }
 
   async function uploadArchive(file: File | undefined) {
@@ -170,6 +268,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     setBusy("upload");
     setError(null);
     setCreated(null);
+    setPackagingResult(null);
     const formData = new FormData();
     formData.append("archive", file);
     try {
@@ -203,10 +302,9 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
 
   async function publishEpisode() {
     if (!preview || !selectedSeason) return;
-    if (title.trim().length === 0) {
-      setError("에피소드 제목을 입력해 주세요.");
-      return;
-    }
+    // 제목을 비워 두면 회차 번호로 자동 지정한다. 등록 뒤에도 수정할 수 있다.
+    const resolvedTitle = title.trim() || `${episodeNumber}화`;
+    const visibility = purpose === "draft" ? "private" : "public";
     setBusy("publish");
     setError(null);
     try {
@@ -216,14 +314,34 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           sessionId: preview.sessionId,
           seasonId: selectedSeason.id,
           number: episodeNumber,
-          title: title.trim(),
+          title: resolvedTitle,
           pageIds: preview.pages.map((page) => page.id),
+          visibility,
         },
         undefined,
         mutationHeaders,
       );
       setCreated(result);
       setPreview(null);
+      if (result.visibility === "private" && selectedSeries) {
+        setDrafts((current) => [
+          {
+            id: result.episodeId,
+            number: episodeNumber,
+            title: resolvedTitle,
+            publishedAt: new Date().toISOString(),
+            season: {
+              id: selectedSeason.id,
+              number: selectedSeason.number,
+            },
+            series: {
+              slug: selectedSeries.slug,
+              title: selectedSeries.title,
+            },
+          },
+          ...current,
+        ]);
+      }
     } catch (reason) {
       setError(
         reason instanceof ApiError
@@ -232,6 +350,116 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       );
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function submitPackagingRequest() {
+    if (!preview) return;
+    if (applicantName.trim().length < 2) {
+      setError("신청자 이름을 두 글자 이상 입력해 주세요.");
+      return;
+    }
+    if (bookTitle.trim().length === 0) {
+      setError("만들 책의 제목을 입력해 주세요.");
+      return;
+    }
+    setBusy("publish");
+    setError(null);
+    try {
+      const result = await postJson<
+        CreatePackagingRequest,
+        PackagingRequest
+      >(
+        "/api/studio/packaging-requests",
+        {
+          sessionId: preview.sessionId,
+          pageIds: preview.pages.map((page) => page.id),
+          applicantName: applicantName.trim(),
+          bookTitle: bookTitle.trim(),
+          bookSize,
+          coverType,
+          quantity,
+          memo: packagingMemo.trim() || null,
+        },
+        undefined,
+        mutationHeaders,
+      );
+      setPackagingResult(result);
+      setPackagingRequests((current) => [result, ...current]);
+      setPreview(null);
+      setBookTitle("");
+      setPackagingMemo("");
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason.message
+          : "패키징 신청을 접수하지 못했습니다.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveRename() {
+    if (!renameTarget) return;
+    const nextTitle = renameTarget.title.trim();
+    if (nextTitle.length === 0) {
+      setRenameMessage("제목을 한 글자 이상 입력해 주세요.");
+      return;
+    }
+    setRenameBusy(true);
+    setRenameMessage(null);
+    try {
+      const updated = await patchJson<{ title: string }, DraftEpisode>(
+        `/api/studio/episodes/${encodeURIComponent(renameTarget.id)}/title`,
+        { title: nextTitle },
+        mutationHeaders,
+      );
+      setRenamedTitles((current) => ({
+        ...current,
+        [updated.id]: updated.title,
+      }));
+      setDrafts((current) =>
+        current.map((draft) =>
+          draft.id === updated.id
+            ? { ...draft, title: updated.title }
+            : draft,
+        ),
+      );
+      setRenameTarget(null);
+      setRenameMessage("에피소드 제목을 수정했어요.");
+    } catch (reason) {
+      setRenameMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "제목을 수정하지 못했습니다.",
+      );
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
+  async function publishDraft(episodeId: string) {
+    setDraftBusyId(episodeId);
+    setDraftMessage(null);
+    try {
+      await patchJson<{ visibility: "public" }, DraftEpisode>(
+        `/api/studio/episodes/${encodeURIComponent(episodeId)}/visibility`,
+        { visibility: "public" },
+        mutationHeaders,
+      );
+      setDrafts((current) =>
+        current.filter((draft) => draft.id !== episodeId),
+      );
+      setDraftMessage("보관 중이던 에피소드를 독자에게 공개했어요.");
+    } catch (reason) {
+      setDraftMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "에피소드를 공개하지 못했습니다.",
+      );
+    } finally {
+      setDraftBusyId(null);
     }
   }
 
@@ -244,6 +472,9 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     setDragging(false);
     void uploadArchive(event.dataTransfer.files[0]);
   }
+
+  const needsSeason = purpose !== "packaging";
+  const seasonUnavailable = needsSeason && availableSeries.length === 0;
 
   return (
     <main className="studio-page">
@@ -258,178 +489,329 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           <h1>원고 한 묶음을<br />새 에피소드로.</h1>
         </div>
         <p>
-          작업 폴더의 이미지를 ZIP 또는 CBZ로 묶어 올리세요. 파일명 순서대로
-          펼쳐 보고, 필요한 순서만 다듬은 뒤 등록할 수 있습니다.
+          작업 폴더의 이미지를 ZIP 또는 CBZ로 묶어 올리세요. 바로 공개하는
+          것 외에도 비공개로 보관하거나, 실물 책 패키징 서비스를 신청할 수
+          있습니다.
         </p>
       </header>
 
-      {availableSeries.length === 0 ? (
-        <section className="orders-empty">
-          <h2>연재 중인 시즌이 없어요.</h2>
-          <p>새 에피소드는 연재 중인 시즌에만 등록할 수 있습니다.</p>
-        </section>
-      ) : (
-        <div className="studio-layout">
-          <aside className="studio-settings">
-            <p className="eyebrow">Episode info</p>
-            <details className="studio-security-access">
-              <summary>운영 보안 설정</summary>
-              <label className="field">
-                <span>스튜디오 접근 키</span>
-                <input
-                  autoComplete="off"
-                  onChange={(event) => {
-                    setAccessKey(event.target.value);
-                    saveSecurityAccessKey("studio", event.target.value);
-                  }}
-                  placeholder="운영 strict 모드에서만 필요"
-                  type="password"
-                  value={accessKey}
-                />
-              </label>
-              <p>키는 현재 탭의 sessionStorage에만 보관됩니다.</p>
-            </details>
-            <label className="field">
-              <span>작품</span>
-              <select
-                onChange={(event) => chooseSeries(event.target.value)}
-                value={selectedSeries?.id}
+      <div className="studio-layout">
+        <aside className="studio-settings">
+          <p className="eyebrow">Upload purpose</p>
+          <fieldset className="studio-purpose" aria-label="업로드 목적">
+            {PURPOSE_OPTIONS.map((option) => (
+              <label
+                key={option.value}
+                className={
+                  purpose === option.value
+                    ? "studio-purpose__option studio-purpose__option--active"
+                    : "studio-purpose__option"
+                }
               >
-                {availableSeries.map((item) => (
-                  <option key={item.id} value={item.id}>{item.title}</option>
-                ))}
-              </select>
+                <input
+                  checked={purpose === option.value}
+                  name="upload-purpose"
+                  onChange={() => {
+                    setPurpose(option.value);
+                    setError(null);
+                    setCreated(null);
+                    setPackagingResult(null);
+                  }}
+                  type="radio"
+                />
+                <span>
+                  <strong>{option.label}</strong>
+                  <small>{option.description}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <details className="studio-security-access">
+            <summary>운영 보안 설정</summary>
+            <label className="field">
+              <span>스튜디오 접근 키</span>
+              <input
+                autoComplete="off"
+                onChange={(event) => {
+                  setAccessKey(event.target.value);
+                  saveSecurityAccessKey("studio", event.target.value);
+                }}
+                placeholder="운영 strict 모드에서만 필요"
+                type="password"
+                value={accessKey}
+              />
             </label>
-            {selectedSeries && selectedPolicy ? (
-              <section className="studio-access-policy">
-                <div>
-                  <strong>독자 공개 범위</strong>
-                  <p>한 권은 5화이며, 무료 권 다음에 일부 화를 더 공개할 수 있어요.</p>
-                </div>
+            <p>키는 현재 탭의 sessionStorage에만 보관됩니다.</p>
+          </details>
+
+          {needsSeason && !seasonUnavailable ? (
+            <>
+              <label className="field">
+                <span>작품</span>
+                <select
+                  onChange={(event) => chooseSeries(event.target.value)}
+                  value={selectedSeries?.id}
+                >
+                  {availableSeries.map((item) => (
+                    <option key={item.id} value={item.id}>{item.title}</option>
+                  ))}
+                </select>
+              </label>
+              {purpose === "publish" && selectedSeries && selectedPolicy ? (
+                <section className="studio-access-policy">
+                  <div>
+                    <strong>독자 공개 범위</strong>
+                    <p>한 권은 5화이며, 무료 권 다음에 일부 화를 더 공개할 수 있어요.</p>
+                  </div>
+                  <label className="field">
+                    <span>무료 공개 권 수</span>
+                    <input
+                      max={20}
+                      min={0}
+                      onChange={(event) =>
+                        setPolicies((current) => ({
+                          ...current,
+                          [selectedSeries.id]: {
+                            ...selectedPolicy,
+                            freeVolumeCount: Number(event.target.value),
+                          },
+                        }))
+                      }
+                      type="number"
+                      value={selectedPolicy.freeVolumeCount}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>다음 권 미리보기</span>
+                    <select
+                      onChange={(event) =>
+                        setPolicies((current) => ({
+                          ...current,
+                          [selectedSeries.id]: {
+                            ...selectedPolicy,
+                            previewEpisodeCount: Number(event.target.value),
+                          },
+                        }))
+                      }
+                      value={selectedPolicy.previewEpisodeCount}
+                    >
+                      {[0, 1, 2, 3, 4].map((count) => (
+                        <option key={count} value={count}>
+                          {count}화
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className="button button--ghost button--wide"
+                    disabled={policyBusy}
+                    onClick={() => void saveAccessPolicy()}
+                    type="button"
+                  >
+                    {policyBusy ? "저장 중…" : "공개 범위 저장"}
+                  </button>
+                  {policyMessage ? (
+                    <p aria-live="polite">{policyMessage}</p>
+                  ) : null}
+                </section>
+              ) : null}
+              <label className="field">
+                <span>시즌</span>
+                <select
+                  onChange={(event) => chooseSeason(event.target.value)}
+                  value={selectedSeason?.id}
+                >
+                  {ongoingSeasons.map((season) => (
+                    <option key={season.id} value={season.id}>
+                      시즌 {season.number} · {season.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="studio-number-title">
                 <label className="field">
-                  <span>무료 공개 권 수</span>
+                  <span>회차</span>
                   <input
-                    max={20}
-                    min={0}
+                    min={1}
                     onChange={(event) =>
-                      setPolicies((current) => ({
-                        ...current,
-                        [selectedSeries.id]: {
-                          ...selectedPolicy,
-                          freeVolumeCount: Number(event.target.value),
-                        },
-                      }))
+                      setEpisodeNumber(Number(event.target.value))
                     }
                     type="number"
-                    value={selectedPolicy.freeVolumeCount}
+                    value={episodeNumber}
                   />
                 </label>
                 <label className="field">
-                  <span>다음 권 미리보기</span>
-                  <select
-                    onChange={(event) =>
-                      setPolicies((current) => ({
-                        ...current,
-                        [selectedSeries.id]: {
-                          ...selectedPolicy,
-                          previewEpisodeCount: Number(event.target.value),
-                        },
-                      }))
-                    }
-                    value={selectedPolicy.previewEpisodeCount}
-                  >
-                    {[0, 1, 2, 3, 4].map((count) => (
-                      <option key={count} value={count}>
-                        {count}화
-                      </option>
-                    ))}
-                  </select>
+                  <span>
+                    제목 <small>비우면 “{episodeNumber}화”로 저장돼요</small>
+                  </span>
+                  <input
+                    maxLength={80}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder={`${episodeNumber}화`}
+                    value={title}
+                  />
                 </label>
-                <button
-                  className="button button--ghost button--wide"
-                  disabled={policyBusy}
-                  onClick={() => void saveAccessPolicy()}
-                  type="button"
-                >
-                  {policyBusy ? "저장 중…" : "공개 범위 저장"}
-                </button>
-                {policyMessage ? (
-                  <p aria-live="polite">{policyMessage}</p>
-                ) : null}
-              </section>
-            ) : null}
-            <label className="field">
-              <span>시즌</span>
-              <select
-                onChange={(event) => chooseSeason(event.target.value)}
-                value={selectedSeason?.id}
-              >
-                {ongoingSeasons.map((season) => (
-                  <option key={season.id} value={season.id}>
-                    시즌 {season.number} · {season.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="studio-number-title">
+              </div>
+            </>
+          ) : null}
+
+          {purpose === "packaging" ? (
+            <section className="studio-packaging-form" aria-label="패키징 신청 정보">
+              <div>
+                <strong>책 사양</strong>
+                <p>업로드한 원고가 그대로 내지가 됩니다.</p>
+              </div>
               <label className="field">
-                <span>회차</span>
+                <span>신청자 이름</span>
                 <input
-                  min={1}
-                  onChange={(event) =>
-                    setEpisodeNumber(Number(event.target.value))
-                  }
-                  type="number"
-                  value={episodeNumber}
+                  maxLength={40}
+                  onChange={(event) => setApplicantName(event.target.value)}
+                  placeholder="필명도 좋아요"
+                  value={applicantName}
                 />
               </label>
               <label className="field">
-                <span>제목</span>
+                <span>책 제목</span>
                 <input
                   maxLength={80}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder={`${episodeNumber}화`}
-                  value={title}
+                  onChange={(event) => setBookTitle(event.target.value)}
+                  placeholder="표지에 들어갈 제목"
+                  value={bookTitle}
                 />
               </label>
-            </div>
-            <div className="studio-safety-note">
-              <strong>업로드 기준</strong>
-              <ul>
-                <li>ZIP/CBZ 최대 25MB, 이미지 최대 80장</li>
-                <li>PNG, JPG, JPEG, WebP만 지원</li>
-                <li>SVG와 실행 가능한 파일은 등록 불가</li>
-                <li>미리보기 파일은 1시간 뒤 자동 만료</li>
-              </ul>
-            </div>
-          </aside>
+              <div className="studio-number-title">
+                <label className="field">
+                  <span>판형</span>
+                  <select
+                    onChange={(event) =>
+                      setBookSize(event.target.value === "B5" ? "B5" : "A5")
+                    }
+                    value={bookSize}
+                  >
+                    <option value="A5">A5 (148×210mm)</option>
+                    <option value="B5">B5 (182×257mm)</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>표지</span>
+                  <select
+                    onChange={(event) =>
+                      setCoverType(
+                        event.target.value === "hardcover"
+                          ? "hardcover"
+                          : "softcover",
+                      )
+                    }
+                    value={coverType}
+                  >
+                    <option value="softcover">소프트커버</option>
+                    <option value="hardcover">하드커버</option>
+                  </select>
+                </label>
+              </div>
+              <label className="field">
+                <span>수량</span>
+                <input
+                  max={500}
+                  min={1}
+                  onChange={(event) =>
+                    setQuantity(
+                      Math.max(
+                        1,
+                        Math.min(500, Number(event.target.value) || 1),
+                      ),
+                    )
+                  }
+                  type="number"
+                  value={quantity}
+                />
+              </label>
+              <label className="field">
+                <span>요청 메모 (선택)</span>
+                <textarea
+                  maxLength={500}
+                  onChange={(event) => setPackagingMemo(event.target.value)}
+                  placeholder="종이, 후가공 등 요청 사항"
+                  rows={3}
+                  value={packagingMemo}
+                />
+              </label>
+            </section>
+          ) : null}
 
-          <section className="studio-workspace">
-            {!preview && !created ? (
-              <div
-                className={`upload-dropzone ${dragging ? "upload-dropzone--dragging" : ""}`}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  setDragging(true);
-                }}
-                onDragLeave={() => setDragging(false)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={onDrop}
+          <div className="studio-safety-note">
+            <strong>업로드 기준</strong>
+            <ul>
+              <li>ZIP/CBZ 최대 25MB, 이미지 최대 80장</li>
+              <li>PNG, JPG, JPEG, WebP만 지원</li>
+              <li>SVG와 실행 가능한 파일은 등록 불가</li>
+              <li>미리보기 파일은 1시간 뒤 자동 만료</li>
+            </ul>
+          </div>
+        </aside>
+
+        <section className="studio-workspace">
+          {seasonUnavailable ? (
+            <section className="orders-empty">
+              <h2>연재 중인 시즌이 없어요.</h2>
+              <p>
+                새 에피소드는 연재 중인 시즌에만 등록할 수 있습니다. 책
+                패키징 신청은 시즌 없이도 이용할 수 있어요.
+              </p>
+            </section>
+          ) : null}
+
+          {!seasonUnavailable && !preview && !created && !packagingResult ? (
+            <div
+              className={`upload-dropzone ${dragging ? "upload-dropzone--dragging" : ""}`}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={onDrop}
+            >
+              <span className="upload-dropzone__icon">ZIP</span>
+              <h2>
+                {busy === "upload"
+                  ? "페이지 순서를 확인하고 있어요…"
+                  : "원고 묶음을 여기에 놓으세요."}
+              </h2>
+              <p>파일명은 1, 2, 10처럼 자연스럽게 정렬됩니다.</p>
+              <button
+                className="button button--primary"
+                disabled={busy !== null}
+                onClick={() => fileInput.current?.click()}
+                type="button"
               >
-                <span className="upload-dropzone__icon">ZIP</span>
-                <h2>
-                  {busy === "upload"
-                    ? "페이지 순서를 확인하고 있어요…"
-                    : "원고 묶음을 여기에 놓으세요."}
-                </h2>
-                <p>파일명은 1, 2, 10처럼 자연스럽게 정렬됩니다.</p>
+                ZIP/CBZ 선택
+              </button>
+              <input
+                accept=".zip,.cbz,application/zip"
+                hidden
+                onChange={onFileChange}
+                ref={fileInput}
+                type="file"
+              />
+            </div>
+          ) : null}
+
+          {preview ? (
+            <>
+              <header className="preview-header">
+                <div>
+                  <p className="eyebrow">Page preview</p>
+                  <h2>{preview.originalName}</h2>
+                  <p>{preview.pages.length}장의 순서를 확인해 주세요.</p>
+                </div>
                 <button
-                  className="button button--primary"
+                  className="button button--ghost"
                   disabled={busy !== null}
                   onClick={() => fileInput.current?.click()}
                   type="button"
                 >
-                  ZIP/CBZ 선택
+                  다른 파일 선택
                 </button>
                 <input
                   accept=".zip,.cbz,application/zip"
@@ -438,121 +820,391 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                   ref={fileInput}
                   type="file"
                 />
-              </div>
-            ) : null}
-
-            {preview ? (
-              <>
-                <header className="preview-header">
-                  <div>
-                    <p className="eyebrow">Page preview</p>
-                    <h2>{preview.originalName}</h2>
-                    <p>{preview.pages.length}장의 순서를 확인해 주세요.</p>
-                  </div>
-                  <button
-                    className="button button--ghost"
-                    disabled={busy !== null}
-                    onClick={() => fileInput.current?.click()}
-                    type="button"
-                  >
-                    다른 파일 선택
-                  </button>
-                  <input
-                    accept=".zip,.cbz,application/zip"
-                    hidden
-                    onChange={onFileChange}
-                    ref={fileInput}
-                    type="file"
-                  />
-                </header>
-                <ol className="page-preview-list">
-                  {preview.pages.map((page, index) => (
-                    <li key={page.id}>
-                      <span className="page-preview-list__number">
-                        {String(index + 1).padStart(2, "0")}
+              </header>
+              <ol className="page-preview-list">
+                {preview.pages.map((page, index) => (
+                  <li key={page.id}>
+                    <span className="page-preview-list__number">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <Image
+                      alt={`${index + 1}번째 페이지 미리보기`}
+                      height={180}
+                      src={page.previewUrl}
+                      unoptimized
+                      width={120}
+                    />
+                    <div>
+                      <strong>{page.originalName}</strong>
+                      <span>{formatBytes(page.byteSize)}</span>
+                    </div>
+                    <div className="page-order-actions">
+                      <button
+                        aria-label={`${page.originalName} 앞으로 이동`}
+                        disabled={index === 0}
+                        onClick={() => movePage(index, -1)}
+                        type="button"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        aria-label={`${page.originalName} 뒤로 이동`}
+                        disabled={index === preview.pages.length - 1}
+                        onClick={() => movePage(index, 1)}
+                        type="button"
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <div className="studio-publish-bar">
+                {purpose === "packaging" ? (
+                  <>
+                    <div>
+                      <strong>
+                        {bookSize} ·{" "}
+                        {coverType === "hardcover"
+                          ? "하드커버"
+                          : "소프트커버"}{" "}
+                        · {quantity}부
+                      </strong>
+                      <span>
+                        내지 {preview.pages.length}쪽으로 패키징을 신청합니다.
                       </span>
-                      <Image
-                        alt={`${index + 1}번째 페이지 미리보기`}
-                        height={180}
-                        src={page.previewUrl}
-                        unoptimized
-                        width={120}
-                      />
-                      <div>
-                        <strong>{page.originalName}</strong>
-                        <span>{formatBytes(page.byteSize)}</span>
-                      </div>
-                      <div className="page-order-actions">
-                        <button
-                          aria-label={`${page.originalName} 앞으로 이동`}
-                          disabled={index === 0}
-                          onClick={() => movePage(index, -1)}
-                          type="button"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          aria-label={`${page.originalName} 뒤로 이동`}
-                          disabled={index === preview.pages.length - 1}
-                          onClick={() => movePage(index, 1)}
-                          type="button"
-                        >
-                          ↓
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-                <div className="studio-publish-bar">
-                  <div>
-                    <strong>
-                      시즌 {selectedSeason?.number} · {episodeNumber}화
-                    </strong>
-                    <span>{preview.pages.length}개 페이지로 등록됩니다.</span>
-                  </div>
-                  <button
-                    className="button button--primary"
-                    disabled={busy !== null}
-                    onClick={publishEpisode}
-                    type="button"
-                  >
-                    {busy === "publish" ? "등록 중…" : "에피소드 등록"}
-                  </button>
-                </div>
-              </>
-            ) : null}
-
-            {created ? (
-              <div className="studio-success">
-                <span>✓</span>
-                <p className="eyebrow">Published</p>
-                <h2>새 에피소드가 독자에게 열렸어요.</h2>
-                <p>{created.pageCount}장의 페이지가 순서대로 등록되었습니다.</p>
-                <div>
-                  <Link className="button button--primary" href={created.readerUrl}>
-                    등록한 에피소드 보기
-                  </Link>
-                  <button
-                    className="button button--ghost"
-                    onClick={() => {
-                      setCreated(null);
-                      setTitle("");
-                      setEpisodeNumber((current) => current + 1);
-                    }}
-                    type="button"
-                  >
-                    다음 에피소드 등록
-                  </button>
-                </div>
+                    </div>
+                    <button
+                      className="button button--primary"
+                      disabled={busy !== null}
+                      onClick={() => void submitPackagingRequest()}
+                      type="button"
+                    >
+                      {busy === "publish" ? "접수 중…" : "패키징 신청"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <strong>
+                        시즌 {selectedSeason?.number} · {episodeNumber}화
+                      </strong>
+                      <span>
+                        {preview.pages.length}개 페이지를{" "}
+                        {purpose === "draft" ? "비공개로 보관" : "등록"}
+                        합니다.
+                      </span>
+                    </div>
+                    <button
+                      className="button button--primary"
+                      disabled={busy !== null}
+                      onClick={() => void publishEpisode()}
+                      type="button"
+                    >
+                      {busy === "publish"
+                        ? purpose === "draft"
+                          ? "보관 중…"
+                          : "등록 중…"
+                        : purpose === "draft"
+                          ? "비공개로 보관"
+                          : "에피소드 등록"}
+                    </button>
+                  </>
+                )}
               </div>
-            ) : null}
+            </>
+          ) : null}
 
-            {error ? (
-              <p className="studio-error" role="alert">{error}</p>
-            ) : null}
-          </section>
-        </div>
-      )}
+          {created ? (
+            <div className="studio-success">
+              <span>✓</span>
+              {created.visibility === "private" ? (
+                <>
+                  <p className="eyebrow">Saved privately</p>
+                  <h2>에피소드를 비공개로 보관했어요.</h2>
+                  <p>
+                    {created.pageCount}장의 페이지가 저장되었습니다. 목록과
+                    피드에는 나오지 않고, 아래 링크를 아는 사람만 볼 수
+                    있어요.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="eyebrow">Published</p>
+                  <h2>새 에피소드가 독자에게 열렸어요.</h2>
+                  <p>{created.pageCount}장의 페이지가 순서대로 등록되었습니다.</p>
+                </>
+              )}
+              <div>
+                <Link className="button button--primary" href={created.readerUrl}>
+                  {created.visibility === "private"
+                    ? "비공개 미리보기"
+                    : "등록한 에피소드 보기"}
+                </Link>
+                <button
+                  className="button button--ghost"
+                  onClick={() => {
+                    setCreated(null);
+                    setTitle("");
+                    setEpisodeNumber((current) => current + 1);
+                  }}
+                  type="button"
+                >
+                  다음 에피소드 등록
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {packagingResult ? (
+            <div className="studio-success">
+              <span>✓</span>
+              <p className="eyebrow">Packaging requested</p>
+              <h2>책 패키징 신청을 접수했어요.</h2>
+              <p>
+                《{packagingResult.bookTitle}》 · 내지{" "}
+                {packagingResult.pageCount}쪽 · {packagingResult.bookSize} ·{" "}
+                {packagingResult.coverType === "hardcover"
+                  ? "하드커버"
+                  : "소프트커버"}{" "}
+                {packagingResult.quantity}부. 담당자가 원고를 확인한 뒤
+                진행 상황을 아래 신청 내역에서 알려드릴게요.
+              </p>
+              <div>
+                <button
+                  className="button button--ghost"
+                  onClick={() => setPackagingResult(null)}
+                  type="button"
+                >
+                  새 원고 올리기
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {error ? (
+            <p className="studio-error" role="alert">{error}</p>
+          ) : null}
+        </section>
+      </div>
+
+      {selectedSeries && selectedSeason && selectedSeason.episodes.length > 0 ? (
+        <section className="studio-drafts studio-episodes" aria-label="등록된 회차 관리">
+          <header>
+            <div>
+              <p className="eyebrow">Episodes</p>
+              <h2>등록된 회차 관리</h2>
+            </div>
+            <p>
+              {selectedSeries.title} · 시즌 {selectedSeason.number} — 압축
+              파일명은 페이지 정렬에만 쓰이며, 제목은 여기서 언제든 고칠 수
+              있어요.
+            </p>
+          </header>
+          {renameMessage ? <p aria-live="polite">{renameMessage}</p> : null}
+          <ul>
+            {selectedSeason.episodes.map((episode) => (
+              <li key={episode.id}>
+                {renameTarget?.id === episode.id ? (
+                  <>
+                    <label className="field studio-rename-field">
+                      <span>{episode.number}화 제목</span>
+                      <input
+                        maxLength={80}
+                        onChange={(event) =>
+                          setRenameTarget({
+                            id: episode.id,
+                            title: event.target.value,
+                          })
+                        }
+                        value={renameTarget.title}
+                      />
+                    </label>
+                    <div className="studio-drafts__actions">
+                      <button
+                        className="button button--ghost"
+                        disabled={renameBusy}
+                        onClick={() => setRenameTarget(null)}
+                        type="button"
+                      >
+                        취소
+                      </button>
+                      <button
+                        className="button button--primary"
+                        disabled={renameBusy}
+                        onClick={() => void saveRename()}
+                        type="button"
+                      >
+                        {renameBusy ? "저장 중…" : "저장"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <strong>{episode.number}화</strong>
+                      <span>
+                        {renamedTitles[episode.id] ?? episode.title}
+                      </span>
+                    </div>
+                    <div className="studio-drafts__actions">
+                      <Link
+                        className="button button--ghost"
+                        href={`/read/${encodeURIComponent(episode.id)}`}
+                      >
+                        보기
+                      </Link>
+                      <button
+                        className="button button--primary"
+                        onClick={() =>
+                          setRenameTarget({
+                            id: episode.id,
+                            title:
+                              renamedTitles[episode.id] ?? episode.title,
+                          })
+                        }
+                        type="button"
+                      >
+                        제목 수정
+                      </button>
+                    </div>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {drafts.length > 0 ? (
+        <section className="studio-drafts" aria-label="비공개 보관함">
+          <header>
+            <div>
+              <p className="eyebrow">Private shelf</p>
+              <h2>비공개 보관함</h2>
+            </div>
+            <p>링크를 아는 사람만 볼 수 있어요. 준비되면 공개로 전환하세요.</p>
+          </header>
+          {draftMessage ? <p aria-live="polite">{draftMessage}</p> : null}
+          <ul>
+            {drafts.map((draft) => (
+              <li key={draft.id}>
+                {renameTarget?.id === draft.id ? (
+                  <>
+                    <label className="field studio-rename-field">
+                      <span>{draft.number}화 제목</span>
+                      <input
+                        maxLength={80}
+                        onChange={(event) =>
+                          setRenameTarget({
+                            id: draft.id,
+                            title: event.target.value,
+                          })
+                        }
+                        value={renameTarget.title}
+                      />
+                    </label>
+                    <div className="studio-drafts__actions">
+                      <button
+                        className="button button--ghost"
+                        disabled={renameBusy}
+                        onClick={() => setRenameTarget(null)}
+                        type="button"
+                      >
+                        취소
+                      </button>
+                      <button
+                        className="button button--primary"
+                        disabled={renameBusy}
+                        onClick={() => void saveRename()}
+                        type="button"
+                      >
+                        {renameBusy ? "저장 중…" : "저장"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <strong>
+                        {draft.series.title} · 시즌 {draft.season.number} ·{" "}
+                        {draft.number}화
+                      </strong>
+                      <span>{draft.title}</span>
+                    </div>
+                    <div className="studio-drafts__actions">
+                      <Link
+                        className="button button--ghost"
+                        href={`/read/${encodeURIComponent(draft.id)}`}
+                      >
+                        미리보기
+                      </Link>
+                      <button
+                        className="button button--ghost"
+                        onClick={() =>
+                          setRenameTarget({
+                            id: draft.id,
+                            title: draft.title,
+                          })
+                        }
+                        type="button"
+                      >
+                        제목 수정
+                      </button>
+                      <button
+                        className="button button--primary"
+                        disabled={draftBusyId !== null}
+                        onClick={() => void publishDraft(draft.id)}
+                        type="button"
+                      >
+                        {draftBusyId === draft.id ? "공개 중…" : "공개하기"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {packagingRequests.length > 0 ? (
+        <section
+          className="studio-packaging-list"
+          aria-label="패키징 신청 내역"
+        >
+          <header>
+            <div>
+              <p className="eyebrow">Packaging</p>
+              <h2>책 패키징 신청 내역</h2>
+            </div>
+            <p>실제 인쇄 없이 접수와 상태만 관리하는 데모 흐름입니다.</p>
+          </header>
+          <ul>
+            {packagingRequests.map((request) => (
+              <li key={request.id}>
+                <div>
+                  <strong>《{request.bookTitle}》</strong>
+                  <span>
+                    {request.applicantName} · 내지 {request.pageCount}쪽 ·{" "}
+                    {request.bookSize} ·{" "}
+                    {request.coverType === "hardcover"
+                      ? "하드커버"
+                      : "소프트커버"}{" "}
+                    · {request.quantity}부
+                  </span>
+                  {request.memo ? <small>{request.memo}</small> : null}
+                </div>
+                <span
+                  className={`studio-packaging-status studio-packaging-status--${request.status}`}
+                >
+                  {PACKAGING_STATUS_LABEL[request.status]}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </main>
   );
 }

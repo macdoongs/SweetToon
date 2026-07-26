@@ -623,6 +623,13 @@ export const openApiDocument = {
                     type: "array",
                     items: { type: "string", format: "uuid" },
                   },
+                  visibility: {
+                    type: "string",
+                    enum: ["public", "private"],
+                    default: "public",
+                    description:
+                      "private은 목록·피드에 노출되지 않는 비공개 보관",
+                  },
                 },
               },
             },
@@ -631,6 +638,138 @@ export const openApiDocument = {
         responses: {
           "201": { description: "발행된 에피소드" },
           "409": { description: "중복 회차 또는 완결 시즌" },
+        },
+      },
+    },
+    "/api/studio/episodes/{episodeId}/visibility": {
+      patch: {
+        tags: ["Studio"],
+        summary: "비공개 보관 에피소드를 공개하거나 다시 비공개로 돌립니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["visibility"],
+                properties: {
+                  visibility: {
+                    type: "string",
+                    enum: ["public", "private"],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "변경된 에피소드 요약" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/studio/episodes/{episodeId}/title": {
+      patch: {
+        tags: ["Studio"],
+        summary: "등록된 에피소드의 제목을 수정합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["title"],
+                properties: {
+                  title: { type: "string", minLength: 1, maxLength: 80 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "수정된 에피소드 요약" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/studio/drafts": {
+      get: {
+        tags: ["Studio"],
+        summary: "비공개 보관 중인 에피소드 목록을 조회합니다.",
+        responses: {
+          "200": { description: "비공개 에피소드 목록" },
+        },
+      },
+    },
+    "/api/studio/packaging-requests": {
+      get: {
+        tags: ["Studio"],
+        summary: "책 패키징 서비스 신청 내역을 조회합니다.",
+        responses: {
+          "200": { description: "최근 패키징 신청 목록" },
+        },
+      },
+      post: {
+        tags: ["Studio"],
+        summary: "업로드한 원고 묶음으로 책 패키징 서비스를 신청합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: [
+                  "sessionId",
+                  "pageIds",
+                  "applicantName",
+                  "bookTitle",
+                  "bookSize",
+                  "coverType",
+                  "quantity",
+                ],
+                properties: {
+                  sessionId: { type: "string", format: "uuid" },
+                  pageIds: {
+                    type: "array",
+                    items: { type: "string", format: "uuid" },
+                  },
+                  applicantName: { type: "string" },
+                  bookTitle: { type: "string" },
+                  bookSize: { type: "string", enum: ["A5", "B5"] },
+                  coverType: {
+                    type: "string",
+                    enum: ["softcover", "hardcover"],
+                  },
+                  quantity: { type: "integer", minimum: 1, maximum: 500 },
+                  memo: { type: "string", nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "접수된 패키징 신청" },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },

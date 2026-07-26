@@ -4,6 +4,10 @@ import type {
   AccessPolicyResponse,
   CreatedEpisode,
   CreateEpisodeRequest,
+  CreatePackagingRequest,
+  DraftEpisode,
+  EpisodeVisibility,
+  PackagingRequest,
   UploadPreview,
 } from "../contracts/studio";
 import {
@@ -48,6 +52,19 @@ export interface StudioUseCases {
     seriesId: string,
     input: AccessPolicy,
   ): Promise<AccessPolicyResponse>;
+  setEpisodeVisibility(
+    episodeId: string,
+    visibility: EpisodeVisibility,
+  ): Promise<DraftEpisode>;
+  updateEpisodeTitle(
+    episodeId: string,
+    title: string,
+  ): Promise<DraftEpisode>;
+  listDraftEpisodes(): Promise<DraftEpisode[]>;
+  createPackagingRequest(
+    input: CreatePackagingRequest,
+  ): Promise<PackagingRequest>;
+  listPackagingRequests(): Promise<PackagingRequest[]>;
 }
 
 export class StudioService implements StudioUseCases {
@@ -147,19 +164,7 @@ export class StudioService implements StudioUseCases {
       );
     }
 
-    const uniquePageIds = new Set(input.pageIds);
-    const sessionPageIds = new Set(session.pages.map((page) => page.id));
-    if (
-      uniquePageIds.size !== input.pageIds.length ||
-      uniquePageIds.size !== sessionPageIds.size ||
-      [...uniquePageIds].some((id) => !sessionPageIds.has(id))
-    ) {
-      throw new StudioServiceError(
-        "PAGE_ORDER_INVALID",
-        "미리보기의 모든 페이지를 한 번씩 순서대로 넣어 주세요.",
-        400,
-      );
-    }
+    assertPageOrderCoversSession(input.pageIds, session);
 
     const publicationId = crypto.randomUUID();
     const published = await this.storage.publish(
@@ -179,6 +184,7 @@ export class StudioService implements StudioUseCases {
         number: input.number,
         title: input.title,
         imageUrls: published.imageUrls,
+        visibility: input.visibility,
       });
       createdEpisodeId = created.id;
       await this.storage.removeSession(session.id);
@@ -187,6 +193,7 @@ export class StudioService implements StudioUseCases {
         seriesSlug: season.series.slug,
         pageCount: published.imageUrls.length,
         readerUrl: `/read/${created.id}`,
+        visibility: input.visibility,
       };
     } catch (error) {
       if (createdEpisodeId) {
@@ -225,5 +232,106 @@ export class StudioService implements StudioUseCases {
       );
     }
     return updated;
+  }
+
+  async setEpisodeVisibility(
+    episodeId: string,
+    visibility: EpisodeVisibility,
+  ): Promise<DraftEpisode> {
+    const updated = await this.repository.setEpisodeVisibility(
+      episodeId,
+      visibility,
+    );
+    if (!updated) {
+      throw new StudioServiceError(
+        "EPISODE_NOT_FOUND",
+        "공개 상태를 바꿀 에피소드를 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return updated;
+  }
+
+  async updateEpisodeTitle(
+    episodeId: string,
+    title: string,
+  ): Promise<DraftEpisode> {
+    const updated = await this.repository.updateEpisodeTitle(
+      episodeId,
+      title,
+    );
+    if (!updated) {
+      throw new StudioServiceError(
+        "EPISODE_NOT_FOUND",
+        "제목을 바꿀 에피소드를 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return updated;
+  }
+
+  async listDraftEpisodes(): Promise<DraftEpisode[]> {
+    return this.repository.listDraftEpisodes();
+  }
+
+  async createPackagingRequest(
+    input: CreatePackagingRequest,
+  ): Promise<PackagingRequest> {
+    const session = await this.storage.getSession(input.sessionId);
+    if (!session) {
+      throw new StudioServiceError(
+        "UPLOAD_SESSION_NOT_FOUND",
+        "미리보기 시간이 만료되었어요. ZIP 파일을 다시 올려 주세요.",
+        404,
+      );
+    }
+    assertPageOrderCoversSession(input.pageIds, session);
+
+    const requestId = crypto.randomUUID();
+    const published = await this.storage.publish(
+      session,
+      ["packaging", requestId],
+      input.pageIds,
+    );
+    try {
+      const created = await this.repository.createPackagingRequest({
+        applicantName: input.applicantName,
+        bookTitle: input.bookTitle,
+        bookSize: input.bookSize,
+        coverType: input.coverType,
+        quantity: input.quantity,
+        memo: input.memo ?? null,
+        pageCount: published.imageUrls.length,
+        manuscriptDir: published.directory,
+      });
+      await this.storage.removeSession(session.id);
+      return created;
+    } catch (error) {
+      await this.storage.removePublished(published.directory);
+      throw error;
+    }
+  }
+
+  async listPackagingRequests(): Promise<PackagingRequest[]> {
+    return this.repository.listPackagingRequests();
+  }
+}
+
+function assertPageOrderCoversSession(
+  pageIds: string[],
+  session: { pages: Array<{ id: string }> },
+): void {
+  const uniquePageIds = new Set(pageIds);
+  const sessionPageIds = new Set(session.pages.map((page) => page.id));
+  if (
+    uniquePageIds.size !== pageIds.length ||
+    uniquePageIds.size !== sessionPageIds.size ||
+    [...uniquePageIds].some((id) => !sessionPageIds.has(id))
+  ) {
+    throw new StudioServiceError(
+      "PAGE_ORDER_INVALID",
+      "미리보기의 모든 페이지를 한 번씩 순서대로 넣어 주세요.",
+      400,
+    );
   }
 }

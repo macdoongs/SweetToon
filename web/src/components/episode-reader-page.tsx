@@ -34,10 +34,13 @@ type ReaderMode = "webtoon" | "double";
 type ScaleType = "screen" | "width" | "height" | "original";
 type Background = "black" | "gray" | "white";
 type ReadingDirection = "ltr" | "rtl";
+type ModeSource = "auto" | "user";
 type Page = EpisodeReader["pages"][number];
 
 const SETTINGS_KEY = "sweettoon:reader-settings";
 const READER_CHROME_HIDE_DELAY_MS = 2400;
+const MOBILE_VIEWPORT_QUERY = "(max-width: 900px)";
+const LANDSCAPE_QUERY = "(orientation: landscape)";
 
 function isExternalImage(url: string) {
   return /^https?:\/\//i.test(url);
@@ -48,6 +51,7 @@ function loadSettings(): {
   scale: ScaleType;
   background: Background;
   direction: ReadingDirection;
+  modeSource: ModeSource;
 } {
   try {
     const value = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}");
@@ -64,6 +68,7 @@ function loadSettings(): {
           ? value.background
           : "black",
       direction: value.direction === "rtl" ? "rtl" : "ltr",
+      modeSource: value.modeSource === "user" ? "user" : "auto",
     };
   } catch {
     return {
@@ -71,6 +76,7 @@ function loadSettings(): {
       scale: "screen",
       background: "black",
       direction: "ltr",
+      modeSource: "auto",
     };
   }
 }
@@ -78,6 +84,7 @@ function loadSettings(): {
 function buildSpreads(
   pages: Page[],
   dimensions: Record<string, { width: number; height: number }>,
+  singlePageOnly: boolean,
 ): Page[][] {
   const spreads: Page[][] = [];
   let index = 0;
@@ -86,7 +93,7 @@ function buildSpreads(
     const size = dimensions[page.id];
     const landscape = size ? size.width > size.height : false;
     const isEdge = index === 0 || index === pages.length - 1;
-    if (isEdge || landscape) {
+    if (singlePageOnly || isEdge || landscape) {
       spreads.push([page]);
       index += 1;
       continue;
@@ -124,6 +131,9 @@ export function EpisodeReaderPage({
   const [scale, setScale] = useState<ScaleType>("screen");
   const [background, setBackground] = useState<Background>("black");
   const [direction, setDirection] = useState<ReadingDirection>("ltr");
+  const [modeSource, setModeSource] = useState<ModeSource>("auto");
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isLandscape, setIsLandscape] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [thumbnailsOpen, setThumbnailsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -210,6 +220,7 @@ export function EpisodeReaderPage({
       setScale(saved.scale);
       setBackground(saved.background);
       setDirection(saved.direction);
+      setModeSource(saved.modeSource);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -217,9 +228,43 @@ export function EpisodeReaderPage({
   useEffect(() => {
     localStorage.setItem(
       SETTINGS_KEY,
-      JSON.stringify({ mode, scale, background, direction }),
+      JSON.stringify({ mode, scale, background, direction, modeSource }),
     );
-  }, [background, direction, mode, scale]);
+  }, [background, direction, mode, modeSource, scale]);
+
+  useEffect(() => {
+    const mobileQuery = window.matchMedia(MOBILE_VIEWPORT_QUERY);
+    const landscapeQuery = window.matchMedia(LANDSCAPE_QUERY);
+    const sync = () => {
+      setIsMobileViewport(mobileQuery.matches);
+      setIsLandscape(landscapeQuery.matches);
+    };
+    sync();
+    mobileQuery.addEventListener("change", sync);
+    landscapeQuery.addEventListener("change", sync);
+    return () => {
+      mobileQuery.removeEventListener("change", sync);
+      landscapeQuery.removeEventListener("change", sync);
+    };
+  }, []);
+
+  // 모바일 기본값: 사용자가 직접 모드를 고르기 전에는 세로=스크롤,
+  // 가로=양면 보기를 화면 방향에 맞춰 따라간다.
+  useEffect(() => {
+    if (!isMobileViewport || modeSource !== "auto") return;
+    const nextMode: ReaderMode = isLandscape ? "double" : "webtoon";
+    setMode((current) => {
+      if (current === nextMode) return current;
+      restoredProgressKey.current = null;
+      if (nextMode === "webtoon") {
+        suppressWebtoonProgressSave.current = true;
+      } else {
+        window.scrollTo({ top: 0 });
+      }
+      return nextMode;
+    });
+    if (nextMode === "double") setSpreadIndex(0);
+  }, [isLandscape, isMobileViewport, modeSource]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -413,9 +458,11 @@ export function EpisodeReaderPage({
     }
   }, [episode, mode]);
 
+  const singlePageSpreads = isMobileViewport && !isLandscape;
   const spreads = useMemo(
-    () => buildSpreads(episode?.pages ?? [], dimensions),
-    [dimensions, episode?.pages],
+    () =>
+      buildSpreads(episode?.pages ?? [], dimensions, singlePageSpreads),
+    [dimensions, episode?.pages, singlePageSpreads],
   );
   const readerProgress =
     mode === "double" && spreads.length > 0
@@ -458,38 +505,45 @@ export function EpisodeReaderPage({
       lastScrollY.current = window.scrollY;
       revealChrome();
     };
+    // 터치 스크롤 제스처가 헤더를 되살리지 않도록 마우스 이동만 취급한다.
+    const onMousePointerMove = (event: PointerEvent) => {
+      if (event.pointerType && event.pointerType !== "mouse") return;
+      onPointerActivity();
+    };
     const onFocus = () => revealChrome();
     const onScroll = () => {
       const nextScrollY = window.scrollY;
-      if (
-        mode === "webtoon" &&
-        !chromePinned &&
-        nextScrollY > Math.max(48, lastScrollY.current + 8)
-      ) {
-        if (chromeHideTimer.current) {
-          window.clearTimeout(chromeHideTimer.current);
+      if (nextScrollY <= 24) {
+        revealChrome();
+      } else if (mode === "webtoon" && !chromePinned) {
+        // 스크롤 감상 중에는 방향과 무관하게 이미지만 남기고 숨긴다.
+        if (Math.abs(nextScrollY - lastScrollY.current) > 8) {
+          if (chromeHideTimer.current) {
+            window.clearTimeout(chromeHideTimer.current);
+          }
+          setChromeVisible(false);
         }
-        setChromeVisible(false);
-      } else if (
-        nextScrollY <= 24 ||
-        nextScrollY < lastScrollY.current - 8
-      ) {
+      } else if (nextScrollY < lastScrollY.current - 8) {
         revealChrome();
       }
       lastScrollY.current = nextScrollY;
     };
-    window.addEventListener("pointermove", onPointerActivity, {
+    window.addEventListener("pointermove", onMousePointerMove, {
       passive: true,
     });
-    window.addEventListener("mousemove", onPointerActivity, { passive: true });
-    window.addEventListener("pointerdown", onPointerActivity, {
-      passive: true,
-    });
+    if (mode === "webtoon") {
+      // 스크롤 모드에서는 탭(클릭)으로만 다시 활성화한다.
+      window.addEventListener("click", onPointerActivity);
+    } else {
+      window.addEventListener("pointerdown", onPointerActivity, {
+        passive: true,
+      });
+    }
     window.addEventListener("focusin", onFocus);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      window.removeEventListener("pointermove", onPointerActivity);
-      window.removeEventListener("mousemove", onPointerActivity);
+      window.removeEventListener("pointermove", onMousePointerMove);
+      window.removeEventListener("click", onPointerActivity);
       window.removeEventListener("pointerdown", onPointerActivity);
       window.removeEventListener("focusin", onFocus);
       window.removeEventListener("scroll", onScroll);
@@ -679,6 +733,9 @@ export function EpisodeReaderPage({
           <span>
             {episode.series.title} · 시즌 {episode.season.number} ·{" "}
             {episode.access.volumeNumber}권
+            {episode.visibility === "private" ? (
+              <em className="reader-toolbar__private">비공개</em>
+            ) : null}
           </span>
           <h1>{episodeLabel(episode.number, episode.title)}</h1>
           {viewerCount !== null ? (
@@ -699,6 +756,7 @@ export function EpisodeReaderPage({
           <button
             aria-pressed={mode === "webtoon"}
             onClick={() => {
+              setModeSource("user");
               if (mode === "webtoon") return;
               restoredProgressKey.current = null;
               suppressWebtoonProgressSave.current = true;
@@ -711,6 +769,7 @@ export function EpisodeReaderPage({
           <button
             aria-pressed={mode === "double"}
             onClick={() => {
+              setModeSource("user");
               if (mode === "double") return;
               restoredProgressKey.current = null;
               setMode("double");
@@ -737,8 +796,27 @@ export function EpisodeReaderPage({
         </p>
       ) : null}
 
+      {settingsOpen || helpOpen || thumbnailsOpen ? (
+        <button
+          aria-label="열린 도구 닫기"
+          className="reader-popover-backdrop"
+          onClick={() => {
+            setSettingsOpen(false);
+            setHelpOpen(false);
+            setThumbnailsOpen(false);
+          }}
+          type="button"
+        />
+      ) : null}
+
       {settingsOpen ? (
         <section className="reader-popover reader-settings" aria-label="화면 설정">
+          <header className="reader-popover__header">
+            <strong>화면 설정</strong>
+            <button onClick={() => setSettingsOpen(false)} type="button">
+              닫기
+            </button>
+          </header>
           <fieldset>
             <legend>페이지 맞춤</legend>
             {(
@@ -803,9 +881,15 @@ export function EpisodeReaderPage({
       ) : null}
 
       {helpOpen ? (
-        <section className="reader-popover reader-help" aria-label="키보드 도움말">
-          <h2>키보드로 읽기</h2>
+        <section className="reader-popover reader-help" aria-label="읽기 도움말">
+          <header className="reader-popover__header">
+            <strong>읽는 방법</strong>
+            <button onClick={() => setHelpOpen(false)} type="button">
+              닫기
+            </button>
+          </header>
           <dl>
+            <div><dt>터치</dt><dd>양면 보기에서 화면 좌우 가장자리를 눌러 페이지 이동</dd></div>
             <div><dt>← / →</dt><dd>읽기 방향에 맞춰 양면 이동</dd></div>
             <div><dt>Space</dt><dd>다음 양면</dd></div>
             <div><dt>T</dt><dd>페이지 탐색기 열기</dd></div>
@@ -912,14 +996,21 @@ export function EpisodeReaderPage({
           >
             ←
           </button>
-          <div className="horizontal-scroll-surface reader-paged__spread">
+          <div
+            className={
+              "horizontal-scroll-surface reader-paged__spread" +
+              ((spreads[spreadIndex]?.length ?? 0) <= 1
+                ? " reader-paged__spread--single"
+                : "")
+            }
+          >
             {(spreads[spreadIndex] ?? []).map((page) => (
               <Image
                 alt={`${episode.title} ${page.order}번째 페이지`}
                 height={1200}
                 key={page.id}
                 preload
-                sizes="(max-width: 700px) calc(100vw - 56px), min(46vw, 800px)"
+                sizes="(max-width: 900px) 100vw, min(46vw, 800px)"
                 src={page.imageUrl}
                 unoptimized={isExternalImage(page.imageUrl)}
                 width={800}

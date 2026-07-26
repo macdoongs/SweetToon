@@ -20,13 +20,18 @@ export interface ReaderRepository {
   ): Promise<EpisodeReader | null>;
 }
 
+const PUBLIC_EPISODES = { visibility: "public" } as const;
+
 const seriesSummaryInclude = {
   author: true,
   seasons: {
     select: {
       status: true,
-      _count: { select: { episodes: true } },
+      _count: {
+        select: { episodes: { where: PUBLIC_EPISODES } },
+      },
       episodes: {
+        where: PUBLIC_EPISODES,
         orderBy: { publishedAt: "desc" as const },
         take: 1,
       },
@@ -235,6 +240,7 @@ export class PrismaReaderRepository implements ReaderRepository {
           orderBy: { number: "asc" },
           include: {
             episodes: {
+              where: PUBLIC_EPISODES,
               orderBy: { number: "asc" },
             },
           },
@@ -294,6 +300,7 @@ export class PrismaReaderRepository implements ReaderRepository {
           include: {
             series: true,
             episodes: {
+              where: PUBLIC_EPISODES,
               orderBy: { number: "asc" },
               select: { id: true, number: true },
             },
@@ -349,6 +356,7 @@ export class PrismaReaderRepository implements ReaderRepository {
       id: episode.id,
       number: episode.number,
       title: episode.title,
+      visibility: episode.visibility === "private" ? "private" : "public",
       publishedAt: episode.publishedAt.toISOString(),
       series: {
         id: episode.season.series.id,

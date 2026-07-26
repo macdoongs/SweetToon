@@ -83,6 +83,7 @@ const episode: EpisodeReader = {
   id: "episode-1",
   number: 1,
   title: "1화",
+  visibility: "public",
   publishedAt,
   series: {
     id: "series-1",

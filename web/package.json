@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "next experimental-analyze --output",
     "start": "next start",
     "lint": "eslint",
+    "lighthouse": "node scripts/run-lighthouse.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
@@ -27,8 +29,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "adm-zip": "^0.6.0",
+    "chrome-launcher": "1.2.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
+    "lighthouse": "12.6.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3.2.7"

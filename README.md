@@ -261,9 +261,10 @@ Set에 60초 동안만 보존하며, DB 주문 전이나 Redis 장애가 주문 
 - [`docs/ROADMAP.md`](./docs/ROADMAP.md) — 남은 사용자 흐름과 비대상 범위
 - [`docs/REVIEW_CHECKLIST.md`](./docs/REVIEW_CHECKLIST.md) — 과제 기준과 PR 리뷰 체크리스트
 - `scripts/verify-web.ps1` — 의존성, audit, lint, Vitest 단위 테스트, Next.js production build
-- `scripts/verify-server.ps1` — 의존성, audit, Prisma 검증, TypeScript build, Jest
+- `scripts/verify-server.ps1` — 의존성, audit, Prisma·DBML 동기화 검증, TypeScript build, Jest
 - `scripts/smoke-compose.ps1` — 격리된 Compose 전체 기동과 Mock/API/SSR 스모크 검증
 - `scripts/verify-e2e.ps1` — 격리된 Compose 환경에서 Chromium 사용자 흐름 검증
+- `scripts/verify-lighthouse.ps1` — 격리된 Compose 환경에서 홈·작품·스튜디오 성능과 접근성 검증
 - `scripts/backup-database.sh` — 운영자가 지정한 보안 경로에 배포 전 DB 덤프 생성
 - [`docs/DEPLOYMENT_RUNBOOK.md`](./docs/DEPLOYMENT_RUNBOOK.md) — 백업·복구·롤백 판단 절차
 
@@ -274,6 +275,7 @@ pwsh -File scripts/verify-web.ps1
 pwsh -File scripts/verify-server.ps1
 pwsh -File scripts/smoke-compose.ps1
 pwsh -File scripts/verify-e2e.ps1
+pwsh -File scripts/verify-lighthouse.ps1
 ```
 
 Compose 스모크 스크립트는 `sweettoon-verify-*` 이름의 독립 project와 임의 호스트
@@ -282,6 +284,12 @@ Compose 스모크 스크립트는 `sweettoon-verify-*` 이름의 독립 project�
 PWA·RSS, 독자 감상, 소장본 주문, 모바일 작가 스튜디오 흐름을 검증합니다. 실패하면
 Playwright trace, 스크린샷, 비디오와 HTML 리포트를 남깁니다. Jenkins도 같은
 스크립트를 호출하므로 로컬 검증과 CI 계약이 분리되지 않습니다.
+
+웹 번들 크기와 import chain은 빌드와 분리된 `npm run analyze --prefix web`으로
+확인합니다. 결과는 `web/.next/diagnostics/analyze`에 생성됩니다. 데이터베이스
+관계도 원본은 `server/prisma/schema.prisma`이며 `npm run db:docs --prefix server`가
+`docs/database/schema.dbml`을 갱신합니다. DBML은 생성 파일이므로 직접 수정하지
+않고 Prisma 스키마 변경과 같은 커밋에 포함합니다.
 
 프론트엔드 E2E는 MSW나 `route.fulfill()`로 임시 HTTP 응답을 만들지 않고,
 Compose에서 실제 Express API와 PostgreSQL 시드 데이터를 호출합니다. 외부 인쇄

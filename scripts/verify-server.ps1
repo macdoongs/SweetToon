@@ -22,6 +22,7 @@ function Invoke-Checked {
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $serverRoot = Join-Path $repositoryRoot "server"
+$dbmlPath = Join-Path $repositoryRoot "docs/database/schema.dbml"
 $previousDatabaseUrl = [Environment]::GetEnvironmentVariable(
     "DATABASE_URL",
     "Process"
@@ -44,6 +45,15 @@ try {
     }
 
     Invoke-Checked { npx prisma validate } "Prisma schema validation"
+    if (-not (Test-Path -LiteralPath $dbmlPath)) {
+        throw "Tracked DBML documentation is missing: $dbmlPath"
+    }
+    $dbmlHashBefore = (Get-FileHash -LiteralPath $dbmlPath -Algorithm SHA256).Hash
+    Invoke-Checked { npm run db:docs } "Prisma DBML generation"
+    $dbmlHashAfter = (Get-FileHash -LiteralPath $dbmlPath -Algorithm SHA256).Hash
+    if ($dbmlHashBefore -ne $dbmlHashAfter) {
+        throw "Prisma DBML documentation drifted. Commit the regenerated docs/database/schema.dbml file."
+    }
     Invoke-Checked { npm run build } "server TypeScript build"
     Invoke-Checked { npm test } "server tests"
 }

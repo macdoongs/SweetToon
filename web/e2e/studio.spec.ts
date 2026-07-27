@@ -21,7 +21,7 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
   await page.goto("/studio");
   await expect(page.getByText("독자 공개 범위")).toBeVisible();
   await page
-    .getByLabel("작품", { exact: true })
+    .getByRole("combobox", { name: "작품", exact: true })
     .selectOption({ label: "옥상 정원 클럽" });
   const freeVolumeInput = page.getByLabel("무료 공개 권 수");
   const previewSelect = page.getByLabel("다음 권 미리보기");
@@ -30,7 +30,9 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
     previewEpisodeCount: Number(await previewSelect.inputValue()),
   };
   const nextEpisodeNumber = Number(
-    await page.getByLabel("회차").inputValue(),
+    await page
+      .getByRole("spinbutton", { name: "회차", exact: true })
+      .inputValue(),
   );
   await freeVolumeInput.fill(String(Math.ceil(nextEpisodeNumber / 5)));
   await previewSelect.selectOption("0");
@@ -54,7 +56,7 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
   ).toBeTruthy();
 
   await page.getByLabel(/^제목/).fill("E2E 새벽 원고");
-  await page.locator('input[type="file"]').first().setInputFiles({
+  await page.locator('input[accept=".zip,.cbz,application/zip"]').first().setInputFiles({
     name: "e2e-episode.cbz",
     mimeType: "application/zip",
     buffer: episodeArchive(),

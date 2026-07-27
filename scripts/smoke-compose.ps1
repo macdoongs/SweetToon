@@ -477,6 +477,53 @@ try {
             })
         "
     } "web SSR check"
+
+    Invoke-Checked {
+        docker compose exec -T web node -e "
+          Promise.all([
+            fetch('http://server:4000/api/discovery/recent-episodes?limit=2'),
+            fetch('http://localhost:3000/feed.xml'),
+            fetch('http://localhost:3000/sitemap.xml'),
+            fetch('http://localhost:3000')
+          ])
+            .then(async ([discoveryResponse, feedResponse, sitemapResponse, homeResponse]) => {
+              if (
+                !discoveryResponse.ok ||
+                !feedResponse.ok ||
+                !sitemapResponse.ok ||
+                !homeResponse.ok
+              ) {
+                throw new Error('discovery response unavailable')
+              }
+              const discovery = await discoveryResponse.json()
+              const feed = await feedResponse.text()
+              const sitemap = await sitemapResponse.text()
+              const home = await homeResponse.text()
+              const feedItemCount = (feed.match(/<item>/g) ?? []).length
+              const sitemapUrlCount = (sitemap.match(/<url>/g) ?? []).length
+              if (
+                discovery.items.length !== 2 ||
+                feedItemCount !== 50 ||
+                !feed.includes('<dc:creator>') ||
+                feed.includes('<author>') ||
+                sitemapUrlCount < 100 ||
+                !sitemap.includes('<lastmod>') ||
+                /googletagmanager|sweettoon-google-analytics/.test(home)
+              ) {
+                throw new Error('discovery contract verification failed')
+              }
+              console.log(
+                'rss-items=' + feedItemCount +
+                  ' sitemap-urls=' + sitemapUrlCount +
+                  ' analytics=disabled'
+              )
+            })
+            .catch(error => {
+              console.error(error)
+              process.exit(1)
+            })
+        "
+    } "RSS, sitemap, and optional analytics check"
 }
 catch {
     if ($composeTouched) {

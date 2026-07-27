@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { PwaRegister } from "@/components/pwa-register";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { SiteAnalytics } from "@/components/site-analytics";
 import {
   SITE_DESCRIPTION,
   SITE_NAME,
@@ -101,6 +102,9 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <SiteAnalytics
+          measurementId={process.env.GOOGLE_ANALYTICS_ID}
+        />
         <PwaRegister />
         <SiteHeader />
         {children}

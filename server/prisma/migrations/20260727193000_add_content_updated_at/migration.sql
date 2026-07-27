@@ -1,0 +1,17 @@
+ALTER TABLE "Series"
+ADD COLUMN "updatedAt" TIMESTAMP(3);
+
+ALTER TABLE "Episode"
+ADD COLUMN "updatedAt" TIMESTAMP(3);
+
+UPDATE "Series"
+SET "updatedAt" = CURRENT_TIMESTAMP;
+
+UPDATE "Episode"
+SET "updatedAt" = CURRENT_TIMESTAMP;
+
+ALTER TABLE "Series"
+ALTER COLUMN "updatedAt" SET NOT NULL;
+
+ALTER TABLE "Episode"
+ALTER COLUMN "updatedAt" SET NOT NULL;

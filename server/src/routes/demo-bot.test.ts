@@ -27,6 +27,8 @@ function readerRepository(): ReaderRepository {
     seriesExists: jest.fn(),
     findSeriesBySlug: jest.fn(),
     findEpisodeById: jest.fn(),
+    listSitemapDiscovery: jest.fn(),
+    listRecentEpisodes: jest.fn(),
   };
 }
 

@@ -98,6 +98,10 @@ function dependencies() {
     seriesExists: jest.fn().mockResolvedValue(true),
     findSeriesBySlug: jest.fn().mockResolvedValue(detail),
     findEpisodeById: jest.fn().mockResolvedValue(null),
+    listSitemapDiscovery: jest
+      .fn()
+      .mockResolvedValue({ series: [], episodes: [] }),
+    listRecentEpisodes: jest.fn().mockResolvedValue([]),
   };
   const orderService: jest.Mocked<DemoOrderUseCases> = {
     quote: jest.fn(),

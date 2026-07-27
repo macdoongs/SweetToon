@@ -16,9 +16,10 @@ import {
   PackagingRequestListSchema,
   PackagingRequestSchema,
   ReplaceEpisodePagesRequestSchema,
+  SeriesCoverResponseSchema,
   SeriesInfoResponseSchema,
   StudioSeasonResponseSchema,
-  UpdateEpisodeTitleRequestSchema,
+  UpdateEpisodeRequestSchema,
   UpdateEpisodeVisibilityRequestSchema,
   UpdatePackagingStatusRequestSchema,
   UpdateSeasonStatusRequestSchema,
@@ -28,6 +29,7 @@ import {
   UploadSessionIdSchema,
 } from "../contracts/studio";
 import { ARCHIVE_LIMITS } from "../uploads/archive-analyzer";
+import { COVER_MAX_BYTES } from "../uploads/cover-image";
 import type { StudioUseCases } from "../services/studio-service";
 import {
   NoopSecurityAuditLogger,
@@ -39,6 +41,15 @@ const archiveUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: ARCHIVE_LIMITS.maxArchiveBytes,
+    files: 1,
+    fields: 0,
+  },
+});
+
+const coverUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: COVER_MAX_BYTES,
     files: 1,
     fields: 0,
   },
@@ -175,8 +186,8 @@ export function createStudioRouter(
   );
 
   router.patch(
-    "/studio/episodes/:episodeId/title",
-    auditSecurityAction(auditLogger, "studio.episode.rename"),
+    "/studio/episodes/:episodeId",
+    auditSecurityAction(auditLogger, "studio.episode.update"),
     mutationGuard,
     async (req, res) => {
       const episodeId = z
@@ -184,19 +195,46 @@ export function createStudioRouter(
         .min(1)
         .max(80)
         .safeParse(req.params.episodeId);
-      const input = UpdateEpisodeTitleRequestSchema.safeParse(req.body);
+      const input = UpdateEpisodeRequestSchema.safeParse(req.body);
       if (!episodeId.success || !input.success) {
         res.status(400).json({
-          code: "INVALID_EPISODE_TITLE",
-          message: "에피소드 제목은 1자 이상 80자 이하로 입력해 주세요.",
+          code: "INVALID_EPISODE_UPDATE",
+          message:
+            "제목(80자 이하)이나 회차 번호(1 이상)를 한 가지 이상 보내 주세요.",
         });
         return;
       }
-      const updated = await service.updateEpisodeTitle(
+      const updated = await service.updateEpisode(
         episodeId.data,
-        input.data.title,
+        input.data,
       );
       res.json(DraftEpisodeSchema.parse(updated));
+    },
+  );
+
+  router.post(
+    "/studio/series/:seriesId/cover",
+    auditSecurityAction(auditLogger, "studio.series.cover"),
+    mutationGuard,
+    coverUpload.single("cover"),
+    async (req, res) => {
+      const seriesId = z
+        .string()
+        .min(1)
+        .max(80)
+        .safeParse(req.params.seriesId);
+      if (!seriesId.success || !req.file) {
+        res.status(400).json({
+          code: "COVER_REQUIRED",
+          message: "표지로 쓸 이미지 파일을 선택해 주세요.",
+        });
+        return;
+      }
+      const updated = await service.updateSeriesCover(
+        seriesId.data,
+        req.file.buffer,
+      );
+      res.json(SeriesCoverResponseSchema.parse(updated));
     },
   );
 

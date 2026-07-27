@@ -7,8 +7,10 @@ import type {
   EpisodeVisibility,
   PackagingRequest,
   SeasonStatus,
+  SeriesCoverResponse,
   SeriesInfoResponse,
   StudioSeasonResponse,
+  UpdateEpisodeRequest,
   UpdateSeriesInfoRequest,
 } from "../contracts/studio";
 
@@ -87,11 +89,16 @@ export interface StudioRepository {
     episodeId: string,
     visibility: EpisodeVisibility,
   ): Promise<DraftEpisode | null>;
-  updateEpisodeTitle(
+  updateEpisode(
     episodeId: string,
-    title: string,
+    input: UpdateEpisodeRequest,
   ): Promise<DraftEpisode | null>;
   findEpisode(episodeId: string): Promise<StudioEpisode | null>;
+  countCandyEntitlements(episodeId: string): Promise<number>;
+  updateSeriesCover(
+    seriesId: string,
+    coverUrl: string,
+  ): Promise<SeriesCoverResponse | null>;
   updateSeriesInfo(
     seriesId: string,
     input: UpdateSeriesInfoRequest,
@@ -213,18 +220,51 @@ export class PrismaStudioRepository implements StudioRepository {
     return updated ? toDraftEpisode(updated) : null;
   }
 
-  async updateEpisodeTitle(
+  async updateEpisode(
     episodeId: string,
-    title: string,
+    input: UpdateEpisodeRequest,
   ): Promise<DraftEpisode | null> {
-    const updated = await this.prisma.episode
-      .update({
+    try {
+      const updated = await this.prisma.episode.update({
         where: { id: episodeId },
-        data: { title },
+        data: {
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.number !== undefined ? { number: input.number } : {}),
+        },
         include: { season: { include: { series: true } } },
+      });
+      return toDraftEpisode(updated);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new StudioRepositoryError("EPISODE_NUMBER_EXISTS");
+      }
+      return null;
+    }
+  }
+
+  async countCandyEntitlements(episodeId: string): Promise<number> {
+    return this.prisma.candyEpisodeEntitlement.count({
+      where: { episodeId },
+    });
+  }
+
+  async updateSeriesCover(
+    seriesId: string,
+    coverUrl: string,
+  ): Promise<SeriesCoverResponse | null> {
+    const updated = await this.prisma.series
+      .update({
+        where: { id: seriesId },
+        data: { coverUrl },
+        select: { id: true, coverUrl: true },
       })
       .catch(() => null);
-    return updated ? toDraftEpisode(updated) : null;
+    return updated && updated.coverUrl
+      ? { seriesId: updated.id, coverUrl: updated.coverUrl }
+      : null;
   }
 
   async createSeries(

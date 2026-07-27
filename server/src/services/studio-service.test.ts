@@ -1,4 +1,5 @@
 import type { CreateEpisodeRequest } from "../contracts/studio";
+import sharp from "sharp";
 import {
   StudioRepositoryError,
   type StudioRepository,
@@ -66,7 +67,12 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
       previewEpisodeCount: 2,
     }),
     setEpisodeVisibility: jest.fn().mockResolvedValue(null),
-    updateEpisodeTitle: jest.fn().mockResolvedValue(null),
+    updateEpisode: jest.fn().mockResolvedValue(null),
+    countCandyEntitlements: jest.fn().mockResolvedValue(0),
+    updateSeriesCover: jest.fn().mockResolvedValue({
+      seriesId: "series-1",
+      coverUrl: "/api/images/studio/covers/series-1-cover.webp",
+    }),
     updateSeriesInfo: jest.fn().mockResolvedValue(null),
     createSeries: jest.fn().mockResolvedValue({
       seriesId: "series-2",
@@ -149,6 +155,10 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
     publish: jest.fn().mockResolvedValue({
       directory: "C:\\published",
       imageUrls: ["/api/images/1.png", "/api/images/2.png"],
+    }),
+    publishCover: jest.fn().mockResolvedValue({
+      url: "/api/images/studio/covers/series-1-cover.webp",
+      location: "C:\\covers\\series-1-cover.webp",
     }),
     removeSession: jest.fn().mockResolvedValue(undefined),
     removePublished: jest.fn().mockResolvedValue(undefined),
@@ -377,12 +387,72 @@ describe("StudioService", () => {
     expect(storage.publish).not.toHaveBeenCalled();
   });
 
-  it("rejects title changes for unknown episodes", async () => {
+  it("rejects updates for unknown episodes", async () => {
     const { service } = makeDependencies();
 
     await expect(
-      service.updateEpisodeTitle("missing", "새 제목"),
+      service.updateEpisode("missing", { title: "새 제목" }),
     ).rejects.toMatchObject({ code: "EPISODE_NOT_FOUND", status: 404 });
+  });
+
+  it("maps duplicate episode numbers to a conflict", async () => {
+    const { service, repository } = makeDependencies();
+    repository.updateEpisode.mockRejectedValue(
+      new StudioRepositoryError("EPISODE_NUMBER_EXISTS"),
+    );
+
+    await expect(
+      service.updateEpisode("episode-12", { number: 3 }),
+    ).rejects.toMatchObject({
+      code: "EPISODE_NUMBER_EXISTS",
+      status: 409,
+    });
+  });
+
+  it("blocks deleting an episode that paid readers unlocked", async () => {
+    const { service, repository, storage } = makeDependencies();
+    repository.countCandyEntitlements.mockResolvedValue(2);
+
+    await expect(service.deleteEpisode("episode-12")).rejects.toMatchObject(
+      { code: "EPISODE_HAS_PAID_READERS", status: 409 },
+    );
+    expect(repository.deleteEpisode).not.toHaveBeenCalled();
+    expect(storage.removePublished).not.toHaveBeenCalled();
+  });
+
+  it("processes and stores a series cover image", async () => {
+    const { service, repository, storage } = makeDependencies();
+    const png = await sharp({
+      create: {
+        width: 8,
+        height: 12,
+        channels: 3,
+        background: { r: 240, g: 120, b: 80 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const updated = await service.updateSeriesCover("series-1", png);
+
+    expect(storage.publishCover).toHaveBeenCalledWith(
+      "series-1",
+      expect.any(Buffer),
+    );
+    expect(repository.updateSeriesCover).toHaveBeenCalledWith(
+      "series-1",
+      "/api/images/studio/covers/series-1-cover.webp",
+    );
+    expect(updated.coverUrl).toContain("covers");
+  });
+
+  it("rejects a cover that is not a raster image", async () => {
+    const { service, storage } = makeDependencies();
+
+    await expect(
+      service.updateSeriesCover("series-1", Buffer.from("<svg></svg>")),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(storage.publishCover).not.toHaveBeenCalled();
   });
 
   it("updates series display info without touching the slug", async () => {

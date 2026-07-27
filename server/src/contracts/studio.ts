@@ -40,8 +40,19 @@ export const UpdateEpisodeVisibilityRequestSchema = z.object({
   visibility: EpisodeVisibilitySchema,
 });
 
-export const UpdateEpisodeTitleRequestSchema = z.object({
-  title: z.string().trim().min(1).max(80),
+export const UpdateEpisodeRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(80).optional(),
+    number: z.number().int().positive().max(10_000).optional(),
+  })
+  .refine(
+    (value) => value.title !== undefined || value.number !== undefined,
+    { message: "수정할 항목을 한 가지 이상 보내 주세요." },
+  );
+
+export const SeriesCoverResponseSchema = z.object({
+  seriesId: z.string(),
+  coverUrl: z.string().min(1),
 });
 
 export const ReplaceEpisodePagesRequestSchema = z.object({
@@ -182,6 +193,8 @@ export type UpdateSeriesInfoRequest = z.infer<
   typeof UpdateSeriesInfoRequestSchema
 >;
 export type SeriesInfoResponse = z.infer<typeof SeriesInfoResponseSchema>;
+export type UpdateEpisodeRequest = z.infer<typeof UpdateEpisodeRequestSchema>;
+export type SeriesCoverResponse = z.infer<typeof SeriesCoverResponseSchema>;
 export type CreateSeriesRequest = z.infer<typeof CreateSeriesRequestSchema>;
 export type CreateSeriesResponse = z.infer<
   typeof CreateSeriesResponseSchema

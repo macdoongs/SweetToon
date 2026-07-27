@@ -100,13 +100,17 @@ function studioService(): jest.Mocked<StudioUseCases> {
       createdAt: "2026-07-27T00:00:00.000Z",
     }),
     deleteEpisode: jest.fn().mockResolvedValue(undefined),
-    updateEpisodeTitle: jest.fn().mockResolvedValue({
+    updateEpisode: jest.fn().mockResolvedValue({
       id: "episode-12",
-      number: 12,
+      number: 13,
       title: "고친 제목",
       publishedAt: "2026-07-24T00:00:00.000Z",
       season: { id: "season-1", number: 1 },
       series: { slug: "moonlight-laundry", title: "달빛 세탁소" },
+    }),
+    updateSeriesCover: jest.fn().mockResolvedValue({
+      seriesId: "series-1",
+      coverUrl: "/api/images/studio/covers/series-1-cover.webp",
     }),
     replaceEpisodePages: jest.fn().mockResolvedValue({
       episodeId: "episode-12",
@@ -394,27 +398,49 @@ describe("studio routes", () => {
     expect(response.body.code).toBe("INVALID_SERIES_INFO");
   });
 
-  it("renames a published episode", async () => {
+  it("updates an episode title and number in one request", async () => {
     const service = studioService();
     const response = await request(app(service))
-      .patch("/api/studio/episodes/episode-12/title")
-      .send({ title: "고친 제목" })
+      .patch("/api/studio/episodes/episode-12")
+      .send({ title: "고친 제목", number: 13 })
       .expect(200);
 
-    expect(service.updateEpisodeTitle).toHaveBeenCalledWith(
-      "episode-12",
-      "고친 제목",
-    );
-    expect(response.body.title).toBe("고친 제목");
+    expect(service.updateEpisode).toHaveBeenCalledWith("episode-12", {
+      title: "고친 제목",
+      number: 13,
+    });
+    expect(response.body.number).toBe(13);
   });
 
-  it("rejects an empty episode title", async () => {
+  it("rejects an episode update without any field", async () => {
     const response = await request(app())
-      .patch("/api/studio/episodes/episode-12/title")
-      .send({ title: "   " })
+      .patch("/api/studio/episodes/episode-12")
+      .send({})
       .expect(400);
 
-    expect(response.body.code).toBe("INVALID_EPISODE_TITLE");
+    expect(response.body.code).toBe("INVALID_EPISODE_UPDATE");
+  });
+
+  it("uploads a series cover image", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .post("/api/studio/series/series-1/cover")
+      .attach("cover", Buffer.from("fake image"), "cover.png")
+      .expect(200);
+
+    expect(service.updateSeriesCover).toHaveBeenCalledWith(
+      "series-1",
+      expect.any(Buffer),
+    );
+    expect(response.body.coverUrl).toContain("covers");
+  });
+
+  it("rejects a cover upload without a file", async () => {
+    const response = await request(app())
+      .post("/api/studio/series/series-1/cover")
+      .expect(400);
+
+    expect(response.body.code).toBe("COVER_REQUIRED");
   });
 
   it("replaces episode pages from a new upload session", async () => {

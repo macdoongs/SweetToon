@@ -12,11 +12,17 @@ import type {
   PackagingRequest,
   ReplaceEpisodePagesRequest,
   SeasonStatus,
+  SeriesCoverResponse,
   SeriesInfoResponse,
   StudioSeasonResponse,
+  UpdateEpisodeRequest,
   UpdateSeriesInfoRequest,
   UploadPreview,
 } from "../contracts/studio";
+import {
+  CoverValidationError,
+  processCoverImage,
+} from "../uploads/cover-image";
 import {
   StudioRepositoryError,
   type StudioRepository,
@@ -74,10 +80,14 @@ export interface StudioUseCases {
     episodeId: string,
     visibility: EpisodeVisibility,
   ): Promise<DraftEpisode>;
-  updateEpisodeTitle(
+  updateEpisode(
     episodeId: string,
-    title: string,
+    input: UpdateEpisodeRequest,
   ): Promise<DraftEpisode>;
+  updateSeriesCover(
+    seriesId: string,
+    image: Buffer,
+  ): Promise<SeriesCoverResponse>;
   replaceEpisodePages(
     episodeId: string,
     input: ReplaceEpisodePagesRequest,
@@ -343,6 +353,17 @@ export class StudioService implements StudioUseCases {
         404,
       );
     }
+    // 캔디로 영구 열람권을 산 독자의 자산을 지우지 않도록 삭제를 막는다.
+    const paidReaders = await this.repository.countCandyEntitlements(
+      episode.id,
+    );
+    if (paidReaders > 0) {
+      throw new StudioServiceError(
+        "EPISODE_HAS_PAID_READERS",
+        "캔디로 열람한 독자가 있어 삭제할 수 없어요. 대신 비공개로 전환해 주세요.",
+        409,
+      );
+    }
     await this.repository.deleteEpisode(episode.id);
     // DB에서 지워진 뒤 남은 발행 파일을 정리한다. 시드 원고는 대상이 아니다.
     if (episode.manuscriptDir) {
@@ -370,18 +391,61 @@ export class StudioService implements StudioUseCases {
     return updated;
   }
 
-  async updateEpisodeTitle(
+  async updateEpisode(
     episodeId: string,
-    title: string,
+    input: UpdateEpisodeRequest,
   ): Promise<DraftEpisode> {
-    const updated = await this.repository.updateEpisodeTitle(
-      episodeId,
-      title,
-    );
+    let updated: DraftEpisode | null;
+    try {
+      updated = await this.repository.updateEpisode(episodeId, input);
+    } catch (error) {
+      if (
+        error instanceof StudioRepositoryError &&
+        error.code === "EPISODE_NUMBER_EXISTS"
+      ) {
+        throw new StudioServiceError(
+          error.code,
+          "같은 회차 번호가 이미 있어요. 다른 번호를 입력해 주세요.",
+          409,
+        );
+      }
+      throw error;
+    }
     if (!updated) {
       throw new StudioServiceError(
         "EPISODE_NOT_FOUND",
-        "제목을 바꿀 에피소드를 찾을 수 없습니다.",
+        "수정할 에피소드를 찾을 수 없습니다.",
+        404,
+      );
+    }
+    return updated;
+  }
+
+  async updateSeriesCover(
+    seriesId: string,
+    image: Buffer,
+  ): Promise<SeriesCoverResponse> {
+    let processed: Buffer;
+    try {
+      processed = await processCoverImage(image);
+    } catch (error) {
+      if (error instanceof CoverValidationError) {
+        throw new StudioServiceError(error.code, error.message, 400);
+      }
+      throw error;
+    }
+    const published = await this.storage.publishCover(seriesId, processed);
+    const updated = await this.repository.updateSeriesCover(
+      seriesId,
+      published.url,
+    );
+    if (!updated) {
+      await this.storage
+        .removePublished(published.location)
+        .catch(() => undefined);
+      throw new StudioServiceError(
+        "SERIES_NOT_FOUND",
+        "표지를 바꿀 작품을 찾을 수 없습니다.",
         404,
       );
     }

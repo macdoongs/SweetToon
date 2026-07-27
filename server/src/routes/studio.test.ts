@@ -8,6 +8,7 @@ import type { SecurityAuditLogger } from "../security/audit-logger";
 
 const sessionId = "a62ba8b5-f8aa-4220-a849-55a49be66f5a";
 const pageId = "b74fb5ce-d837-40a6-ab85-e34f67f8668f";
+const requestKey = "f371de0c-01cd-4214-99f7-7cd8e1df82a0";
 
 function readerRepository(): ReaderRepository {
   return {
@@ -232,6 +233,7 @@ describe("studio routes", () => {
     const response = await request(app(service))
       .post("/api/studio/episodes")
       .send({
+        requestKey,
         sessionId,
         seasonId: "season-1",
         number: 12,
@@ -249,6 +251,7 @@ describe("studio routes", () => {
     await request(app(service))
       .post("/api/studio/episodes")
       .send({
+        requestKey,
         sessionId,
         seasonId: "season-1",
         number: 12,
@@ -342,6 +345,7 @@ describe("studio routes", () => {
     const response = await request(app(service))
       .post("/api/studio/series")
       .send({
+        requestKey,
         slug: "night-market",
         title: "야시장",
         synopsis: "밤에만 열리는 시장 이야기",
@@ -475,6 +479,7 @@ describe("studio routes", () => {
     const response = await request(app(service))
       .post("/api/studio/packaging-requests")
       .send({
+        requestKey,
         sessionId,
         pageIds: [pageId],
         applicantName: "박야근",

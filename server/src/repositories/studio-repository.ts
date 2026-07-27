@@ -26,6 +26,8 @@ export type StudioSeason = {
 };
 
 export type CreateStudioEpisodeInput = {
+  requestKey: string;
+  requestFingerprint: string;
   seasonId: string;
   number: number;
   title: string;
@@ -51,6 +53,8 @@ export type StudioEpisode = {
 };
 
 export type CreatePackagingRequestInput = {
+  requestKey: string;
+  requestFingerprint: string;
   applicantName: string;
   bookTitle: string;
   bookSize: string;
@@ -65,9 +69,28 @@ export type CreatedStudioEpisode = {
   id: string;
 };
 
+export type IdempotentStudioEpisode = {
+  requestFingerprint: string;
+  episode: StudioEpisode;
+  pageCount: number;
+};
+
+export type IdempotentSeries = {
+  requestFingerprint: string;
+  response: CreateSeriesResponse;
+};
+
+export type IdempotentPackagingRequest = {
+  requestFingerprint: string;
+  response: PackagingRequest;
+};
+
 export class StudioRepositoryError extends Error {
   constructor(
-    readonly code: "EPISODE_NUMBER_EXISTS" | "SERIES_SLUG_EXISTS",
+    readonly code:
+      | "EPISODE_NUMBER_EXISTS"
+      | "SERIES_SLUG_EXISTS"
+      | "IDEMPOTENCY_KEY_EXISTS",
   ) {
     super(code);
     this.name = "StudioRepositoryError";
@@ -76,6 +99,9 @@ export class StudioRepositoryError extends Error {
 
 export interface StudioRepository {
   findSeason(id: string): Promise<StudioSeason | null>;
+  findEpisodeByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentStudioEpisode | null>;
   createEpisode(
     input: CreateStudioEpisodeInput,
   ): Promise<CreatedStudioEpisode>;
@@ -103,7 +129,13 @@ export interface StudioRepository {
     seriesId: string,
     input: UpdateSeriesInfoRequest,
   ): Promise<SeriesInfoResponse | null>;
-  createSeries(input: CreateSeriesRequest): Promise<CreateSeriesResponse>;
+  findSeriesByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentSeries | null>;
+  createSeries(
+    input: CreateSeriesRequest,
+    requestFingerprint: string,
+  ): Promise<CreateSeriesResponse>;
   updateSeasonStatus(
     seasonId: string,
     status: SeasonStatus,
@@ -118,6 +150,9 @@ export interface StudioRepository {
   createPackagingRequest(
     input: CreatePackagingRequestInput,
   ): Promise<PackagingRequest>;
+  findPackagingRequestByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentPackagingRequest | null>;
   listPackagingRequests(): Promise<PackagingRequest[]>;
   findPackagingRequest(id: string): Promise<PackagingRequest | null>;
   updatePackagingStatus(
@@ -154,6 +189,8 @@ export class PrismaStudioRepository implements StudioRepository {
       return await this.prisma.$transaction(async (transaction) => {
         const episode = await transaction.episode.create({
           data: {
+            requestKey: input.requestKey,
+            requestFingerprint: input.requestFingerprint,
             seasonId: input.seasonId,
             number: input.number,
             title: input.title,
@@ -175,10 +212,31 @@ export class PrismaStudioRepository implements StudioRepository {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
+        if (uniqueTargetIncludes(error, "requestKey")) {
+          throw new StudioRepositoryError("IDEMPOTENCY_KEY_EXISTS");
+        }
         throw new StudioRepositoryError("EPISODE_NUMBER_EXISTS");
       }
       throw error;
     }
+  }
+
+  async findEpisodeByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentStudioEpisode | null> {
+    const episode = await this.prisma.episode.findUnique({
+      where: { requestKey },
+      include: {
+        season: { include: { series: true } },
+        _count: { select: { pages: true } },
+      },
+    });
+    if (!episode?.requestFingerprint) return null;
+    return {
+      requestFingerprint: episode.requestFingerprint,
+      episode: toStudioEpisode(episode),
+      pageCount: episode._count.pages,
+    };
   }
 
   async deleteEpisode(id: string): Promise<void> {
@@ -269,6 +327,7 @@ export class PrismaStudioRepository implements StudioRepository {
 
   async createSeries(
     input: CreateSeriesRequest,
+    requestFingerprint: string,
   ): Promise<CreateSeriesResponse> {
     try {
       return await this.prisma.$transaction(async (transaction) => {
@@ -283,6 +342,8 @@ export class PrismaStudioRepository implements StudioRepository {
           }));
         const series = await transaction.series.create({
           data: {
+            requestKey: input.requestKey,
+            requestFingerprint,
             slug: input.slug,
             authorId: author.id,
             title: input.title,
@@ -307,10 +368,32 @@ export class PrismaStudioRepository implements StudioRepository {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
+        if (uniqueTargetIncludes(error, "requestKey")) {
+          throw new StudioRepositoryError("IDEMPOTENCY_KEY_EXISTS");
+        }
         throw new StudioRepositoryError("SERIES_SLUG_EXISTS");
       }
       throw error;
     }
+  }
+
+  async findSeriesByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentSeries | null> {
+    const series = await this.prisma.series.findUnique({
+      where: { requestKey },
+      include: { seasons: { where: { number: 1 }, take: 1 } },
+    });
+    if (!series?.requestFingerprint || !series.seasons[0]) return null;
+    return {
+      requestFingerprint: series.requestFingerprint,
+      response: {
+        seriesId: series.id,
+        slug: series.slug,
+        title: series.title,
+        seasonId: series.seasons[0].id,
+      },
+    };
   }
 
   async updateSeasonStatus(
@@ -434,10 +517,34 @@ export class PrismaStudioRepository implements StudioRepository {
   async createPackagingRequest(
     input: CreatePackagingRequestInput,
   ): Promise<PackagingRequest> {
-    const created = await this.prisma.packagingRequest.create({
-      data: input,
+    try {
+      const created = await this.prisma.packagingRequest.create({
+        data: input,
+      });
+      return toPackagingRequest(created);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002" &&
+        uniqueTargetIncludes(error, "requestKey")
+      ) {
+        throw new StudioRepositoryError("IDEMPOTENCY_KEY_EXISTS");
+      }
+      throw error;
+    }
+  }
+
+  async findPackagingRequestByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentPackagingRequest | null> {
+    const request = await this.prisma.packagingRequest.findUnique({
+      where: { requestKey },
     });
-    return toPackagingRequest(created);
+    if (!request?.requestFingerprint) return null;
+    return {
+      requestFingerprint: request.requestFingerprint,
+      response: toPackagingRequest(request),
+    };
   }
 
   async listPackagingRequests(): Promise<PackagingRequest[]> {
@@ -503,6 +610,28 @@ function toDraftEpisode(
   };
 }
 
+function toStudioEpisode(
+  episode: Prisma.EpisodeGetPayload<{
+    include: { season: { include: { series: true } } };
+  }>,
+): StudioEpisode {
+  return {
+    id: episode.id,
+    number: episode.number,
+    title: episode.title,
+    visibility: episode.visibility === "private" ? "private" : "public",
+    manuscriptDir: episode.manuscriptDir,
+    season: {
+      id: episode.season.id,
+      number: episode.season.number,
+      series: {
+        slug: episode.season.series.slug,
+        title: episode.season.series.title,
+      },
+    },
+  };
+}
+
 function toPackagingRequest(
   request: Prisma.PackagingRequestGetPayload<Record<string, never>>,
 ): PackagingRequest {
@@ -524,4 +653,14 @@ function toPackagingRequest(
         : "received",
     createdAt: request.createdAt.toISOString(),
   };
+}
+
+function uniqueTargetIncludes(
+  error: Prisma.PrismaClientKnownRequestError,
+  field: string,
+): boolean {
+  const target = error.meta?.target;
+  return Array.isArray(target)
+    ? target.some((value) => value === field)
+    : typeof target === "string" && target.includes(field);
 }

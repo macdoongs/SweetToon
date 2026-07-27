@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, getJson, patchJson, postJson } from "@/lib/api";
 import type {
   DemoBotSpeed,
@@ -69,51 +69,88 @@ export function OperationsOrderPage({
   const [packagingRequests, setPackagingRequests] = useState<
     PackagingRequest[]
   >([]);
+  const [packagingState, setPackagingState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [packagingBusyId, setPackagingBusyId] = useState<string | null>(
     null,
   );
   const [botBusy, setBotBusy] = useState(false);
   const [botStatus, setBotStatus] = useState<DemoBotStatus | null>(null);
+  const [botState, setBotState] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+  const [ordersRefreshFailed, setOrdersRefreshFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const refreshInFlight = useRef(false);
   const [accessKey, setAccessKey] = useState(() =>
     loadSecurityAccessKey("operations"),
   );
 
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    try {
+      await Promise.allSettled([
+        getJson<OrderListResponse>("/api/orders", signal).then(
+          (orderResponse) => {
+            if (signal?.aborted) return;
+            setOrdersRefreshFailed(false);
+            setOrders((current) => {
+              const refreshedIds = new Set(
+                orderResponse.items.map((order) => order.id),
+              );
+              return [
+                ...orderResponse.items,
+                ...current.filter((order) => !refreshedIds.has(order.id)),
+              ];
+            });
+          },
+          () => {
+            if (!signal?.aborted) setOrdersRefreshFailed(true);
+          },
+        ),
+        getJson<DemoBotStatus>("/api/realtime/demo-bot", signal).then(
+          (nextBotStatus) => {
+            if (signal?.aborted) return;
+            setBotStatus(nextBotStatus);
+            setBotState("ready");
+          },
+          () => {
+            if (!signal?.aborted) setBotState("error");
+          },
+        ),
+        getJson<{ items: PackagingRequest[] }>(
+          "/api/studio/packaging-requests",
+          signal,
+        ).then(
+          (packagingResponse) => {
+            if (signal?.aborted) return;
+            setPackagingRequests(packagingResponse.items);
+            setPackagingState("ready");
+          },
+          () => {
+            if (!signal?.aborted) setPackagingState("error");
+          },
+        ),
+      ]);
+    } finally {
+      refreshInFlight.current = false;
+    }
+  }, []);
+
   useEffect(() => {
-    let active = true;
-    const refresh = async () => {
-      try {
-        const [orderResponse, nextBotStatus, packagingResponse] =
-          await Promise.all([
-            getJson<OrderListResponse>("/api/orders"),
-            getJson<DemoBotStatus>("/api/realtime/demo-bot"),
-            getJson<{ items: PackagingRequest[] }>(
-              "/api/studio/packaging-requests",
-            ),
-          ]);
-        if (!active) return;
-        setPackagingRequests(packagingResponse.items);
-        setOrders((current) => {
-          const refreshedIds = new Set(
-            orderResponse.items.map((order) => order.id),
-          );
-          return [
-            ...orderResponse.items,
-            ...current.filter((order) => !refreshedIds.has(order.id)),
-          ];
-        });
-        setBotStatus(nextBotStatus);
-      } catch {
-        // Keep the last successful snapshot visible during a transient poll.
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 3_000);
+    const controller = new AbortController();
+    void refresh(controller.signal);
+    const interval = window.setInterval(
+      () => void refresh(controller.signal),
+      3_000,
+    );
     return () => {
-      active = false;
+      controller.abort();
       window.clearInterval(interval);
     };
-  }, []);
+  }, [refresh]);
 
   const operationHeaders: Record<string, string> = accessKey.trim()
     ? { "x-sweettoon-operations-key": accessKey.trim() }
@@ -289,7 +326,18 @@ export function OperationsOrderPage({
               : "정지"}
           </span>
         </div>
-        {botStatus ? (
+        {botState === "error" ? (
+          <div className="demo-bot-panel__activity" role="alert">
+            <p>봇 상태를 불러오지 못했어요.</p>
+            <button
+              className="button button--ghost"
+              onClick={() => void refresh()}
+              type="button"
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : botStatus ? (
           <>
             <div className="demo-bot-metrics">
               <strong>{botStatus.activeBotCount}명</strong>
@@ -381,48 +429,61 @@ export function OperationsOrderPage({
       {error ? (
         <p className="operations-error" role="alert">{error}</p>
       ) : null}
+      {ordersRefreshFailed ? (
+        <p className="operations-error" role="status">
+          최신 주문 정보를 가져오지 못해 마지막 결과를 표시합니다. 자동으로
+          다시 시도합니다.
+        </p>
+      ) : null}
 
       <section className="operations-list" aria-label="제작 주문 목록">
-        {orders.map((order) => {
-          const action = nextAction[order.status];
-          return (
-            <article className="operations-card" key={order.id}>
-              <div>
-                <span className={`order-status order-status--${order.status}`}>
-                  {statusLabel[order.status]}
-                </span>
-                {order.isDemo ? (
-                  <span className="demo-order-badge">봇 데모</span>
-                ) : null}
-                <h2>{order.series.title}</h2>
-                <p>
-                  시즌 {order.season.number} · {order.bookSize} ·{" "}
-                  {order.quantity}권
-                </p>
-                <small>주문 {order.id}</small>
-              </div>
-              <div className="operations-card__actions">
-                <Link href={`/orders/${encodeURIComponent(order.id)}`}>
-                  타임라인 보기
-                </Link>
-                {action ? (
-                  <button
-                    className="button button--primary"
-                    disabled={busyId === order.id}
-                    onClick={() => void advance(order)}
-                    type="button"
-                  >
-                    {busyId === order.id ? "변경 중…" : action.label}
-                  </button>
-                ) : (
-                  <span className="operations-card__done">
-                    {order.status === "canceled" ? "취소됨" : "처리 완료"}
+        {orders.length === 0 ? (
+          <div className="orders-empty">
+            <h2>아직 접수된 제작 주문이 없어요.</h2>
+            <p>독자가 소장본을 주문하면 이곳에서 제작 상태를 관리할 수 있어요.</p>
+          </div>
+        ) : (
+          orders.map((order) => {
+            const action = nextAction[order.status];
+            return (
+              <article className="operations-card" key={order.id}>
+                <div>
+                  <span className={`order-status order-status--${order.status}`}>
+                    {statusLabel[order.status]}
                   </span>
-                )}
-              </div>
-            </article>
-          );
-        })}
+                  {order.isDemo ? (
+                    <span className="demo-order-badge">봇 데모</span>
+                  ) : null}
+                  <h2>{order.series.title}</h2>
+                  <p>
+                    시즌 {order.season.number} · {order.bookSize} ·{" "}
+                    {order.quantity}권
+                  </p>
+                  <small>주문 {order.id}</small>
+                </div>
+                <div className="operations-card__actions">
+                  <Link href={`/orders/${encodeURIComponent(order.id)}`}>
+                    타임라인 보기
+                  </Link>
+                  {action ? (
+                    <button
+                      className="button button--primary"
+                      disabled={busyId === order.id}
+                      onClick={() => void advance(order)}
+                      type="button"
+                    >
+                      {busyId === order.id ? "변경 중…" : action.label}
+                    </button>
+                  ) : (
+                    <span className="operations-card__done">
+                      {order.status === "canceled" ? "취소됨" : "처리 완료"}
+                    </span>
+                  )}
+                </div>
+              </article>
+            );
+          })
+        )}
       </section>
       {nextCursor ? (
         <button
@@ -435,20 +496,38 @@ export function OperationsOrderPage({
         </button>
       ) : null}
 
-      {packagingRequests.length > 0 ? (
-        <section
-          className="operations-list operations-packaging"
-          aria-label="패키징 신청 목록"
-        >
-          <header className="operations-packaging__header">
-            <p className="eyebrow">Packaging intake</p>
-            <h2>책 패키징 신청 관리</h2>
-            <p>
-              창작자가 스튜디오에서 접수한 원고 묶음입니다. 접수 → 검토 →
-              제작 완료 순서로만 진행할 수 있어요.
-            </p>
-          </header>
-          {packagingRequests.map((request) => {
+      <section
+        className="operations-list operations-packaging"
+        aria-label="패키징 신청 목록"
+      >
+        <header className="operations-packaging__header">
+          <p className="eyebrow">Packaging intake</p>
+          <h2>책 패키징 신청 관리</h2>
+          <p>
+            창작자가 스튜디오에서 접수한 원고 묶음입니다. 접수 → 검토 → 제작
+            완료 순서로만 진행할 수 있어요.
+          </p>
+        </header>
+        {packagingState === "loading" ? (
+          <p aria-busy="true">패키징 신청을 불러오는 중…</p>
+        ) : packagingState === "error" ? (
+          <div className="orders-empty" role="alert">
+            <h2>패키징 신청을 불러오지 못했어요.</h2>
+            <button
+              className="button button--ghost"
+              onClick={() => void refresh()}
+              type="button"
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : packagingRequests.length === 0 ? (
+          <div className="orders-empty">
+            <h2>아직 접수된 패키징 신청이 없어요.</h2>
+            <p>창작자가 신청하면 이곳에서 검토 상태를 관리할 수 있어요.</p>
+          </div>
+        ) : (
+          packagingRequests.map((request) => {
             const action = packagingNextAction[request.status];
             const terminal =
               request.status === "completed" ||
@@ -508,9 +587,9 @@ export function OperationsOrderPage({
                 </div>
               </article>
             );
-          })}
-        </section>
-      ) : null}
+          })
+        )}
+      </section>
     </main>
   );
 }

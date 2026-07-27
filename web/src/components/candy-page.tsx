@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { getJson, postJson } from "@/lib/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getJson, isUncertainRequestError, postJson } from "@/lib/api";
 import {
   getCandyWalletToken,
   notifyCandyUpdated,
@@ -17,25 +17,40 @@ function formatWon(value: number) {
 }
 
 export function CandyPage() {
+  const chargeRequest = useRef<{
+    candyAmount: CandyChargeAmount;
+    requestKey: string;
+  } | null>(null);
   const [wallet, setWallet] = useState<CandyWallet | null>(null);
+  const [walletState, setWalletState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [charging, setCharging] = useState<CandyChargeAmount | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const token = getCandyWalletToken();
-    setWallet(
-      await getJson<CandyWallet>(
+    setWalletState("loading");
+    setError(null);
+    try {
+      const token = getCandyWalletToken();
+      setWallet(await getJson<CandyWallet>(
         `/api/candy-wallets/${encodeURIComponent(token)}`,
-      ),
-    );
+      ));
+      setWalletState("ready");
+    } catch (reason) {
+      setWalletState("error");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "캔디 지갑을 불러오지 못했습니다.",
+      );
+    }
   }, []);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      void refresh().catch(() =>
-        setError("캔디 지갑을 불러오지 못했습니다."),
-      );
+      void refresh();
     });
     return () => cancelAnimationFrame(frame);
   }, [refresh]);
@@ -46,19 +61,30 @@ export function CandyPage() {
     setError(null);
     try {
       const token = getCandyWalletToken();
+      if (chargeRequest.current?.candyAmount !== candyAmount) {
+        chargeRequest.current = {
+          candyAmount,
+          requestKey: crypto.randomUUID(),
+        };
+      }
       const result = await postJson<
         { requestKey: string; candyAmount: CandyChargeAmount },
         CandyChargeResponse
       >(`/api/candy-wallets/${encodeURIComponent(token)}/charges`, {
-        requestKey: crypto.randomUUID(),
+        requestKey: chargeRequest.current.requestKey,
         candyAmount,
       });
+      chargeRequest.current = null;
       setWallet(result);
+      setWalletState("ready");
       notifyCandyUpdated();
       setMessage(
         `데모 캔디 ${result.chargedCandy}개를 충전했습니다. 현재 ${result.balance}개예요.`,
       );
     } catch (reason) {
+      if (!isUncertainRequestError(reason)) {
+        chargeRequest.current = null;
+      }
       setError(
         reason instanceof Error
           ? reason.message
@@ -82,7 +108,9 @@ export function CandyPage() {
         </div>
         <div className="candy-balance" aria-live="polite">
           <span>보유 캔디</span>
-          <strong>🍬 {wallet?.balance ?? "—"}</strong>
+          <strong>
+            🍬 {walletState === "loading" ? "확인 중…" : wallet?.balance ?? "—"}
+          </strong>
         </div>
       </header>
 
@@ -111,7 +139,7 @@ export function CandyPage() {
               <small>유료 회차 {amount}편</small>
               <button
                 className="button button--primary"
-                disabled={charging !== null}
+                disabled={charging !== null || walletState === "loading"}
                 onClick={() => void charge(amount)}
                 type="button"
               >
@@ -127,9 +155,18 @@ export function CandyPage() {
         </p>
       ) : null}
       {error ? (
-        <p className="candy-page__error" role="alert">
-          {error}
-        </p>
+        <div className="candy-page__error" role="alert">
+          <p>{error}</p>
+          {walletState === "error" ? (
+            <button
+              className="button button--ghost"
+              onClick={() => void refresh()}
+              type="button"
+            >
+              다시 시도
+            </button>
+          ) : null}
+        </div>
       ) : null}
       <p className="candy-page__footnote">
         1권 소장본(1~5화)을 주문하면 별도로 캔디 5개가 지급됩니다.

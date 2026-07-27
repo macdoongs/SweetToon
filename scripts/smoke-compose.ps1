@@ -428,20 +428,33 @@ try {
               throw new Error('natural page order failed: ' + names)
             }
 
+            const publishInput = {
+              requestKey: crypto.randomUUID(),
+              sessionId: preview.sessionId,
+              seasonId: selected.season.id,
+              number: episodeNumber,
+              title: 'Smoke Episode',
+              pageIds: preview.pages.map(page => page.id)
+            }
             const created = await json('/api/studio/episodes', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json'
               },
-              body: JSON.stringify({
-                sessionId: preview.sessionId,
-                seasonId: selected.season.id,
-                number: episodeNumber,
-                title: 'Smoke Episode',
-                pageIds: preview.pages.map(page => page.id)
-              })
+              body: JSON.stringify(publishInput)
             })
+            const replayed = await json('/api/studio/episodes', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+              },
+              body: JSON.stringify(publishInput)
+            })
+            if (replayed.episodeId !== created.episodeId) {
+              throw new Error('studio episode idempotency replay failed')
+            }
             const episode = await json(
               '/api/episodes/' + encodeURIComponent(created.episodeId)
             )

@@ -76,7 +76,31 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
     .click();
   await expect(pageNames).toHaveText(["1.png", "10.png", "2.png"]);
 
+  const publishRequest = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/api/studio/episodes") &&
+      request.method() === "POST",
+  );
+  const publishResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/studio/episodes") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "에피소드 등록" }).click();
+  const originalRequest = await publishRequest;
+  const originalResponse = await publishResponse;
+  const requestBody = originalRequest.postDataJSON();
+  const createdEpisode = await originalResponse.json();
+  const replay = await page.request.post("/api/studio/episodes", {
+    data: requestBody,
+  });
+  expect(replay.status()).toBe(201);
+  expect((await replay.json()).episodeId).toBe(createdEpisode.episodeId);
+  const conflict = await page.request.post("/api/studio/episodes", {
+    data: { ...requestBody, title: "같은 키의 다른 원고" },
+  });
+  expect(conflict.status()).toBe(409);
+  expect((await conflict.json()).code).toBe("IDEMPOTENCY_KEY_REUSED");
   await expect(
     page.getByRole("heading", {
       level: 2,

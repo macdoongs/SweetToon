@@ -10,7 +10,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { ApiError, getJson, postJson } from "@/lib/api";
+import {
+  ApiError,
+  getJson,
+  isUncertainRequestError,
+  postJson,
+} from "@/lib/api";
 import { getDemoEntitlement } from "@/lib/demo-entitlements";
 import {
   getCandyWalletToken,
@@ -121,6 +126,7 @@ export function EpisodeReaderPage({
   episodeId: string;
   initialData?: EpisodeReader | null;
 }) {
+  const candyUnlockRequestKey = useRef<string | null>(null);
   const [episode, setEpisode] = useState<EpisodeReader | null>(initialData);
   const [error, setError] = useState<{ message: string; status?: number } | null>(
     null,
@@ -324,13 +330,15 @@ export function EpisodeReaderPage({
     setCandyBusy(true);
     setCandyMessage(null);
     try {
+      candyUnlockRequestKey.current ??= crypto.randomUUID();
       const result = await postJson<
         { walletToken: string; requestKey: string },
         CandyUnlockResponse
       >(`/api/episodes/${encodeURIComponent(episode.id)}/candy-unlock`, {
         walletToken: getCandyWalletToken(),
-        requestKey: crypto.randomUUID(),
+        requestKey: candyUnlockRequestKey.current,
       });
+      candyUnlockRequestKey.current = null;
       setCandyBalance(result.balance);
       setCandyMessage(
         result.spent
@@ -340,6 +348,9 @@ export function EpisodeReaderPage({
       notifyCandyUpdated();
       setRequestKey((current) => current + 1);
     } catch (reason) {
+      if (!isUncertainRequestError(reason)) {
+        candyUnlockRequestKey.current = null;
+      }
       setCandyMessage(
         reason instanceof ApiError
           ? reason.message

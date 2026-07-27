@@ -31,12 +31,21 @@ async function serverGetJson<T>(
   path: string,
   options: { fresh?: boolean } = {},
 ): Promise<T> {
-  const response = await fetch(`${API_INTERNAL_URL}${path}`, {
-    headers: { Accept: "application/json" },
-    ...(options.fresh
-      ? { cache: "no-store" as const }
-      : { next: { revalidate: 300 } }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_INTERNAL_URL}${path}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+      ...(options.fresh
+        ? { cache: "no-store" as const }
+        : { next: { revalidate: 300 } }),
+    });
+  } catch {
+    throw new ServerApiError(
+      "서버 연결이 지연되고 있습니다. 잠시 뒤 다시 시도해 주세요.",
+      503,
+    );
+  }
 
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as {

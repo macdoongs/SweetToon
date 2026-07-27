@@ -16,6 +16,7 @@ import {
   ApiError,
   deleteRequest,
   getJson,
+  isUncertainRequestError,
   patchJson,
   postFormData,
   postJson,
@@ -77,7 +78,10 @@ const PACKAGING_STATUS_LABEL: Record<PackagingRequest["status"], string> = {
   canceled: "취소됨",
 };
 
-const EMPTY_NEW_SERIES: CreateSeriesRequest = {
+type NewSeriesDraft = Omit<CreateSeriesRequest, "requestKey">;
+type IdempotentAttempt = { fingerprint: string; requestKey: string };
+
+const EMPTY_NEW_SERIES: NewSeriesDraft = {
   slug: "",
   title: "",
   synopsis: "",
@@ -138,7 +142,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     null,
   );
   const [newSeries, setNewSeries] =
-    useState<CreateSeriesRequest>(EMPTY_NEW_SERIES);
+    useState<NewSeriesDraft>(EMPTY_NEW_SERIES);
   const [newSeriesBusy, setNewSeriesBusy] = useState(false);
   const [newSeriesMessage, setNewSeriesMessage] = useState<string | null>(
     null,
@@ -166,6 +170,9 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     ongoingSeasons[0];
 
   const [drafts, setDrafts] = useState<DraftEpisode[]>([]);
+  const [draftsState, setDraftsState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [draftBusyId, setDraftBusyId] = useState<string | null>(null);
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<
@@ -179,6 +186,10 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [packagingRequests, setPackagingRequests] = useState<
     PackagingRequest[]
   >([]);
+  const [packagingRequestsState, setPackagingRequestsState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [collectionLoadKey, setCollectionLoadKey] = useState(0);
 
   const nextNumberFor = useCallback(
     (season: SeriesDetail["seasons"][number] | undefined) => {
@@ -199,6 +210,9 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const suggestedNumber = nextNumberFor(selectedSeason);
 
   const fileInput = useRef<HTMLInputElement>(null);
+  const episodeAttempt = useRef<IdempotentAttempt | null>(null);
+  const packagingAttempt = useRef<IdempotentAttempt | null>(null);
+  const seriesAttempt = useRef<IdempotentAttempt | null>(null);
   const [preview, setPreview] = useState<UploadPreview | null>(null);
   const [episodeNumber, setEpisodeNumber] = useState(suggestedNumber);
   const [title, setTitle] = useState("");
@@ -231,6 +245,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     )
       .then((response) => {
         setDrafts(response.items);
+        setDraftsState("ready");
         // 비공개 보관 회차와 겹치지 않게 추천 회차 번호를 보정한다.
         const season = selectedSeason;
         if (!season) return;
@@ -248,15 +263,30 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
             : current,
         );
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!controller.signal.aborted) setDraftsState("error");
+      });
     getJson<{ items: PackagingRequest[] }>(
       "/api/studio/packaging-requests",
       controller.signal,
     )
-      .then((response) => setPackagingRequests(response.items))
-      .catch(() => undefined);
+      .then((response) => {
+        setPackagingRequests(response.items);
+        setPackagingRequestsState("ready");
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setPackagingRequestsState("error");
+        }
+      });
     return () => controller.abort();
-  }, []);
+  }, [collectionLoadKey]);
+
+  function retryCollections() {
+    setDraftsState("loading");
+    setPackagingRequestsState("loading");
+    setCollectionLoadKey((current) => current + 1);
+  }
 
   function chooseSeries(nextSeriesId: string) {
     const nextSeries = availableSeries.find(
@@ -416,22 +446,28 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     // 제목을 비워 두면 회차 번호로 자동 지정한다. 등록 뒤에도 수정할 수 있다.
     const resolvedTitle = title.trim() || `${episodeNumber}화`;
     const visibility = purpose === "draft" ? "private" : "public";
+    const payload: Omit<CreateEpisodeRequest, "requestKey"> = {
+      sessionId: preview.sessionId,
+      seasonId: selectedSeason.id,
+      number: episodeNumber,
+      title: resolvedTitle,
+      pageIds: preview.pages.map((page) => page.id),
+      visibility,
+    };
+    const requestKey = idempotencyKeyFor(episodeAttempt, payload);
     setBusy("publish");
     setError(null);
     try {
       const result = await postJson<CreateEpisodeRequest, CreatedEpisode>(
         "/api/studio/episodes",
         {
-          sessionId: preview.sessionId,
-          seasonId: selectedSeason.id,
-          number: episodeNumber,
-          title: resolvedTitle,
-          pageIds: preview.pages.map((page) => page.id),
-          visibility,
+          requestKey,
+          ...payload,
         },
         undefined,
         mutationHeaders,
       );
+      episodeAttempt.current = null;
       setCreated(result);
       setPreview(null);
       if (result.visibility === "private" && selectedSeries) {
@@ -454,6 +490,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
         ]);
       }
     } catch (reason) {
+      if (!isUncertainRequestError(reason)) episodeAttempt.current = null;
       setError(
         reason instanceof ApiError
           ? reason.message
@@ -474,6 +511,17 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       setError("만들 책의 제목을 입력해 주세요.");
       return;
     }
+    const payload: Omit<CreatePackagingRequest, "requestKey"> = {
+      sessionId: preview.sessionId,
+      pageIds: preview.pages.map((page) => page.id),
+      applicantName: applicantName.trim(),
+      bookTitle: bookTitle.trim(),
+      bookSize,
+      coverType,
+      quantity,
+      memo: packagingMemo.trim() || null,
+    };
+    const requestKey = idempotencyKeyFor(packagingAttempt, payload);
     setBusy("publish");
     setError(null);
     try {
@@ -483,24 +531,20 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       >(
         "/api/studio/packaging-requests",
         {
-          sessionId: preview.sessionId,
-          pageIds: preview.pages.map((page) => page.id),
-          applicantName: applicantName.trim(),
-          bookTitle: bookTitle.trim(),
-          bookSize,
-          coverType,
-          quantity,
-          memo: packagingMemo.trim() || null,
+          requestKey,
+          ...payload,
         },
         undefined,
         mutationHeaders,
       );
+      packagingAttempt.current = null;
       setPackagingResult(result);
       setPackagingRequests((current) => [result, ...current]);
       setPreview(null);
       setBookTitle("");
       setPackagingMemo("");
     } catch (reason) {
+      if (!isUncertainRequestError(reason)) packagingAttempt.current = null;
       setError(
         reason instanceof ApiError
           ? reason.message
@@ -599,7 +643,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   }
 
   async function createNewSeries() {
-    const payload: CreateSeriesRequest = {
+    const payload: NewSeriesDraft = {
       slug: newSeries.slug.trim(),
       title: newSeries.title.trim(),
       synopsis: newSeries.synopsis.trim(),
@@ -617,13 +661,20 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       setNewSeriesMessage("모든 항목을 입력해 주세요.");
       return;
     }
+    const requestKey = idempotencyKeyFor(seriesAttempt, payload);
     setNewSeriesBusy(true);
     setNewSeriesMessage(null);
     try {
       const created = await postJson<
         CreateSeriesRequest,
         CreateSeriesResponse
-      >("/api/studio/series", payload, undefined, mutationHeaders);
+      >(
+        "/api/studio/series",
+        { requestKey, ...payload },
+        undefined,
+        mutationHeaders,
+      );
+      seriesAttempt.current = null;
       setNewSeries(EMPTY_NEW_SERIES);
       setNewSeriesMessage(
         `《${created.title}》 시즌 1이 준비됐어요. 이제 원고를 올릴 수 있습니다.`,
@@ -633,6 +684,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       // 서버 컴포넌트 데이터를 다시 받아 드롭다운에 새 작품을 반영한다.
       router.refresh();
     } catch (reason) {
+      if (!isUncertainRequestError(reason)) seriesAttempt.current = null;
       setNewSeriesMessage(
         reason instanceof ApiError
           ? reason.message
@@ -1760,7 +1812,22 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
         </section>
       ) : null}
 
-      {drafts.length > 0 ? (
+      {draftsState === "loading" ? (
+        <section className="studio-drafts" aria-busy="true">
+          <h2>비공개 보관함을 불러오는 중…</h2>
+        </section>
+      ) : draftsState === "error" ? (
+        <section className="studio-drafts" role="alert">
+          <h2>비공개 보관함을 불러오지 못했어요.</h2>
+          <button
+            className="button button--ghost"
+            onClick={retryCollections}
+            type="button"
+          >
+            다시 시도
+          </button>
+        </section>
+      ) : drafts.length > 0 ? (
         <section className="studio-drafts" aria-label="비공개 보관함">
           <header>
             <div>
@@ -1894,9 +1961,29 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
             ))}
           </ul>
         </section>
-      ) : null}
+      ) : (
+        <section className="studio-drafts">
+          <h2>비공개로 보관한 회차가 없어요.</h2>
+          <p>원고 업로드 목적에서 ‘비공개 보관’을 선택해 추가할 수 있어요.</p>
+        </section>
+      )}
 
-      {packagingRequests.length > 0 ? (
+      {packagingRequestsState === "loading" ? (
+        <section className="studio-packaging-list" aria-busy="true">
+          <h2>패키징 신청 내역을 불러오는 중…</h2>
+        </section>
+      ) : packagingRequestsState === "error" ? (
+        <section className="studio-packaging-list" role="alert">
+          <h2>패키징 신청 내역을 불러오지 못했어요.</h2>
+          <button
+            className="button button--ghost"
+            onClick={retryCollections}
+            type="button"
+          >
+            다시 시도
+          </button>
+        </section>
+      ) : packagingRequests.length > 0 ? (
         <section
           className="studio-packaging-list"
           aria-label="패키징 신청 내역"
@@ -1932,7 +2019,26 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
             ))}
           </ul>
         </section>
-      ) : null}
+      ) : (
+        <section className="studio-packaging-list">
+          <h2>아직 패키징 신청 내역이 없어요.</h2>
+          <p>원고 업로드 목적에서 ‘책 패키징 신청’을 선택해 접수할 수 있어요.</p>
+        </section>
+      )}
     </main>
   );
+}
+
+function idempotencyKeyFor(
+  attempt: { current: IdempotentAttempt | null },
+  payload: unknown,
+): string {
+  const fingerprint = JSON.stringify(payload);
+  if (attempt.current?.fingerprint !== fingerprint) {
+    attempt.current = {
+      fingerprint,
+      requestKey: crypto.randomUUID(),
+    };
+  }
+  return attempt.current.requestKey;
 }

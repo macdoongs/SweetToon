@@ -653,6 +653,7 @@ export const openApiDocument = {
               schema: {
                 type: "object",
                 required: [
+                  "requestKey",
                   "sessionId",
                   "seasonId",
                   "number",
@@ -660,6 +661,7 @@ export const openApiDocument = {
                   "pageIds",
                 ],
                 properties: {
+                  requestKey: { type: "string", format: "uuid" },
                   sessionId: { type: "string", format: "uuid" },
                   seasonId: { type: "string" },
                   number: { type: "integer", minimum: 1 },
@@ -682,7 +684,9 @@ export const openApiDocument = {
         },
         responses: {
           "201": { description: "발행된 에피소드" },
-          "409": { description: "중복 회차 또는 완결 시즌" },
+          "409": {
+            description: "중복 회차, 완결 시즌 또는 요청 키 재사용",
+          },
         },
       },
     },
@@ -920,6 +924,7 @@ export const openApiDocument = {
               schema: {
                 type: "object",
                 required: [
+                  "requestKey",
                   "sessionId",
                   "pageIds",
                   "applicantName",
@@ -929,6 +934,7 @@ export const openApiDocument = {
                   "quantity",
                 ],
                 properties: {
+                  requestKey: { type: "string", format: "uuid" },
                   sessionId: { type: "string", format: "uuid" },
                   pageIds: {
                     type: "array",
@@ -952,6 +958,7 @@ export const openApiDocument = {
           "201": { description: "접수된 패키징 신청" },
           "400": { $ref: "#/components/responses/BadRequest" },
           "404": { $ref: "#/components/responses/NotFound" },
+          "409": { description: "같은 요청 키를 다른 내용에 재사용" },
         },
       },
     },
@@ -967,6 +974,7 @@ export const openApiDocument = {
               schema: {
                 type: "object",
                 required: [
+                  "requestKey",
                   "slug",
                   "title",
                   "synopsis",
@@ -975,6 +983,7 @@ export const openApiDocument = {
                   "authorName",
                 ],
                 properties: {
+                  requestKey: { type: "string", format: "uuid" },
                   slug: {
                     type: "string",
                     pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
@@ -994,7 +1003,7 @@ export const openApiDocument = {
         },
         responses: {
           "201": { description: "만들어진 작품과 시즌 1" },
-          "409": { description: "slug 중복" },
+          "409": { description: "slug 중복 또는 요청 키 재사용" },
         },
       },
     },

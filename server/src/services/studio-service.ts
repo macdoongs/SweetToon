@@ -26,6 +26,7 @@ import {
 import {
   StudioRepositoryError,
   type StudioRepository,
+  type StudioEpisode,
 } from "../repositories/studio-repository";
 import {
   analyzeArchive,
@@ -182,6 +183,15 @@ export class StudioService implements StudioUseCases {
   async createEpisode(
     input: CreateEpisodeRequest,
   ): Promise<CreatedEpisode> {
+    const requestFingerprint = fingerprintStudioRequest("episode", input);
+    const existing = await this.repository.findEpisodeByRequestKey(
+      input.requestKey,
+    );
+    if (existing) {
+      assertMatchingFingerprint(existing.requestFingerprint, requestFingerprint);
+      return toCreatedEpisode(existing.episode, existing.pageCount);
+    }
+
     const [season, session] = await Promise.all([
       this.repository.findSeason(input.seasonId),
       this.storage.getSession(input.sessionId),
@@ -224,6 +234,8 @@ export class StudioService implements StudioUseCases {
     let createdEpisodeId: string | null = null;
     try {
       const created = await this.repository.createEpisode({
+        requestKey: input.requestKey,
+        requestFingerprint,
         seasonId: season.id,
         number: input.number,
         title: input.title,
@@ -246,6 +258,18 @@ export class StudioService implements StudioUseCases {
       }
       await this.storage.removePublished(published.directory);
       if (error instanceof StudioRepositoryError) {
+        if (error.code === "IDEMPOTENCY_KEY_EXISTS") {
+          const raced = await this.repository.findEpisodeByRequestKey(
+            input.requestKey,
+          );
+          if (raced) {
+            assertMatchingFingerprint(
+              raced.requestFingerprint,
+              requestFingerprint,
+            );
+            return toCreatedEpisode(raced.episode, raced.pageCount);
+          }
+        }
         throw new StudioServiceError(
           error.code,
           "같은 회차 번호가 이미 있어요. 다른 번호를 입력해 주세요.",
@@ -297,9 +321,32 @@ export class StudioService implements StudioUseCases {
   async createSeries(
     input: CreateSeriesRequest,
   ): Promise<CreateSeriesResponse> {
+    const requestFingerprint = fingerprintStudioRequest("series", input);
+    const existing = await this.repository.findSeriesByRequestKey(
+      input.requestKey,
+    );
+    if (existing) {
+      assertMatchingFingerprint(existing.requestFingerprint, requestFingerprint);
+      return existing.response;
+    }
     try {
-      return await this.repository.createSeries(input);
+      return await this.repository.createSeries(input, requestFingerprint);
     } catch (error) {
+      if (
+        error instanceof StudioRepositoryError &&
+        error.code === "IDEMPOTENCY_KEY_EXISTS"
+      ) {
+        const raced = await this.repository.findSeriesByRequestKey(
+          input.requestKey,
+        );
+        if (raced) {
+          assertMatchingFingerprint(
+            raced.requestFingerprint,
+            requestFingerprint,
+          );
+          return raced.response;
+        }
+      }
       if (
         error instanceof StudioRepositoryError &&
         error.code === "SERIES_SLUG_EXISTS"
@@ -519,6 +566,15 @@ export class StudioService implements StudioUseCases {
   async createPackagingRequest(
     input: CreatePackagingRequest,
   ): Promise<PackagingRequest> {
+    const requestFingerprint = fingerprintStudioRequest("packaging", input);
+    const existing = await this.repository.findPackagingRequestByRequestKey(
+      input.requestKey,
+    );
+    if (existing) {
+      assertMatchingFingerprint(existing.requestFingerprint, requestFingerprint);
+      return existing.response;
+    }
+
     const session = await this.storage.getSession(input.sessionId);
     if (!session) {
       throw new StudioServiceError(
@@ -537,6 +593,8 @@ export class StudioService implements StudioUseCases {
     );
     try {
       const created = await this.repository.createPackagingRequest({
+        requestKey: input.requestKey,
+        requestFingerprint,
         applicantName: input.applicantName,
         bookTitle: input.bookTitle,
         bookSize: input.bookSize,
@@ -550,6 +608,22 @@ export class StudioService implements StudioUseCases {
       return created;
     } catch (error) {
       await this.storage.removePublished(published.directory);
+      if (
+        error instanceof StudioRepositoryError &&
+        error.code === "IDEMPOTENCY_KEY_EXISTS"
+      ) {
+        const raced =
+          await this.repository.findPackagingRequestByRequestKey(
+            input.requestKey,
+          );
+        if (raced) {
+          assertMatchingFingerprint(
+            raced.requestFingerprint,
+            requestFingerprint,
+          );
+          return raced.response;
+        }
+      }
       throw error;
     }
   }
@@ -587,6 +661,43 @@ export class StudioService implements StudioUseCases {
     }
     return updated;
   }
+}
+
+function fingerprintStudioRequest<T extends { requestKey: string }>(
+  operation: "series" | "episode" | "packaging",
+  input: T,
+): string {
+  const { requestKey: _requestKey, ...payload } = input;
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify({ operation, payload }))
+    .digest("hex");
+}
+
+function assertMatchingFingerprint(
+  existing: string,
+  requested: string,
+): void {
+  if (existing !== requested) {
+    throw new StudioServiceError(
+      "IDEMPOTENCY_KEY_REUSED",
+      "같은 요청 키를 다른 내용에 다시 사용할 수 없습니다.",
+      409,
+    );
+  }
+}
+
+function toCreatedEpisode(
+  episode: StudioEpisode,
+  pageCount: number,
+): CreatedEpisode {
+  return {
+    episodeId: episode.id,
+    seriesSlug: episode.season.series.slug,
+    pageCount,
+    readerUrl: `/read/${episode.id}`,
+    visibility: episode.visibility,
+  };
 }
 
 function assertPageOrderCoversSession(

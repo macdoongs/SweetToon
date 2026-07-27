@@ -20,6 +20,7 @@ export const UploadPreviewSchema = z.object({
 export const EpisodeVisibilitySchema = z.enum(["public", "private"]);
 
 export const CreateEpisodeRequestSchema = z.object({
+  requestKey: z.string().uuid(),
   sessionId: UploadSessionIdSchema,
   seasonId: z.string().min(1).max(80),
   number: z.number().int().positive().max(10_000),
@@ -79,6 +80,7 @@ export const SeriesInfoResponseSchema = z.object({
 });
 
 export const CreateSeriesRequestSchema = z.object({
+  requestKey: z.string().uuid(),
   slug: z
     .string()
     .trim()
@@ -144,6 +146,7 @@ export const PackagingStatusSchema = z.enum([
 ]);
 
 export const CreatePackagingRequestSchema = z.object({
+  requestKey: z.string().uuid(),
   sessionId: UploadSessionIdSchema,
   pageIds: z.array(UploadPageIdSchema).min(1).max(80),
   applicantName: z.string().trim().min(2).max(40),

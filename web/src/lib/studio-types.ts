@@ -17,6 +17,7 @@ export type EpisodeVisibility = "public" | "private";
 export type UploadPurpose = "publish" | "draft" | "packaging";
 
 export type CreateEpisodeRequest = {
+  requestKey: string;
   sessionId: string;
   seasonId: string;
   number: number;
@@ -51,6 +52,7 @@ export type PackagingStatus =
   | "canceled";
 
 export type CreatePackagingRequest = {
+  requestKey: string;
   sessionId: string;
   pageIds: string[];
   applicantName: string;
@@ -87,6 +89,7 @@ export type SeriesInfoResponse = {
 };
 
 export type CreateSeriesRequest = {
+  requestKey: string;
   slug: string;
   title: string;
   synopsis: string;

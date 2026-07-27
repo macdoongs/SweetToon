@@ -18,6 +18,8 @@ Table Author {
 
 Table Series {
   id String [pk]
+  requestKey String [unique]
+  requestFingerprint String
   slug String [unique, not null]
   authorId String [not null]
   title String [not null]
@@ -52,6 +54,8 @@ Table Season {
 
 Table Episode {
   id String [pk]
+  requestKey String [unique]
+  requestFingerprint String
   seasonId String [not null]
   number Int [not null]
   title String [not null]
@@ -160,6 +164,8 @@ Table CandyEpisodeEntitlement {
 
 Table PackagingRequest {
   id String [pk]
+  requestKey String [unique]
+  requestFingerprint String
   applicantName String [not null]
   bookTitle String [not null]
   bookSize String [not null]

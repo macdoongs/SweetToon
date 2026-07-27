@@ -48,6 +48,7 @@ const season: StudioSeason = {
 };
 
 const input: CreateEpisodeRequest = {
+  requestKey: "f371de0c-01cd-4214-99f7-7cd8e1df82a0",
   sessionId: session.id,
   seasonId: season.id,
   number: 12,
@@ -59,6 +60,7 @@ const input: CreateEpisodeRequest = {
 function makeDependencies(malwareScanner?: MalwareScanner) {
   const repository: jest.Mocked<StudioRepository> = {
     findSeason: jest.fn().mockResolvedValue(season),
+    findEpisodeByRequestKey: jest.fn().mockResolvedValue(null),
     createEpisode: jest.fn().mockResolvedValue({ id: "episode-12" }),
     deleteEpisode: jest.fn().mockResolvedValue(undefined),
     updateAccessPolicy: jest.fn().mockResolvedValue({
@@ -74,6 +76,7 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
       coverUrl: "/api/images/studio/covers/series-1-cover.webp",
     }),
     updateSeriesInfo: jest.fn().mockResolvedValue(null),
+    findSeriesByRequestKey: jest.fn().mockResolvedValue(null),
     createSeries: jest.fn().mockResolvedValue({
       seriesId: "series-2",
       slug: "night-market",
@@ -146,6 +149,7 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
         createdAt: "2026-07-27T00:00:00.000Z",
       }),
     ),
+    findPackagingRequestByRequestKey: jest.fn().mockResolvedValue(null),
     listPackagingRequests: jest.fn().mockResolvedValue([]),
   };
   const storage: jest.Mocked<StudioStorage> = {
@@ -204,17 +208,85 @@ describe("StudioService", () => {
       expect.arrayContaining(["moonlight-laundry", "s1"]),
       reversed.pageIds,
     );
-    expect(repository.createEpisode).toHaveBeenCalledWith({
-      seasonId: "season-1",
-      number: 12,
-      title: "새벽의 손님",
-      imageUrls: ["/api/images/1.png", "/api/images/2.png"],
-      visibility: "public",
-      manuscriptDir: "C:\\published",
-    });
+    expect(repository.createEpisode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestKey: input.requestKey,
+        requestFingerprint: expect.any(String),
+        seasonId: "season-1",
+        number: 12,
+        title: "새벽의 손님",
+        imageUrls: ["/api/images/1.png", "/api/images/2.png"],
+        visibility: "public",
+        manuscriptDir: "C:\\published",
+      }),
+    );
     expect(storage.removeSession).toHaveBeenCalledWith(session.id);
     expect(created.readerUrl).toBe("/read/episode-12");
     expect(created.visibility).toBe("public");
+  });
+
+  it("returns the original episode when the same request key is retried", async () => {
+    const { service, repository, storage } = makeDependencies();
+    const first = await service.createEpisode(input);
+    const requestFingerprint =
+      repository.createEpisode.mock.calls[0][0].requestFingerprint;
+    repository.findEpisodeByRequestKey.mockResolvedValue({
+      requestFingerprint,
+      episode: {
+        id: first.episodeId,
+        number: input.number,
+        title: input.title,
+        visibility: input.visibility,
+        manuscriptDir: "C:\\published",
+        season: {
+          id: season.id,
+          number: season.number,
+          series: {
+            slug: season.series.slug,
+            title: season.series.title,
+          },
+        },
+      },
+      pageCount: 2,
+    });
+
+    await expect(service.createEpisode(input)).resolves.toEqual(first);
+    expect(repository.createEpisode).toHaveBeenCalledTimes(1);
+    expect(storage.publish).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects reusing an episode request key with different content", async () => {
+    const { service, repository, storage } = makeDependencies();
+    await service.createEpisode(input);
+    const requestFingerprint =
+      repository.createEpisode.mock.calls[0][0].requestFingerprint;
+    repository.findEpisodeByRequestKey.mockResolvedValue({
+      requestFingerprint,
+      episode: {
+        id: "episode-12",
+        number: input.number,
+        title: input.title,
+        visibility: input.visibility,
+        manuscriptDir: "C:\\published",
+        season: {
+          id: season.id,
+          number: season.number,
+          series: {
+            slug: season.series.slug,
+            title: season.series.title,
+          },
+        },
+      },
+      pageCount: 2,
+    });
+
+    await expect(
+      service.createEpisode({ ...input, title: "다른 제목" }),
+    ).rejects.toMatchObject({
+      code: "IDEMPOTENCY_KEY_REUSED",
+      status: 409,
+    });
+    expect(storage.publish).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a private upload out of the public flow but readable by link", async () => {
@@ -272,6 +344,7 @@ describe("StudioService", () => {
     const { service, repository, storage } = makeDependencies();
 
     const created = await service.createPackagingRequest({
+      requestKey: "49aefcdc-18c9-4db7-bdd5-d7a05404a9a2",
       sessionId: session.id,
       pageIds: session.pages.map((page) => page.id),
       applicantName: "박야근",
@@ -299,6 +372,34 @@ describe("StudioService", () => {
     expect(created.status).toBe("received");
   });
 
+  it("returns the original packaging request on a retry", async () => {
+    const { service, repository, storage } = makeDependencies();
+    const packagingInput = {
+      requestKey: "49aefcdc-18c9-4db7-bdd5-d7a05404a9a2",
+      sessionId: session.id,
+      pageIds: session.pages.map((page) => page.id),
+      applicantName: "박야근",
+      bookTitle: "야근의 기록",
+      bookSize: "A5" as const,
+      coverType: "softcover" as const,
+      quantity: 30,
+      memo: null,
+    };
+    const first = await service.createPackagingRequest(packagingInput);
+    const requestFingerprint =
+      repository.createPackagingRequest.mock.calls[0][0].requestFingerprint;
+    repository.findPackagingRequestByRequestKey.mockResolvedValue({
+      requestFingerprint,
+      response: first,
+    });
+
+    await expect(
+      service.createPackagingRequest(packagingInput),
+    ).resolves.toEqual(first);
+    expect(repository.createPackagingRequest).toHaveBeenCalledTimes(1);
+    expect(storage.publish).toHaveBeenCalledTimes(1);
+  });
+
   it("removes packaging files if the request record fails", async () => {
     const { service, repository, storage } = makeDependencies();
     repository.createPackagingRequest.mockRejectedValue(
@@ -307,6 +408,7 @@ describe("StudioService", () => {
 
     await expect(
       service.createPackagingRequest({
+        requestKey: "49aefcdc-18c9-4db7-bdd5-d7a05404a9a2",
         sessionId: session.id,
         pageIds: session.pages.map((page) => page.id),
         applicantName: "박야근",
@@ -489,6 +591,7 @@ describe("StudioService", () => {
 
     await expect(
       service.createSeries({
+        requestKey: "49aefcdc-18c9-4db7-bdd5-d7a05404a9a2",
         slug: "moonlight-laundry",
         title: "달빛 세탁소",
         synopsis: "줄거리",
@@ -497,6 +600,28 @@ describe("StudioService", () => {
         authorName: "새 작가",
       }),
     ).rejects.toMatchObject({ code: "SERIES_SLUG_EXISTS", status: 409 });
+  });
+
+  it("returns the original series on a retry", async () => {
+    const { service, repository } = makeDependencies();
+    const seriesInput = {
+      requestKey: "49aefcdc-18c9-4db7-bdd5-d7a05404a9a2",
+      slug: "night-market",
+      title: "야시장",
+      synopsis: "밤에만 열리는 시장 이야기",
+      genre: "판타지",
+      weekday: "mon" as const,
+      authorName: "박야근",
+    };
+    const first = await service.createSeries(seriesInput);
+    const requestFingerprint = repository.createSeries.mock.calls[0][1];
+    repository.findSeriesByRequestKey.mockResolvedValue({
+      requestFingerprint,
+      response: first,
+    });
+
+    await expect(service.createSeries(seriesInput)).resolves.toEqual(first);
+    expect(repository.createSeries).toHaveBeenCalledTimes(1);
   });
 
   it("deletes an episode and cleans up its manuscript files", async () => {

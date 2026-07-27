@@ -23,6 +23,10 @@ function readerRepository(): ReaderRepository {
     seriesExists: jest.fn().mockResolvedValue(false),
     findSeriesBySlug: jest.fn().mockResolvedValue(null),
     findEpisodeById: jest.fn().mockResolvedValue(null),
+    listSitemapDiscovery: jest
+      .fn()
+      .mockResolvedValue({ series: [], episodes: [] }),
+    listRecentEpisodes: jest.fn().mockResolvedValue([]),
   };
 }
 

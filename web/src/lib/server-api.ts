@@ -9,6 +9,10 @@ import {
   type CatalogFilters,
 } from "./series-filter";
 import type { OrderDetail, OrderListResponse } from "./order-types";
+import type {
+  RecentEpisodesResponse,
+  SitemapDiscoveryResponse,
+} from "./discovery-types";
 
 const API_INTERNAL_URL =
   process.env.API_INTERNAL_URL ?? "http://localhost:4000";
@@ -99,4 +103,17 @@ export function getOrder(orderId: string): Promise<OrderDetail> {
   return serverGetJson(`/api/orders/${encodeURIComponent(orderId)}`, {
     fresh: true,
   });
+}
+
+export function getSitemapDiscovery(): Promise<SitemapDiscoveryResponse> {
+  return serverGetJson("/api/discovery/sitemap");
+}
+
+export function getRecentEpisodes(
+  limit = 50,
+): Promise<RecentEpisodesResponse> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  return serverGetJson(
+    `/api/discovery/recent-episodes?${query.toString()}`,
+  );
 }

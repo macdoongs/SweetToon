@@ -398,7 +398,10 @@ async function main() {
   if (existingSeries > 0) {
     for (const [slug, coverUrl] of coverUrls) {
       await prisma.series.updateMany({
-        where: { slug },
+        where: {
+          slug,
+          OR: [{ coverUrl: null }, { coverUrl: { not: coverUrl } }],
+        },
         data: { coverUrl },
       });
     }

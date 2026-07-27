@@ -131,6 +131,33 @@ function makeRepository(): jest.Mocked<ReaderRepository> {
     findEpisodeById: jest
       .fn()
       .mockImplementation(async (id) => (id === episode.id ? episode : null)),
+    listSitemapDiscovery: jest.fn().mockResolvedValue({
+      series: [
+        {
+          slug: seriesDetail.slug,
+          status: "ongoing",
+          coverUrl: seriesDetail.coverUrl,
+          updatedAt: "2026-07-27T10:00:00.000Z",
+        },
+      ],
+      episodes: [
+        {
+          id: episode.id,
+          number: episode.number,
+          title: episode.title,
+          publishedAt,
+          updatedAt: "2026-07-27T10:00:00.000Z",
+          series: {
+            slug: seriesDetail.slug,
+            title: seriesDetail.title,
+            synopsis: seriesDetail.synopsis,
+            genre: seriesDetail.genre,
+            authorName: seriesDetail.author.name,
+          },
+        },
+      ],
+    }),
+    listRecentEpisodes: jest.fn().mockResolvedValue([]),
   };
 }
 
@@ -219,6 +246,34 @@ describe("reader routes", () => {
       response.body.pages.map((page: { order: number }) => page.order),
     ).toEqual([1, 2]);
     expect(response.body.navigation.nextEpisodeId).toBe("episode-2");
+  });
+
+  it("returns public sitemap discovery data", async () => {
+    const response = await request(makeApp())
+      .get("/api/discovery/sitemap")
+      .expect(200);
+
+    expect(response.body.series[0].slug).toBe("moonlight-laundry");
+    expect(response.body.episodes[0].updatedAt).toBe(
+      "2026-07-27T10:00:00.000Z",
+    );
+  });
+
+  it("limits the global recent episode feed", async () => {
+    const repository = makeRepository();
+    const app = createApp({
+      readerRepository: repository,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+    });
+
+    await request(app)
+      .get("/api/discovery/recent-episodes?limit=30")
+      .expect(200);
+
+    expect(repository.listRecentEpisodes).toHaveBeenCalledWith(30);
+    await request(app)
+      .get("/api/discovery/recent-episodes?limit=51")
+      .expect(400);
   });
 
   it("passes an anonymous demo entitlement to the repository", async () => {

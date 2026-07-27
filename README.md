@@ -93,6 +93,12 @@ Manifest와 서비스 워커를 제공해 홈 화면 설치가 가능하며, 네
 탐색 요청은 전용 오프라인 안내 화면으로 전환합니다. 최신 회차는
 `/feed.xml` RSS 2.0 피드로 구독할 수 있습니다.
 
+운영 분석이 필요하면 `GOOGLE_ANALYTICS_ID=G-...`를 설정해 GA4 방문 분석과
+Core Web Vitals 수집을 함께 켤 수 있습니다. 기본값은 비활성이라 로컬·과제
+실행에서는 외부 분석 스크립트를 불러오지 않습니다. 측정 ID는 web 이미지에
+포함되므로 값을 바꾼 뒤에는 web 이미지를 다시 빌드해야 하며, 실제 운영에서
+활성화할 때는 배포 지역의 개인정보·동의 정책도 함께 적용해야 합니다.
+
 `SITE_URL`은 canonical, Open Graph, `robots.txt`, sitemap과 RSS의 기준
 주소입니다. `robots.txt`는 web 이미지 빌드 시 생성되므로 배포 주소를 바꾸면
 `SITE_URL`과 `SITE_HOST`를 함께 갱신한 뒤 web 이미지를 다시 빌드해야 합니다.

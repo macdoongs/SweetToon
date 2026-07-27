@@ -88,6 +88,51 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/discovery/sitemap": {
+      get: {
+        tags: ["Reader"],
+        summary: "검색 엔진용 공개 작품·회차 갱신 정보를 조회합니다.",
+        responses: {
+          "200": {
+            description: "공개 작품과 공개 회차의 sitemap 투영 데이터",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/discovery/recent-episodes": {
+      get: {
+        tags: ["Reader"],
+        summary: "RSS용 최근 공개 회차를 전체 작품에서 조회합니다.",
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 50,
+              default: 50,
+            },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "발행일 최신순 공개 회차",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+        },
+      },
+    },
     "/api/episodes/{id}": {
       get: {
         tags: ["Reader"],

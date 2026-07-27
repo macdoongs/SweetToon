@@ -8,6 +8,11 @@ import {
   SlugParamSchema,
 } from "../contracts/reader";
 import type { ReaderRepository } from "../repositories/reader-repository";
+import {
+  DiscoveryLimitQuerySchema,
+  RecentEpisodesResponseSchema,
+  SitemapDiscoveryResponseSchema,
+} from "../contracts/discovery";
 
 export function createReaderRouter(repository: ReaderRepository): Router {
   const router = Router();
@@ -48,6 +53,30 @@ export function createReaderRouter(repository: ReaderRepository): Router {
     }
 
     res.json(SeriesDetailSchema.parse(result));
+  });
+
+  router.get("/discovery/sitemap", async (_req, res) => {
+    res.json(
+      SitemapDiscoveryResponseSchema.parse(
+        await repository.listSitemapDiscovery(),
+      ),
+    );
+  });
+
+  router.get("/discovery/recent-episodes", async (req, res) => {
+    const query = DiscoveryLimitQuerySchema.safeParse(req.query);
+    if (!query.success) {
+      res.status(400).json({
+        code: "INVALID_DISCOVERY_LIMIT",
+        message: "최근 회차 조회 개수가 올바르지 않습니다.",
+      });
+      return;
+    }
+    res.json(
+      RecentEpisodesResponseSchema.parse({
+        items: await repository.listRecentEpisodes(query.data.limit),
+      }),
+    );
   });
 
   router.get("/episodes/:id", async (req, res) => {

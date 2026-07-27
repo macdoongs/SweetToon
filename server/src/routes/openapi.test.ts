@@ -19,6 +19,12 @@ describe("OpenAPI documentation", () => {
     expect(response.body.openapi).toBe("3.1.0");
     expect(response.body.paths).toHaveProperty("/api/episodes/{id}");
     expect(response.body.paths).toHaveProperty(
+      "/api/discovery/sitemap",
+    );
+    expect(response.body.paths).toHaveProperty(
+      "/api/discovery/recent-episodes",
+    );
+    expect(response.body.paths).toHaveProperty(
       "/api/studio/series/{seriesId}/access-policy",
     );
     expect(response.body.paths).toHaveProperty(

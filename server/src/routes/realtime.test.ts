@@ -62,6 +62,10 @@ function repository(): ReaderRepository {
       .fn()
       .mockImplementation(async (slug) => (slug === summary.slug ? detail : null)),
     findEpisodeById: jest.fn().mockResolvedValue(null),
+    listSitemapDiscovery: jest
+      .fn()
+      .mockResolvedValue({ series: [], episodes: [] }),
+    listRecentEpisodes: jest.fn().mockResolvedValue([]),
   };
 }
 

@@ -59,6 +59,19 @@ pipeline {
             }
         }
 
+        stage('Lighthouse') {
+            steps {
+                powershell '''
+                    $ErrorActionPreference = "Stop"
+                    & "$env:WORKSPACE/scripts/verify-lighthouse.ps1" `
+                        -ProjectName $env:COMPOSE_PROJECT_NAME `
+                        -SkipBuild `
+                        -SkipInstall `
+                        -SkipBrowserInstall
+                '''
+            }
+        }
+
         stage('Deploy dev') {
             when {
                 expression {
@@ -78,7 +91,7 @@ pipeline {
 
     post {
         always {
-            archiveArtifacts artifacts: 'web/playwright-report/**,web/test-results/**',
+            archiveArtifacts artifacts: 'web/lighthouse-report/**,web/playwright-report/**,web/test-results/**',
                 allowEmptyArchive: true
             script {
                 def cleanupStatus = powershell(

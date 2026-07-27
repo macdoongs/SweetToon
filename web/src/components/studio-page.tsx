@@ -133,6 +133,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     { title: string; synopsis: string } | null
   >(null);
   const [seriesEditBusy, setSeriesEditBusy] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
   const [seriesEditMessage, setSeriesEditMessage] = useState<string | null>(
     null,
   );
@@ -168,13 +169,13 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [draftBusyId, setDraftBusyId] = useState<string | null>(null);
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<
-    { id: string; title: string } | null
+    { id: string; title: string; number: number } | null
   >(null);
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameMessage, setRenameMessage] = useState<string | null>(null);
-  const [renamedTitles, setRenamedTitles] = useState<Record<string, string>>(
-    {},
-  );
+  const [episodeOverrides, setEpisodeOverrides] = useState<
+    Record<string, { title: string; number: number }>
+  >({});
   const [packagingRequests, setPackagingRequests] = useState<
     PackagingRequest[]
   >([]);
@@ -513,6 +514,31 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const manageSeries =
     series.find((item) => item.id === manageSeriesId) ?? series[0];
 
+  async function uploadCover(file: File | undefined) {
+    if (!selectedSeries || !file) return;
+    setCoverBusy(true);
+    setSeriesEditMessage(null);
+    const formData = new FormData();
+    formData.append("cover", file);
+    try {
+      await postFormData<{ seriesId: string; coverUrl: string }>(
+        `/api/studio/series/${encodeURIComponent(selectedSeries.id)}/cover`,
+        formData,
+        mutationHeaders,
+      );
+      setSeriesEditMessage("표지를 교체했어요. 목록과 상세에 곧 반영됩니다.");
+      router.refresh();
+    } catch (reason) {
+      setSeriesEditMessage(
+        reason instanceof ApiError
+          ? reason.message
+          : "표지를 올리지 못했습니다.",
+      );
+    } finally {
+      setCoverBusy(false);
+    }
+  }
+
   async function changeSeasonStatus(
     seasonId: string,
     status: "ongoing" | "completed",
@@ -695,32 +721,39 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       setRenameMessage("제목을 한 글자 이상 입력해 주세요.");
       return;
     }
+    if (!Number.isInteger(renameTarget.number) || renameTarget.number < 1) {
+      setRenameMessage("회차 번호는 1 이상의 숫자여야 해요.");
+      return;
+    }
     setRenameBusy(true);
     setRenameMessage(null);
     try {
-      const updated = await patchJson<{ title: string }, DraftEpisode>(
-        `/api/studio/episodes/${encodeURIComponent(renameTarget.id)}/title`,
-        { title: nextTitle },
+      const updated = await patchJson<
+        { title: string; number: number },
+        DraftEpisode
+      >(
+        `/api/studio/episodes/${encodeURIComponent(renameTarget.id)}`,
+        { title: nextTitle, number: renameTarget.number },
         mutationHeaders,
       );
-      setRenamedTitles((current) => ({
+      setEpisodeOverrides((current) => ({
         ...current,
-        [updated.id]: updated.title,
+        [updated.id]: { title: updated.title, number: updated.number },
       }));
       setDrafts((current) =>
         current.map((draft) =>
           draft.id === updated.id
-            ? { ...draft, title: updated.title }
+            ? { ...draft, title: updated.title, number: updated.number }
             : draft,
         ),
       );
       setRenameTarget(null);
-      setRenameMessage("에피소드 제목을 수정했어요.");
+      setRenameMessage("에피소드 정보를 수정했어요.");
     } catch (reason) {
       setRenameMessage(
         reason instanceof ApiError
           ? reason.message
-          : "제목을 수정하지 못했습니다.",
+          : "에피소드를 수정하지 못했습니다.",
       );
     } finally {
       setRenameBusy(false);
@@ -1045,6 +1078,22 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                       }
                       rows={4}
                       value={seriesEdit?.synopsis ?? displayedSeriesSynopsis}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>
+                      표지 이미지 <small>PNG/JPG/WebP · 5MB 이하</small>
+                    </span>
+                    <input
+                      accept="image/png,image/jpeg,image/webp"
+                      disabled={coverBusy}
+                      onChange={(event) => {
+                        const input = event.target;
+                        void uploadCover(input.files?.[0]).finally(() => {
+                          input.value = "";
+                        });
+                      }}
+                      type="file"
                     />
                   </label>
                   <button
@@ -1586,13 +1635,27 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
               <li key={episode.id}>
                 {renameTarget?.id === episode.id ? (
                   <>
+                    <label className="field studio-rename-number">
+                      <span>회차 번호</span>
+                      <input
+                        min={1}
+                        onChange={(event) =>
+                          setRenameTarget({
+                            ...renameTarget,
+                            number: Number(event.target.value),
+                          })
+                        }
+                        type="number"
+                        value={renameTarget.number}
+                      />
+                    </label>
                     <label className="field studio-rename-field">
-                      <span>{episode.number}화 제목</span>
+                      <span>에피소드 제목</span>
                       <input
                         maxLength={80}
                         onChange={(event) =>
                           setRenameTarget({
-                            id: episode.id,
+                            ...renameTarget,
                             title: event.target.value,
                           })
                         }
@@ -1621,9 +1684,14 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                 ) : (
                   <>
                     <div>
-                      <strong>{episode.number}화</strong>
+                      <strong>
+                        {episodeOverrides[episode.id]?.number ??
+                          episode.number}
+                        화
+                      </strong>
                       <span>
-                        {renamedTitles[episode.id] ?? episode.title}
+                        {episodeOverrides[episode.id]?.title ??
+                          episode.title}
                       </span>
                     </div>
                     <div className="studio-drafts__actions">
@@ -1638,9 +1706,12 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                         onClick={() =>
                           startReplace({
                             id: episode.id,
-                            number: episode.number,
+                            number:
+                              episodeOverrides[episode.id]?.number ??
+                              episode.number,
                             title:
-                              renamedTitles[episode.id] ?? episode.title,
+                              episodeOverrides[episode.id]?.title ??
+                              episode.title,
                           })
                         }
                         type="button"
@@ -1652,13 +1723,17 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                         onClick={() =>
                           setRenameTarget({
                             id: episode.id,
+                            number:
+                              episodeOverrides[episode.id]?.number ??
+                              episode.number,
                             title:
-                              renamedTitles[episode.id] ?? episode.title,
+                              episodeOverrides[episode.id]?.title ??
+                              episode.title,
                           })
                         }
                         type="button"
                       >
-                        제목 수정
+                        정보 수정
                       </button>
                       <button
                         className="button button--danger"
@@ -1700,13 +1775,27 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
               <li key={draft.id}>
                 {renameTarget?.id === draft.id ? (
                   <>
+                    <label className="field studio-rename-number">
+                      <span>회차 번호</span>
+                      <input
+                        min={1}
+                        onChange={(event) =>
+                          setRenameTarget({
+                            ...renameTarget,
+                            number: Number(event.target.value),
+                          })
+                        }
+                        type="number"
+                        value={renameTarget.number}
+                      />
+                    </label>
                     <label className="field studio-rename-field">
-                      <span>{draft.number}화 제목</span>
+                      <span>에피소드 제목</span>
                       <input
                         maxLength={80}
                         onChange={(event) =>
                           setRenameTarget({
-                            id: draft.id,
+                            ...renameTarget,
                             title: event.target.value,
                           })
                         }
@@ -1753,12 +1842,13 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                         onClick={() =>
                           setRenameTarget({
                             id: draft.id,
+                            number: draft.number,
                             title: draft.title,
                           })
                         }
                         type="button"
                       >
-                        제목 수정
+                        정보 수정
                       </button>
                       <button
                         className="button button--ghost"

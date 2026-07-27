@@ -2844,6 +2844,10 @@ button {
   min-width: 200px;
 }
 
+.studio-rename-number {
+  width: 96px;
+}
+
 .studio-season-manage__list {
   margin: 14px 0 10px;
   padding: 0;

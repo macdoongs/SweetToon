@@ -677,14 +677,14 @@ export const openApiDocument = {
         },
       },
     },
-    "/api/studio/episodes/{episodeId}/title": {
-      patch: {
+    "/api/studio/series/{seriesId}/cover": {
+      post: {
         tags: ["Studio"],
-        summary: "등록된 에피소드의 제목을 수정합니다.",
+        summary: "작품 표지 이미지를 올려 WebP로 교체합니다.",
         security: [{ studioApiKey: [] }, {}],
         parameters: [
           {
-            name: "episodeId",
+            name: "seriesId",
             in: "path",
             required: true,
             schema: { type: "string" },
@@ -693,19 +693,24 @@ export const openApiDocument = {
         requestBody: {
           required: true,
           content: {
-            "application/json": {
+            "multipart/form-data": {
               schema: {
                 type: "object",
-                required: ["title"],
+                required: ["cover"],
                 properties: {
-                  title: { type: "string", minLength: 1, maxLength: 80 },
+                  cover: {
+                    type: "string",
+                    format: "binary",
+                    description: "5MB 이하 PNG/JPG/WebP",
+                  },
                 },
               },
             },
           },
         },
         responses: {
-          "200": { description: "수정된 에피소드 요약" },
+          "200": { description: "새 표지 URL" },
+          "400": { $ref: "#/components/responses/BadRequest" },
           "404": { $ref: "#/components/responses/NotFound" },
         },
       },
@@ -949,6 +954,39 @@ export const openApiDocument = {
       },
     },
     "/api/studio/episodes/{episodeId}": {
+      patch: {
+        tags: ["Studio"],
+        summary: "에피소드 제목이나 회차 번호를 부분 수정합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                minProperties: 1,
+                properties: {
+                  title: { type: "string", minLength: 1, maxLength: 80 },
+                  number: { type: "integer", minimum: 1, maximum: 10000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "수정된 에피소드 요약" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { description: "이미 있는 회차 번호" },
+        },
+      },
       delete: {
         tags: ["Studio"],
         summary: "에피소드와 발행 원고 파일을 삭제합니다.",
@@ -964,6 +1002,9 @@ export const openApiDocument = {
         responses: {
           "204": { description: "삭제 완료" },
           "404": { $ref: "#/components/responses/NotFound" },
+          "409": {
+            description: "캔디로 열람한 독자가 있어 삭제 불가",
+          },
         },
       },
     },

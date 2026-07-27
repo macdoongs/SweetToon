@@ -31,6 +31,11 @@ export type PublishedFiles = {
   imageUrls: string[];
 };
 
+export type PublishedCover = {
+  url: string;
+  location: string;
+};
+
 export interface StudioStorage {
   createSession(
     originalName: string,
@@ -46,6 +51,7 @@ export interface StudioStorage {
     destinationSegments: string[],
     orderedPageIds: string[],
   ): Promise<PublishedFiles>;
+  publishCover(seriesId: string, webp: Buffer): Promise<PublishedCover>;
   removeSession(sessionId: string): Promise<void>;
   removePublished(directory: string): Promise<void>;
   cleanupExpired(): Promise<void>;
@@ -218,6 +224,24 @@ export class FileStudioStorage implements StudioStorage {
       fs.rmSync(destination, { recursive: true, force: true });
       throw error;
     }
+  }
+
+  async publishCover(
+    seriesId: string,
+    webp: Buffer,
+  ): Promise<PublishedCover> {
+    if (!/^[a-zA-Z0-9_-]+$/.test(seriesId)) {
+      throw new Error("Unsafe storage destination");
+    }
+    const coverDir = path.join(this.uploadDir, "studio", "covers");
+    fs.mkdirSync(coverDir, { recursive: true });
+    const fileName = `${seriesId}-${crypto.randomUUID()}.webp`;
+    const filePath = path.join(coverDir, fileName);
+    fs.writeFileSync(filePath, webp, { flag: "wx" });
+    return {
+      url: `/api/images/studio/covers/${fileName}`,
+      location: filePath,
+    };
   }
 
   async removeSession(sessionId: string): Promise<void> {

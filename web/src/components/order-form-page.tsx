@@ -75,6 +75,10 @@ export function OrderFormPage({
   }
 
   async function requestQuote() {
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50) {
+      setError("수량은 1권부터 50권까지 입력할 수 있어요.");
+      return;
+    }
     setBusy("quote");
     setError(null);
     try {
@@ -85,7 +89,7 @@ export function OrderFormPage({
       setQuote(result);
     } catch (reason) {
       setError(
-        reason instanceof Error
+        reason instanceof ApiError
           ? reason.message
           : "견적을 계산하지 못했습니다.",
       );

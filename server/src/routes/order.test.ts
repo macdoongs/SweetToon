@@ -153,6 +153,24 @@ describe("order routes", () => {
     expect(response.body.code).toBe("INVALID_PRINT_SPECIFICATION");
   });
 
+  it("surfaces a field-level Korean message for an out-of-range quantity", async () => {
+    const response = await request(makeApp())
+      .post("/api/print-quotes")
+      .send({
+        seasonId: "cmseason00000000000000001",
+        volumeNumber: 1,
+        bookSize: "A5",
+        coverType: "hardcover",
+        quantity: 999,
+      })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_PRINT_SPECIFICATION");
+    expect(response.body.message).toBe(
+      "수량은 한 번에 50권까지 주문할 수 있어요.",
+    );
+  });
+
   it("creates and lists persistent orders through the use case boundary", async () => {
     const service = makeService();
     const app = makeApp(service);

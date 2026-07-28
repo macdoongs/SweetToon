@@ -23,8 +23,16 @@ export const CreateEpisodeRequestSchema = z.object({
   requestKey: z.string().uuid(),
   sessionId: UploadSessionIdSchema,
   seasonId: z.string().min(1).max(80),
-  number: z.number().int().positive().max(10_000),
-  title: z.string().trim().min(1).max(80),
+  number: z
+    .number("회차 번호는 숫자로 입력해 주세요.")
+    .int("회차 번호는 정수로 입력해 주세요.")
+    .positive("회차 번호는 1 이상 입력해 주세요.")
+    .max(10_000, "회차 번호는 10000 이하로 입력해 주세요."),
+  title: z
+    .string("회차 제목을 입력해 주세요.")
+    .trim()
+    .min(1, "회차 제목을 입력해 주세요.")
+    .max(80, "회차 제목은 80자 이하로 입력해 주세요."),
   pageIds: z.array(UploadPageIdSchema).min(1).max(80),
   visibility: EpisodeVisibilitySchema.default("public"),
 });
@@ -43,8 +51,18 @@ export const UpdateEpisodeVisibilityRequestSchema = z.object({
 
 export const UpdateEpisodeRequestSchema = z
   .object({
-    title: z.string().trim().min(1).max(80).optional(),
-    number: z.number().int().positive().max(10_000).optional(),
+    title: z
+      .string("회차 제목을 입력해 주세요.")
+      .trim()
+      .min(1, "회차 제목을 입력해 주세요.")
+      .max(80, "회차 제목은 80자 이하로 입력해 주세요.")
+      .optional(),
+    number: z
+      .number("회차 번호는 숫자로 입력해 주세요.")
+      .int("회차 번호는 정수로 입력해 주세요.")
+      .positive("회차 번호는 1 이상 입력해 주세요.")
+      .max(10_000, "회차 번호는 10000 이하로 입력해 주세요.")
+      .optional(),
   })
   .refine(
     (value) => value.title !== undefined || value.number !== undefined,
@@ -90,11 +108,30 @@ export const CreateSeriesRequestSchema = z.object({
       /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
       "slug는 영문 소문자, 숫자, 하이픈만 쓸 수 있어요.",
     ),
-  title: z.string().trim().min(1).max(80),
-  synopsis: z.string().trim().min(1).max(1000),
-  genre: z.string().trim().min(1).max(40),
-  weekday: z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]),
-  authorName: z.string().trim().min(1).max(40),
+  title: z
+    .string("작품 제목을 입력해 주세요.")
+    .trim()
+    .min(1, "작품 제목을 입력해 주세요.")
+    .max(80, "작품 제목은 80자 이하로 입력해 주세요."),
+  synopsis: z
+    .string("줄거리를 입력해 주세요.")
+    .trim()
+    .min(1, "줄거리를 입력해 주세요.")
+    .max(1000, "줄거리는 1000자 이하로 입력해 주세요."),
+  genre: z
+    .string("장르를 입력해 주세요.")
+    .trim()
+    .min(1, "장르를 입력해 주세요.")
+    .max(40, "장르는 40자 이하로 입력해 주세요."),
+  weekday: z.enum(
+    ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+    "연재 요일을 선택해 주세요.",
+  ),
+  authorName: z
+    .string("작가 이름을 입력해 주세요.")
+    .trim()
+    .min(1, "작가 이름을 입력해 주세요.")
+    .max(40, "작가 이름은 40자 이하로 입력해 주세요."),
 });
 
 export const CreateSeriesResponseSchema = z.object({
@@ -149,12 +186,29 @@ export const CreatePackagingRequestSchema = z.object({
   requestKey: z.string().uuid(),
   sessionId: UploadSessionIdSchema,
   pageIds: z.array(UploadPageIdSchema).min(1).max(80),
-  applicantName: z.string().trim().min(2).max(40),
-  bookTitle: z.string().trim().min(1).max(80),
+  applicantName: z
+    .string("신청자 이름을 입력해 주세요.")
+    .trim()
+    .min(2, "신청자 이름은 2자 이상 입력해 주세요.")
+    .max(40, "신청자 이름은 40자 이하로 입력해 주세요."),
+  bookTitle: z
+    .string("책 제목을 입력해 주세요.")
+    .trim()
+    .min(1, "책 제목을 입력해 주세요.")
+    .max(80, "책 제목은 80자 이하로 입력해 주세요."),
   bookSize: PackagingBookSizeSchema,
   coverType: PackagingCoverTypeSchema,
-  quantity: z.number().int().min(1).max(500),
-  memo: z.string().trim().max(500).nullable().optional(),
+  quantity: z
+    .number("수량은 숫자로 입력해 주세요.")
+    .int("수량은 정수로 입력해 주세요.")
+    .min(1, "수량은 1권 이상 입력해 주세요.")
+    .max(500, "수량은 한 번에 500권까지 신청할 수 있어요."),
+  memo: z
+    .string()
+    .trim()
+    .max(500, "메모는 500자 이하로 적어 주세요.")
+    .nullable()
+    .optional(),
 });
 
 export const PackagingRequestSchema = z.object({
@@ -180,8 +234,16 @@ export const UpdatePackagingStatusRequestSchema = z.object({
 });
 
 export const AccessPolicySchema = z.object({
-  freeVolumeCount: z.number().int().min(0).max(20),
-  previewEpisodeCount: z.number().int().min(0).max(4),
+  freeVolumeCount: z
+    .number("무료 공개 권 수는 숫자로 입력해 주세요.")
+    .int("무료 공개 권 수는 정수로 입력해 주세요.")
+    .min(0, "무료 공개 권 수는 0 이상 입력해 주세요.")
+    .max(20, "무료 공개 권 수는 20 이하로 입력해 주세요."),
+  previewEpisodeCount: z
+    .number("미리보기 회차 수는 숫자로 입력해 주세요.")
+    .int("미리보기 회차 수는 정수로 입력해 주세요.")
+    .min(0, "미리보기 회차 수는 0 이상 입력해 주세요.")
+    .max(4, "미리보기 회차 수는 4 이하로 입력해 주세요."),
 });
 
 export const AccessPolicyResponseSchema = AccessPolicySchema.extend({

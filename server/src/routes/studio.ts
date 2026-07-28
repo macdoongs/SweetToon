@@ -28,6 +28,7 @@ import {
   UploadPreviewSchema,
   UploadSessionIdSchema,
 } from "../contracts/studio";
+import { fieldIssueMessage } from "../contracts/validation";
 import { ARCHIVE_LIMITS } from "../uploads/archive-analyzer";
 import { COVER_MAX_BYTES } from "../uploads/cover-image";
 import type { StudioUseCases } from "../services/studio-service";
@@ -36,6 +37,34 @@ import {
   auditSecurityAction,
   type SecurityAuditLogger,
 } from "../security/audit-logger";
+
+const episodeFieldLabels = {
+  number: "회차 번호",
+  title: "회차 제목",
+};
+
+const seriesFieldLabels = {
+  slug: "slug",
+  title: "작품 제목",
+  synopsis: "줄거리",
+  genre: "장르",
+  weekday: "연재 요일",
+  authorName: "작가 이름",
+};
+
+const packagingFieldLabels = {
+  applicantName: "신청자 이름",
+  bookTitle: "책 제목",
+  bookSize: "판형",
+  coverType: "표지",
+  quantity: "수량",
+  memo: "메모",
+};
+
+const accessPolicyFieldLabels = {
+  freeVolumeCount: "무료 공개 권 수",
+  previewEpisodeCount: "미리보기 회차 수",
+};
 
 const archiveUpload = multer({
   storage: multer.memoryStorage(),
@@ -150,7 +179,11 @@ export function createStudioRouter(
       if (!input.success) {
         res.status(400).json({
           code: "INVALID_EPISODE",
-          message: "시즌, 회차, 제목과 페이지 순서를 다시 확인해 주세요.",
+          message: fieldIssueMessage(
+            input.error,
+            episodeFieldLabels,
+            "시즌, 회차, 제목과 페이지 순서를 다시 확인해 주세요.",
+          ),
         });
         return;
       }
@@ -199,8 +232,13 @@ export function createStudioRouter(
       if (!episodeId.success || !input.success) {
         res.status(400).json({
           code: "INVALID_EPISODE_UPDATE",
-          message:
-            "제목(80자 이하)이나 회차 번호(1 이상)를 한 가지 이상 보내 주세요.",
+          message: input.success
+            ? "에피소드 주소가 올바르지 않습니다."
+            : fieldIssueMessage(
+                input.error,
+                episodeFieldLabels,
+                "제목(80자 이하)이나 회차 번호(1 이상)를 한 가지 이상 보내 주세요.",
+              ),
         });
         return;
       }
@@ -281,7 +319,11 @@ export function createStudioRouter(
       if (!input.success) {
         res.status(400).json({
           code: "INVALID_PACKAGING_REQUEST",
-          message: "신청자, 책 제목, 판형과 페이지 순서를 다시 확인해 주세요.",
+          message: fieldIssueMessage(
+            input.error,
+            packagingFieldLabels,
+            "신청자, 책 제목, 판형과 페이지 순서를 다시 확인해 주세요.",
+          ),
         });
         return;
       }
@@ -381,8 +423,11 @@ export function createStudioRouter(
       if (!input.success) {
         res.status(400).json({
           code: "INVALID_SERIES",
-          message:
+          message: fieldIssueMessage(
+            input.error,
+            seriesFieldLabels,
             "slug(영문 소문자·숫자·하이픈), 제목, 줄거리, 장르, 요일, 작가 이름을 다시 확인해 주세요.",
+          ),
         });
         return;
       }
@@ -427,8 +472,13 @@ export function createStudioRouter(
       if (!seriesId.success || !input.success) {
         res.status(400).json({
           code: "INVALID_SERIES_INFO",
-          message:
-            "작품 제목(80자 이하)이나 줄거리(1000자 이하)를 다시 확인해 주세요.",
+          message: input.success
+            ? "작품 주소가 올바르지 않습니다."
+            : fieldIssueMessage(
+                input.error,
+                seriesFieldLabels,
+                "작품 제목(80자 이하)이나 줄거리(1000자 이하)를 다시 확인해 주세요.",
+              ),
         });
         return;
       }
@@ -450,7 +500,13 @@ export function createStudioRouter(
     if (!seriesId.success || !input.success) {
       res.status(400).json({
         code: "INVALID_ACCESS_POLICY",
-        message: "무료 공개 권 수와 미리보기 화 수를 다시 확인해 주세요.",
+        message: input.success
+          ? "작품 주소가 올바르지 않습니다."
+          : fieldIssueMessage(
+              input.error,
+              accessPolicyFieldLabels,
+              "무료 공개 권 수와 미리보기 화 수를 다시 확인해 주세요.",
+            ),
       });
       return;
     }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useRef, useState } from "react";
 import { ApiError, postJson } from "@/lib/api";
+import { isUncertainRequestError } from "@/lib/api";
 import type {
   BookSize,
   CoverType,
@@ -18,6 +19,12 @@ import {
   getCandyWalletToken,
   notifyCandyUpdated,
 } from "@/lib/candy-wallet";
+import {
+  clearOrderAttempt,
+  getOrCreateOrderAttempt,
+  type OrderAttempt,
+  orderAttemptStorageKey,
+} from "@/lib/order-attempt";
 
 const won = new Intl.NumberFormat("ko-KR", {
   style: "currency",
@@ -39,7 +46,8 @@ export function OrderFormPage({
   volumeEpisodes: Season["episodes"];
 }) {
   const router = useRouter();
-  const requestKey = useRef<string | null>(null);
+  const orderAttempt = useRef<OrderAttempt | null>(null);
+  const attemptStorageKey = orderAttemptStorageKey(season.id, volumeNumber);
   const [bookSize, setBookSize] = useState<BookSize>("A5");
   const [coverType, setCoverType] = useState<CoverType>("softcover");
   const [quantity, setQuantity] = useState(1);
@@ -60,7 +68,10 @@ export function OrderFormPage({
   function invalidateQuote() {
     setQuote(null);
     setError(null);
-    requestKey.current = null;
+    if (busy !== "order") {
+      orderAttempt.current = null;
+      clearOrderAttempt(attemptStorageKey);
+    }
   }
 
   async function requestQuote() {
@@ -94,33 +105,51 @@ export function OrderFormPage({
       return;
     }
 
-    requestKey.current ??= crypto.randomUUID();
+    const payload: Omit<CreateOrderRequest, "requestKey"> = {
+      ...specification,
+      candyWalletToken: getCandyWalletToken(),
+      ordererName: ordererName.trim(),
+      memo: memo.trim() || null,
+    };
+    const attempt = getOrCreateOrderAttempt(
+      attemptStorageKey,
+      payload,
+      orderAttempt.current,
+    );
+    orderAttempt.current = attempt;
     setBusy("order");
     setError(null);
     try {
       const created = await postJson<CreateOrderRequest, OrderReceipt>(
         "/api/orders",
         {
-          ...specification,
-          requestKey: requestKey.current,
-          candyWalletToken: getCandyWalletToken(),
-          ordererName: ordererName.trim(),
-          memo: memo.trim() || null,
+          requestKey: attempt.requestKey,
+          ...payload,
         },
       );
-      saveDemoEntitlement(
+      orderAttempt.current = null;
+      clearOrderAttempt(attemptStorageKey);
+      const entitlementSaved = saveDemoEntitlement(
         season.id,
         volumeNumber,
         created.entitlementToken,
       );
       if (created.candyBonus > 0) notifyCandyUpdated();
-      router.push(`/orders/${encodeURIComponent(created.id)}`);
+      const storageNotice = entitlementSaved ? "" : "?storage=unavailable";
+      router.push(
+        `/orders/${encodeURIComponent(created.id)}${storageNotice}`,
+      );
     } catch (reason) {
       if (
-        reason instanceof ApiError &&
-        reason.code === "PRINT_SUBMISSION_FAILED"
+        !isUncertainRequestError(reason) &&
+        !(
+          reason instanceof ApiError &&
+          reason.status >= 500 &&
+          reason.code !== "PRINT_SUBMISSION_FAILED"
+        )
       ) {
-        requestKey.current = null;
+        orderAttempt.current = null;
+        clearOrderAttempt(attemptStorageKey);
       }
       setError(
         reason instanceof ApiError
@@ -169,6 +198,7 @@ export function OrderFormPage({
                   <label className="choice-card" key={size}>
                     <input
                       checked={bookSize === size}
+                      disabled={busy === "order"}
                       name="bookSize"
                       onChange={() => {
                         setBookSize(size);
@@ -195,6 +225,7 @@ export function OrderFormPage({
                   <label className="choice-card" key={cover}>
                     <input
                       checked={coverType === cover}
+                      disabled={busy === "order"}
                       name="coverType"
                       onChange={() => {
                         setCoverType(cover);
@@ -221,6 +252,7 @@ export function OrderFormPage({
               <input
                 max={50}
                 min={1}
+                disabled={busy === "order"}
                 onChange={(event) => {
                   setQuantity(Number(event.target.value));
                   invalidateQuote();
@@ -244,6 +276,7 @@ export function OrderFormPage({
               <span>주문자 닉네임</span>
               <input
                 autoComplete="off"
+                disabled={busy === "order"}
                 maxLength={30}
                 minLength={2}
                 onChange={(event) => setOrdererName(event.target.value)}
@@ -256,6 +289,7 @@ export function OrderFormPage({
               <span>제작 메모 <small>선택</small></span>
               <textarea
                 maxLength={200}
+                disabled={busy === "order"}
                 onChange={(event) => setMemo(event.target.value)}
                 placeholder="개인정보 없이 제작 참고사항만 남겨 주세요."
                 rows={4}

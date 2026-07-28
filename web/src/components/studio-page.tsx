@@ -355,6 +355,14 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
 
   async function saveAccessPolicy() {
     if (!selectedSeries || !selectedPolicy) return;
+    if (
+      !Number.isInteger(selectedPolicy.freeVolumeCount) ||
+      selectedPolicy.freeVolumeCount < 0 ||
+      selectedPolicy.freeVolumeCount > 20
+    ) {
+      setPolicyMessage("무료 공개 권수는 0에서 20 사이 숫자여야 해요.");
+      return;
+    }
     setPolicyBusy(true);
     setPolicyMessage(null);
     try {
@@ -443,6 +451,10 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
 
   async function publishEpisode() {
     if (!preview || !selectedSeason) return;
+    if (!Number.isInteger(episodeNumber) || episodeNumber < 1) {
+      setError("회차 번호는 1 이상의 숫자여야 해요.");
+      return;
+    }
     // 제목을 비워 두면 회차 번호로 자동 지정한다. 등록 뒤에도 수정할 수 있다.
     const resolvedTitle = title.trim() || `${episodeNumber}화`;
     const visibility = purpose === "draft" ? "private" : "public";
@@ -560,6 +572,19 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
 
   async function uploadCover(file: File | undefined) {
     if (!selectedSeries || !file) return;
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+    if (
+      !["png", "jpg", "jpeg", "webp"].includes(extension ?? "") ||
+      (file.type !== "" && !allowedTypes.has(file.type))
+    ) {
+      setSeriesEditMessage("PNG, JPG 또는 WebP 표지 이미지를 선택해 주세요.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSeriesEditMessage("표지 이미지는 5MB 이하로 올려 주세요.");
+      return;
+    }
     setCoverBusy(true);
     setSeriesEditMessage(null);
     const formData = new FormData();
@@ -1178,7 +1203,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                           ...current,
                           [selectedSeries.id]: {
                             ...selectedPolicy,
-                            freeVolumeCount: Number(event.target.value),
+                            freeVolumeCount: event.target.valueAsNumber || 0,
                           },
                         }))
                       }
@@ -1239,7 +1264,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                   <input
                     min={1}
                     onChange={(event) =>
-                      setEpisodeNumber(Number(event.target.value))
+                      setEpisodeNumber(event.target.valueAsNumber || 0)
                     }
                     type="number"
                     value={episodeNumber}

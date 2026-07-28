@@ -97,6 +97,7 @@ model Page {
 model Order {
   id                    String            @id @default(cuid())
   requestKey            String?           @unique
+  requestFingerprint    String?
   entitlementToken      String            @unique @default(uuid())
   providerOrderId       String?           @unique
   candyWalletToken      String?

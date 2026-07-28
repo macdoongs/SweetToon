@@ -19,7 +19,13 @@ const won = new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
 });
 
-export function OrderDetailPage({ order }: { order: OrderDetail }) {
+export function OrderDetailPage({
+  order,
+  browserStorageUnavailable = false,
+}: {
+  order: OrderDetail;
+  browserStorageUnavailable?: boolean;
+}) {
   const [liveOrder, setLiveOrder] = useState(order);
   const [connection, setConnection] = useState<
     "connecting" | "live" | "retrying"
@@ -74,6 +80,12 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
             : "수록 회차도 이 브라우저에서 바로 열렸어요."}
         </p>
       </header>
+      {browserStorageUnavailable ? (
+        <p className="form-error" role="alert">
+          주문은 정상 접수됐지만 이 브라우저에 디지털 이용권을 저장하지
+          못했어요. 브라우저 저장소 설정을 확인해 주세요.
+        </p>
+      ) : null}
 
       <div className="order-detail-grid">
         <section className="order-detail-card">

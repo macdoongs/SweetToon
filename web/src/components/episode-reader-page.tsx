@@ -47,6 +47,63 @@ const READER_CHROME_HIDE_DELAY_MS = 2400;
 const MOBILE_VIEWPORT_QUERY = "(max-width: 900px)";
 const LANDSCAPE_QUERY = "(orientation: landscape)";
 
+function RecoverablePageImage({
+  page,
+  title,
+  sizes,
+  preload = false,
+  thumbnail = false,
+}: {
+  page: Page;
+  title: string;
+  sizes: string;
+  preload?: boolean;
+  thumbnail?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  if (failed) {
+    return thumbnail ? (
+      <span className="reader-image-error reader-image-error--thumbnail">
+        미리보기 실패
+      </span>
+    ) : (
+      <div className="reader-image-error" role="alert">
+        <strong>{page.order}쪽 이미지를 불러오지 못했어요.</strong>
+        <button
+          className="button button--ghost"
+          onClick={() => {
+            setAttempt((current) => current + 1);
+            setFailed(false);
+          }}
+          type="button"
+        >
+          이미지 다시 불러오기
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <Image
+      alt={
+        thumbnail
+          ? `${page.order}쪽 미리보기`
+          : `${title} ${page.order}번째 페이지`
+      }
+      height={thumbnail ? 180 : 1200}
+      key={`${page.id}-${attempt}`}
+      onError={() => setFailed(true)}
+      preload={preload}
+      sizes={sizes}
+      src={page.imageUrl}
+      unoptimized={isExternalImage(page.imageUrl)}
+      width={thumbnail ? 120 : 800}
+    />
+  );
+}
+
 function isExternalImage(url: string) {
   return /^https?:\/\//i.test(url);
 }
@@ -976,14 +1033,11 @@ export function EpisodeReaderPage({
         >
           {episode.pages.map((page) => (
             <div className="webtoon-strip__cut" id={`page-${page.order}`} key={page.id}>
-              <Image
-                alt={`${episode.title} ${page.order}번째 컷`}
-                height={1200}
+              <RecoverablePageImage
+                page={page}
                 preload={page.order <= 2}
                 sizes="min(100vw, 800px)"
-                src={page.imageUrl}
-                unoptimized={isExternalImage(page.imageUrl)}
-                width={800}
+                title={episode.title}
               />
             </div>
           ))}
@@ -1016,15 +1070,12 @@ export function EpisodeReaderPage({
             }
           >
             {(spreads[spreadIndex] ?? []).map((page) => (
-              <Image
-                alt={`${episode.title} ${page.order}번째 페이지`}
-                height={1200}
+              <RecoverablePageImage
                 key={page.id}
+                page={page}
                 preload
                 sizes="(max-width: 900px) 100vw, min(46vw, 800px)"
-                src={page.imageUrl}
-                unoptimized={isExternalImage(page.imageUrl)}
-                width={800}
+                title={episode.title}
               />
             ))}
           </div>
@@ -1073,13 +1124,11 @@ export function EpisodeReaderPage({
                   setThumbnailsOpen(false);
                 }}
               >
-                <Image
-                  alt={`${page.order}쪽 미리보기`}
-                  height={180}
+                <RecoverablePageImage
+                  page={page}
                   sizes="120px"
-                  src={page.imageUrl}
-                  unoptimized={isExternalImage(page.imageUrl)}
-                  width={120}
+                  thumbnail
+                  title={episode.title}
                 />
                 <span>{page.order}</span>
               </button>

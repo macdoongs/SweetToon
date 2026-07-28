@@ -19,10 +19,10 @@ export function saveDemoEntitlement(
   seasonId: string,
   volumeNumber: number,
   token: string,
-) {
+): boolean {
   const current = readEntitlements();
   current[entitlementKey(seasonId, volumeNumber)] = token;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  return writeLocalStorage(STORAGE_KEY, JSON.stringify(current));
 }
 
 export function getDemoEntitlement(
@@ -38,3 +38,4 @@ export function hasDemoEntitlement(
 ): boolean {
   return Boolean(getDemoEntitlement(seasonId, volumeNumber));
 }
+import { writeLocalStorage } from "./local-storage";

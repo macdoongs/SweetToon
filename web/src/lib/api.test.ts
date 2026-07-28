@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getJson } from "./api";
+import { ApiError, deleteRequest, getJson } from "./api";
 
 describe("client API network handling", () => {
   afterEach(() => {
@@ -54,6 +54,30 @@ describe("client API network handling", () => {
     await expect(getJson("/api/example")).rejects.toMatchObject({
       code: "INVALID_RESPONSE",
       status: 200,
+    });
+  });
+
+  it("preserves a delete error code and Korean server message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: "EPISODE_HAS_ENTITLEMENTS",
+            message: "대신 비공개로 전환해 주세요.",
+          }),
+          {
+            status: 409,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    await expect(deleteRequest("/api/studio/episodes/1")).rejects.toMatchObject({
+      code: "EPISODE_HAS_ENTITLEMENTS",
+      message: "대신 비공개로 전환해 주세요.",
+      status: 409,
     });
   });
 });

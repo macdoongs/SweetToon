@@ -208,6 +208,13 @@ export function createApp({
     );
   }
 
+  app.use("/api", (_req, res) => {
+    res.status(404).json({
+      code: "API_NOT_FOUND",
+      message: "요청한 API를 찾을 수 없습니다.",
+    });
+  });
+
   app.use(
     (
       error: unknown,
@@ -243,13 +250,31 @@ export function createApp({
         });
         return;
       }
-      if (error instanceof multer.MulterError) {
+      if (
+        error instanceof SyntaxError &&
+        "type" in error &&
+        error.type === "entity.parse.failed"
+      ) {
         res.status(400).json({
-          code: "ARCHIVE_UPLOAD_REJECTED",
+          code: "INVALID_JSON",
+          message: "JSON 요청 본문이 올바르지 않습니다.",
+        });
+        return;
+      }
+      if (error instanceof multer.MulterError) {
+        const isCover = error.field === "cover";
+        res.status(400).json({
+          code: isCover
+            ? "COVER_UPLOAD_REJECTED"
+            : "ARCHIVE_UPLOAD_REJECTED",
           message:
             error.code === "LIMIT_FILE_SIZE"
-              ? "ZIP 파일은 25MB 이하로 올려 주세요."
-              : "ZIP 파일 하나만 올려 주세요.",
+              ? isCover
+                ? "표지 이미지는 5MB 이하로 올려 주세요."
+                : "ZIP 파일은 25MB 이하로 올려 주세요."
+              : isCover
+                ? "표지 이미지 하나만 올려 주세요."
+                : "ZIP 파일 하나만 올려 주세요.",
         });
         return;
       }

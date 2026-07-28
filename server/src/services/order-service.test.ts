@@ -83,12 +83,21 @@ function orderFixture(overrides: Partial<OrderReceipt> = {}): OrderReceipt {
 
 function makeDependencies() {
   let savedOrder: OrderReceipt | null = null;
+  let savedFingerprint: string | null = null;
   const repository: jest.Mocked<OrderRepository> = {
     findOrderableSeason: jest.fn().mockResolvedValue(season),
-    findByRequestKey: jest.fn().mockImplementation(async () => savedOrder),
+    findByRequestKey: jest.fn().mockImplementation(async () =>
+      savedOrder
+        ? {
+            requestFingerprint: savedFingerprint,
+            receipt: savedOrder,
+          }
+        : null,
+    ),
     createPendingOrder: jest
       .fn()
-      .mockImplementation(async (_input: CreatePendingOrderInput) => {
+      .mockImplementation(async (pendingInput: CreatePendingOrderInput) => {
+        savedFingerprint = pendingInput.requestFingerprint;
         savedOrder = orderFixture();
         return savedOrder;
       }),
@@ -196,20 +205,36 @@ describe("OrderService", () => {
 
   it("returns the existing order for a repeated request key", async () => {
     const { service, repository, provider } = makeDependencies();
-    repository.findByRequestKey.mockResolvedValue(orderFixture());
+    const first = await service.create(input);
 
     const existing = await service.create(input);
 
-    expect(existing.id).toBe("cmorder000000000000000001");
-    expect(repository.createPendingOrder).not.toHaveBeenCalled();
-    expect(provider.createOrder).not.toHaveBeenCalled();
+    expect(existing.id).toBe(first.id);
+    expect(repository.createPendingOrder).toHaveBeenCalledTimes(1);
+    expect(provider.createOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a repeated request key with different order content", async () => {
+    const { service, repository } = makeDependencies();
+    await service.create(input);
+
+    await expect(
+      service.create({ ...input, quantity: 2 }),
+    ).rejects.toMatchObject({
+      code: "IDEMPOTENCY_KEY_REUSED",
+      status: 409,
+    } satisfies Partial<OrderServiceError>);
+    expect(repository.createPendingOrder).toHaveBeenCalledTimes(1);
   });
 
   it("returns the winning order when concurrent requests race", async () => {
     const { service, repository, provider } = makeDependencies();
     repository.findByRequestKey
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(orderFixture());
+      .mockResolvedValueOnce({
+        requestFingerprint: null,
+        receipt: orderFixture(),
+      });
     repository.createPendingOrder.mockRejectedValue(
       new Error("unique request key"),
     );

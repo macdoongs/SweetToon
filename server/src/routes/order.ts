@@ -10,6 +10,7 @@ import {
   PrintQuoteRequestSchema,
   PrintQuoteResponseSchema,
 } from "../contracts/order";
+import { fieldIssueMessage } from "../contracts/validation";
 import type { OrderUseCases } from "../services/order-service";
 import {
   NoopSecurityAuditLogger,
@@ -26,6 +27,14 @@ type OrderRouterOptions = {
 
 const allowRequest: RequestHandler = (_req, _res, next) => next();
 
+const orderFieldLabels = {
+  bookSize: "판형",
+  coverType: "표지",
+  quantity: "수량",
+  ordererName: "주문자 닉네임",
+  memo: "메모",
+};
+
 export function createOrderRouter(
   service: OrderUseCases,
   {
@@ -41,7 +50,11 @@ export function createOrderRouter(
     if (!input.success) {
       res.status(400).json({
         code: "INVALID_PRINT_SPECIFICATION",
-        message: "판형, 표지와 수량을 다시 확인해 주세요.",
+        message: fieldIssueMessage(
+          input.error,
+          orderFieldLabels,
+          "판형, 표지와 수량을 다시 확인해 주세요.",
+        ),
       });
       return;
     }
@@ -53,7 +66,11 @@ export function createOrderRouter(
     if (!input.success) {
       res.status(400).json({
         code: "INVALID_ORDER",
-        message: "주문자와 소장본 정보를 다시 확인해 주세요.",
+        message: fieldIssueMessage(
+          input.error,
+          orderFieldLabels,
+          "주문자와 소장본 정보를 다시 확인해 주세요.",
+        ),
       });
       return;
     }

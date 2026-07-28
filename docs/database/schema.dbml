@@ -87,6 +87,7 @@ Table Page {
 Table Order {
   id String [pk]
   requestKey String [unique]
+  requestFingerprint String
   entitlementToken String [unique, not null]
   providerOrderId String [unique]
   candyWalletToken String

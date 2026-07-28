@@ -1,5 +1,41 @@
 import { expect, test } from "@playwright/test";
 
+test("없는 경로를 한국어 404와 홈 복귀 동선으로 안내한다", async ({ page }) => {
+  await page.goto("/series/does-not-exist");
+
+  await expect(
+    page.getByRole("heading", { name: "페이지를 찾을 수 없어요" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "홈으로 돌아가기" })).toHaveAttribute(
+    "href",
+    "/",
+  );
+});
+
+test("뷰어 이미지 실패를 알리고 개별 이미지를 다시 불러온다", async ({
+  page,
+}) => {
+  const detailResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  const detail = await detailResponse.json();
+  const episodeId = detail.seasons[0].episodes[0].id as string;
+  await page.route("**/_next/image**", (route) => route.abort("failed"));
+
+  await page.goto(`/read/${encodeURIComponent(episodeId)}`);
+  const firstPageError = page
+    .locator(".reader-image-error")
+    .filter({ hasText: "1쪽 이미지를 불러오지 못했어요." });
+  const retry = firstPageError.getByRole("button", {
+    name: "이미지 다시 불러오기",
+  });
+  await expect(retry).toBeVisible();
+
+  await page.unroute("**/_next/image**");
+  await retry.click();
+  await expect(firstPageError).toHaveCount(0);
+});
+
 test("캔디 지갑 조회 실패를 알리고 다시 시도한다", async ({ page }) => {
   let failWallet = true;
   await page.route("**/api/candy-wallets/*", async (route) => {

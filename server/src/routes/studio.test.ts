@@ -451,6 +451,18 @@ describe("studio routes", () => {
     expect(response.body.code).toBe("COVER_REQUIRED");
   });
 
+  it("uses a cover-specific message when the image is too large", async () => {
+    const response = await request(app())
+      .post("/api/studio/series/series-1/cover")
+      .attach("cover", Buffer.alloc(5 * 1024 * 1024 + 1), "cover.png")
+      .expect(400);
+
+    expect(response.body).toEqual({
+      code: "COVER_UPLOAD_REJECTED",
+      message: "표지 이미지는 5MB 이하로 올려 주세요.",
+    });
+  });
+
   it("replaces episode pages from a new upload session", async () => {
     const service = studioService();
     const response = await request(app(service))

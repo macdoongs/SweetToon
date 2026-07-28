@@ -240,7 +240,11 @@ export class PrismaStudioRepository implements StudioRepository {
   }
 
   async deleteEpisode(id: string): Promise<void> {
-    await this.prisma.episode.delete({ where: { id } }).catch(() => undefined);
+    try {
+      await this.prisma.episode.delete({ where: { id } });
+    } catch (error) {
+      if (!isPrismaNotFound(error)) throw error;
+    }
   }
 
   async updateAccessPolicy(
@@ -248,13 +252,13 @@ export class PrismaStudioRepository implements StudioRepository {
     freeVolumeCount: number,
     previewEpisodeCount: number,
   ): Promise<AccessPolicyResponse | null> {
-    const updated = await this.prisma.series
-      .update({
+    const updated = await nullWhenNotFound(
+      this.prisma.series.update({
         where: { id: seriesId },
         data: { freeVolumeCount, previewEpisodeCount },
         select: { id: true, freeVolumeCount: true, previewEpisodeCount: true },
-      })
-      .catch(() => null);
+      }),
+    );
     return updated
       ? {
           seriesId: updated.id,
@@ -268,13 +272,13 @@ export class PrismaStudioRepository implements StudioRepository {
     episodeId: string,
     visibility: EpisodeVisibility,
   ): Promise<DraftEpisode | null> {
-    const updated = await this.prisma.episode
-      .update({
+    const updated = await nullWhenNotFound(
+      this.prisma.episode.update({
         where: { id: episodeId },
         data: { visibility },
         include: { season: { include: { series: true } } },
-      })
-      .catch(() => null);
+      }),
+    );
     return updated ? toDraftEpisode(updated) : null;
   }
 
@@ -299,7 +303,8 @@ export class PrismaStudioRepository implements StudioRepository {
       ) {
         throw new StudioRepositoryError("EPISODE_NUMBER_EXISTS");
       }
-      return null;
+      if (isPrismaNotFound(error)) return null;
+      throw error;
     }
   }
 
@@ -313,13 +318,13 @@ export class PrismaStudioRepository implements StudioRepository {
     seriesId: string,
     coverUrl: string,
   ): Promise<SeriesCoverResponse | null> {
-    const updated = await this.prisma.series
-      .update({
+    const updated = await nullWhenNotFound(
+      this.prisma.series.update({
         where: { id: seriesId },
         data: { coverUrl },
         select: { id: true, coverUrl: true },
-      })
-      .catch(() => null);
+      }),
+    );
     return updated && updated.coverUrl
       ? { seriesId: updated.id, coverUrl: updated.coverUrl }
       : null;
@@ -400,13 +405,13 @@ export class PrismaStudioRepository implements StudioRepository {
     seasonId: string,
     status: SeasonStatus,
   ): Promise<StudioSeasonResponse | null> {
-    const updated = await this.prisma.season
-      .update({
+    const updated = await nullWhenNotFound(
+      this.prisma.season.update({
         where: { id: seasonId },
         data: { status },
         select: { id: true, seriesId: true, number: true, status: true },
-      })
-      .catch(() => null);
+      }),
+    );
     return updated ? toStudioSeasonResponse(updated) : null;
   }
 
@@ -430,8 +435,15 @@ export class PrismaStudioRepository implements StudioRepository {
         });
         return toStudioSeasonResponse(created);
       });
-    } catch {
-      return null;
+    } catch (error) {
+      if (
+        isPrismaNotFound(error) ||
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2003")
+      ) {
+        return null;
+      }
+      throw error;
     }
   }
 
@@ -439,8 +451,8 @@ export class PrismaStudioRepository implements StudioRepository {
     seriesId: string,
     input: UpdateSeriesInfoRequest,
   ): Promise<SeriesInfoResponse | null> {
-    const updated = await this.prisma.series
-      .update({
+    const updated = await nullWhenNotFound(
+      this.prisma.series.update({
         where: { id: seriesId },
         data: {
           ...(input.title !== undefined ? { title: input.title } : {}),
@@ -449,8 +461,8 @@ export class PrismaStudioRepository implements StudioRepository {
             : {}),
         },
         select: { id: true, slug: true, title: true, synopsis: true },
-      })
-      .catch(() => null);
+      }),
+    );
     return updated
       ? {
           seriesId: updated.id,
@@ -568,9 +580,9 @@ export class PrismaStudioRepository implements StudioRepository {
     id: string,
     status: string,
   ): Promise<PackagingRequest | null> {
-    const updated = await this.prisma.packagingRequest
-      .update({ where: { id }, data: { status } })
-      .catch(() => null);
+    const updated = await nullWhenNotFound(
+      this.prisma.packagingRequest.update({ where: { id }, data: { status } }),
+    );
     return updated ? toPackagingRequest(updated) : null;
   }
 }
@@ -663,4 +675,20 @@ function uniqueTargetIncludes(
   return Array.isArray(target)
     ? target.some((value) => value === field)
     : typeof target === "string" && target.includes(field);
+}
+
+function isPrismaNotFound(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2025"
+  );
+}
+
+async function nullWhenNotFound<T>(operation: Promise<T>): Promise<T | null> {
+  try {
+    return await operation;
+  } catch (error) {
+    if (isPrismaNotFound(error)) return null;
+    throw error;
+  }
 }

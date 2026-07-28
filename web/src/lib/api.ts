@@ -175,6 +175,14 @@ export async function deleteRequest(
 ): Promise<void> {
   const response = await fetchWithTimeout(path, { method: "DELETE", headers });
   if (!response.ok && response.status !== 404) {
-    throw new ApiError("임시 파일을 정리하지 못했습니다.", response.status);
+    const error = (await response.json().catch(() => null)) as {
+      code?: string;
+      message?: string;
+    } | null;
+    throw new ApiError(
+      error?.message ?? "임시 파일을 정리하지 못했습니다.",
+      response.status,
+      error?.code,
+    );
   }
 }

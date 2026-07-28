@@ -51,7 +51,10 @@ export async function generateMetadata({
         images: images.map((image) => image.url),
       },
     };
-  } catch {
+  } catch (error) {
+    if (!(error instanceof ServerApiError && error.status === 404)) {
+      throw error;
+    }
     return {
       title: "작품을 찾을 수 없습니다",
       robots: { index: false, follow: false },

@@ -1,5 +1,30 @@
 import { expect, test } from "@playwright/test";
 
+test("브라우저 저장소가 막혀도 성공한 주문을 실패로 되돌리지 않는다", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("blocked", "SecurityError");
+    };
+  });
+  await page.goto("/series/moonlight-laundry");
+  await page
+    .getByRole("link", { name: /선택한 \d+권 주문하기/ })
+    .click();
+  await page.getByLabel("주문자 닉네임").fill("저장소차단독자");
+  await page.getByRole("button", { name: "견적 확인하기" }).click();
+  await page.getByRole("button", { name: "이 사양으로 주문하기" }).click();
+
+  await expect(page).toHaveURL(/\/orders\/[^/?]+\?storage=unavailable$/);
+  await expect(
+    page.getByText("주문은 정상 접수됐지만 이 브라우저에"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "소장본 주문을 받았어요." }),
+  ).toBeVisible();
+});
+
 test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 제외된다", async ({
   page,
 }) => {

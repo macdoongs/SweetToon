@@ -79,4 +79,27 @@ describe("HTTP security boundary", () => {
       "access-control-allow-origin",
     );
   });
+
+  it("returns the stable JSON contract for unknown APIs", async () => {
+    const response = await request(app).get("/api/missing").expect(404);
+
+    expect(response.body).toEqual({
+      code: "API_NOT_FOUND",
+      message: "요청한 API를 찾을 수 없습니다.",
+    });
+    expect(response.type).toBe("application/json");
+  });
+
+  it("returns a client error for malformed JSON", async () => {
+    const response = await request(app)
+      .post("/api/anything")
+      .set("Content-Type", "application/json")
+      .send('{"broken":')
+      .expect(400);
+
+    expect(response.body).toEqual({
+      code: "INVALID_JSON",
+      message: "JSON 요청 본문이 올바르지 않습니다.",
+    });
+  });
 });

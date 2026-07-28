@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type {
   CreateOrderRequest,
   OrderDetail,
@@ -149,9 +150,14 @@ export class OrderService implements DemoOrderUseCases {
     input: CreateOrderRequest,
     isDemo: boolean,
   ): Promise<OrderReceipt> {
+    const requestFingerprint = fingerprintOrderRequest(input, isDemo);
     const existing = await this.repository.findByRequestKey(input.requestKey);
     if (existing) {
-      return existing;
+      assertMatchingFingerprint(
+        existing.requestFingerprint,
+        requestFingerprint,
+      );
+      return existing.receipt;
     }
 
     const season = await this.requireOrderableSeason(
@@ -163,6 +169,7 @@ export class OrderService implements DemoOrderUseCases {
     try {
       order = await this.repository.createPendingOrder({
         ...input,
+        requestFingerprint,
         season,
         quote,
         isDemo,
@@ -174,7 +181,11 @@ export class OrderService implements DemoOrderUseCases {
         input.requestKey,
       );
       if (racedOrder) {
-        return racedOrder;
+        assertMatchingFingerprint(
+          racedOrder.requestFingerprint,
+          requestFingerprint,
+        );
+        return racedOrder.receipt;
       }
       throw error;
     }
@@ -262,5 +273,31 @@ export class OrderService implements DemoOrderUseCases {
       );
     }
     return updated;
+  }
+}
+
+function fingerprintOrderRequest(
+  input: CreateOrderRequest,
+  isDemo: boolean,
+): string {
+  const { requestKey: _requestKey, ...payload } = input;
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify({ operation: isDemo ? "demo-order" : "order", payload }))
+    .digest("hex");
+}
+
+function assertMatchingFingerprint(
+  existing: string | null,
+  requested: string,
+): void {
+  // Migration 이전 주문은 fingerprint가 없으므로 기존 재시도 동작을 유지한다.
+  if (existing === null) return;
+  if (existing !== requested) {
+    throw new OrderServiceError(
+      "IDEMPOTENCY_KEY_REUSED",
+      "같은 요청 키를 다른 주문 내용에 다시 사용할 수 없습니다.",
+      409,
+    );
   }
 }

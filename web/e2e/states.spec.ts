@@ -127,3 +127,57 @@ test("운영 보조 API 하나가 실패해도 다른 상태를 분리해 표시
     page.getByText("패키징 신청을 불러오는 중…"),
   ).toHaveCount(0);
 });
+
+test("사라진 주문의 실시간 스트림은 무한 재연결을 중단한다", async ({
+  page,
+}) => {
+  const ordersResponse = await page.request.get("/api/orders");
+  const orders = await ordersResponse.json();
+  const orderId = orders.items[0].id as string;
+  const encodedOrderId = encodeURIComponent(orderId);
+
+  await page.route(`**/api/orders/${encodedOrderId}/events`, (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "ORDER_NOT_FOUND",
+        message: "주문을 찾을 수 없습니다.",
+      }),
+    }),
+  );
+  await page.route(`**/api/orders/${encodedOrderId}`, (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "ORDER_NOT_FOUND",
+        message: "주문을 찾을 수 없습니다.",
+      }),
+    }),
+  );
+
+  await page.goto(`/orders/${encodedOrderId}`);
+  await expect(page.getByRole("status")).toContainText("실시간 갱신 중단");
+  await expect(page.getByText(`주문 번호 ${orderId}`)).toBeVisible();
+});
+
+test("오프라인 안내는 실제 연결 상태에 맞춰 재시도를 활성화한다", async ({
+  context,
+  page,
+}) => {
+  await page.goto("/offline");
+  await expect(
+    page.getByRole("button", { name: "다시 연결하기" }),
+  ).toBeEnabled();
+
+  await context.setOffline(true);
+  await expect(
+    page.getByRole("button", { name: "연결을 기다리는 중" }),
+  ).toBeDisabled();
+
+  await context.setOffline(false);
+  await expect(
+    page.getByRole("button", { name: "다시 연결하기" }),
+  ).toBeEnabled();
+});

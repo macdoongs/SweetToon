@@ -13,8 +13,8 @@ export default function OfflinePage() {
       <p className="eyebrow">Offline shelf</p>
       <h1>잠시 인터넷 서가와 연결이 끊겼어요.</h1>
       <p>
-        연결 상태를 확인한 뒤 다시 시도해 주세요. 연결이 돌아오면
-        자동으로 홈으로 이동합니다.
+        오프라인에서는 새 화면을 불러올 수 없습니다. 연결이 복구되면 아래
+        버튼으로 홈을 다시 불러와 주세요.
       </p>
       <OfflineRetry />
     </main>

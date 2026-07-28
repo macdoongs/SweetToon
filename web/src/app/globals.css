@@ -2200,23 +2200,16 @@ button {
 }
 
 .realtime-status--connecting,
-.realtime-status--retrying {
+.realtime-status--retrying,
+.realtime-status--unavailable {
   color: var(--muted);
 }
 
 .realtime-status--connecting i,
-.realtime-status--retrying i {
+.realtime-status--retrying i,
+.realtime-status--unavailable i {
   background: #d99a43;
   box-shadow: 0 0 0 4px rgba(217, 154, 67, 0.13);
-}
-
-.realtime-status--stopped {
-  color: var(--muted);
-}
-
-.realtime-status--stopped i {
-  background: #b6473f;
-  box-shadow: 0 0 0 4px rgba(182, 71, 63, 0.13);
 }
 
 .order-timeline {

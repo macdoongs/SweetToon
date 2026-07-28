@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ApiError, getJson } from "@/lib/api";
 import type { OrderDetail } from "@/lib/order-types";
 import { formatKoreanDateTime } from "@/lib/date-time";
+import { parseOrderStreamEvent } from "@/lib/order-stream";
 
 const statusLabel: Record<OrderDetail["status"], string> = {
   pending: "주문 접수",
@@ -28,39 +30,52 @@ export function OrderDetailPage({
 }) {
   const [liveOrder, setLiveOrder] = useState(order);
   const [connection, setConnection] = useState<
-    "connecting" | "live" | "retrying" | "stopped"
+    "connecting" | "live" | "retrying" | "unavailable"
   >("connecting");
 
   useEffect(() => {
+    const controller = new AbortController();
+    let closed = false;
+    let probeInFlight = false;
     const source = new EventSource(
       `/api/orders/${encodeURIComponent(order.id)}/events`,
     );
-    // 주문이 사라졌거나 스트림 경로가 계속 실패하면 EventSource가 영원히
-    // 재연결을 반복한다. 연속 실패 상한에서 끊고 수동 새로고침을 안내한다.
-    let consecutiveErrors = 0;
-    source.addEventListener("open", () => {
-      consecutiveErrors = 0;
-      setConnection("live");
-    });
+    source.addEventListener("open", () => setConnection("live"));
     source.addEventListener("error", () => {
-      consecutiveErrors += 1;
-      if (consecutiveErrors >= 5) {
-        source.close();
-        setConnection("stopped");
-        return;
-      }
+      if (closed || probeInFlight) return;
       setConnection("retrying");
+      probeInFlight = true;
+      void getJson<OrderDetail>(
+        `/api/orders/${encodeURIComponent(order.id)}`,
+        controller.signal,
+      )
+        .then((latest) => {
+          if (closed) return;
+          setLiveOrder((current) =>
+            Date.parse(latest.updatedAt) >= Date.parse(current.updatedAt)
+              ? latest
+              : current,
+          );
+        })
+        .catch((reason) => {
+          if (closed) return;
+          if (reason instanceof ApiError && reason.status === 404) {
+            source.close();
+            setConnection("unavailable");
+          }
+        })
+        .finally(() => {
+          probeInFlight = false;
+        });
     });
     source.addEventListener("order", (event) => {
-      let incoming: OrderDetail;
-      try {
-        incoming = JSON.parse(
-          (event as MessageEvent<string>).data,
-        ) as OrderDetail;
-      } catch {
+      const incoming = parseOrderStreamEvent(
+        (event as MessageEvent<string>).data,
+      );
+      if (!incoming) {
+        setConnection("retrying");
         return;
       }
-      consecutiveErrors = 0;
       setLiveOrder((current) =>
         Date.parse(incoming.updatedAt) >= Date.parse(current.updatedAt)
           ? incoming
@@ -68,7 +83,11 @@ export function OrderDetailPage({
       );
       setConnection("live");
     });
-    return () => source.close();
+    return () => {
+      closed = true;
+      controller.abort();
+      source.close();
+    };
   }, [order.id]);
 
   return (
@@ -123,11 +142,11 @@ export function OrderDetailPage({
               <i aria-hidden="true" />
               {connection === "live"
                 ? "실시간 연결됨"
+                : connection === "unavailable"
+                  ? "실시간 갱신 중단"
                 : connection === "retrying"
                   ? "재연결 중"
-                  : connection === "stopped"
-                    ? "실시간 연결이 끊겼어요. 새로고침하면 최신 상태를 볼 수 있어요."
-                    : "연결 중"}
+                  : "연결 중"}
             </span>
           </div>
           <ol className="order-timeline">

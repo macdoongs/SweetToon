@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { getJson } from "@/lib/api";
+import { startBackoffPolling } from "@/lib/polling";
 import type { SeriesListResponse, SeriesSummary } from "@/lib/reader-types";
 import {
   catalogHref,
@@ -320,21 +321,24 @@ export function HomePage({
 
   useEffect(() => {
     let active = true;
-    const refresh = async () => {
-      try {
-        const response = await getJson<LivePopularResponse>(
-          "/api/realtime/popular",
-        );
-        if (active) setLivePopular(response);
-      } catch {
-        if (active) setLivePopular(null);
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 15_000);
+    const stop = startBackoffPolling(
+      async () => {
+        try {
+          const response = await getJson<LivePopularResponse>(
+            "/api/realtime/popular",
+          );
+          if (active) setLivePopular(response);
+          return true;
+        } catch {
+          if (active) setLivePopular(null);
+          return false;
+        }
+      },
+      { intervalMs: 15_000, maxIntervalMs: 120_000 },
+    );
     return () => {
       active = false;
-      window.clearInterval(interval);
+      stop();
     };
   }, []);
 

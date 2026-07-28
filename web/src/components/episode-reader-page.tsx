@@ -16,6 +16,7 @@ import {
   isUncertainRequestError,
   postJson,
 } from "@/lib/api";
+import { startBackoffPolling } from "@/lib/polling";
 import { getDemoEntitlement } from "@/lib/demo-entitlements";
 import {
   getCandyWalletToken,
@@ -238,7 +239,8 @@ export function EpisodeReaderPage({
     if (!seriesSlug) return;
     let active = true;
     const heartbeat = async () => {
-      if (document.visibilityState !== "visible") return;
+      // 숨겨진 탭은 실패가 아니므로 backoff를 키우지 않는다.
+      if (document.visibilityState !== "visible") return true;
       try {
         const response = await postJson<
           { sessionId: string },
@@ -247,17 +249,21 @@ export function EpisodeReaderPage({
           sessionId: getReaderSessionId(),
         });
         if (active) setViewerCount(response.viewerCount);
+        return true;
       } catch {
         if (active) setViewerCount(null);
+        return false;
       }
     };
-    void heartbeat();
-    const interval = window.setInterval(() => void heartbeat(), 20_000);
+    const stop = startBackoffPolling(heartbeat, {
+      intervalMs: 20_000,
+      maxIntervalMs: 160_000,
+    });
     const onVisibilityChange = () => void heartbeat();
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       active = false;
-      window.clearInterval(interval);
+      stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [episode?.series.slug]);

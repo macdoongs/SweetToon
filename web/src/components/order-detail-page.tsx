@@ -28,17 +28,39 @@ export function OrderDetailPage({
 }) {
   const [liveOrder, setLiveOrder] = useState(order);
   const [connection, setConnection] = useState<
-    "connecting" | "live" | "retrying"
+    "connecting" | "live" | "retrying" | "stopped"
   >("connecting");
 
   useEffect(() => {
     const source = new EventSource(
       `/api/orders/${encodeURIComponent(order.id)}/events`,
     );
-    source.addEventListener("open", () => setConnection("live"));
-    source.addEventListener("error", () => setConnection("retrying"));
+    // 주문이 사라졌거나 스트림 경로가 계속 실패하면 EventSource가 영원히
+    // 재연결을 반복한다. 연속 실패 상한에서 끊고 수동 새로고침을 안내한다.
+    let consecutiveErrors = 0;
+    source.addEventListener("open", () => {
+      consecutiveErrors = 0;
+      setConnection("live");
+    });
+    source.addEventListener("error", () => {
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 5) {
+        source.close();
+        setConnection("stopped");
+        return;
+      }
+      setConnection("retrying");
+    });
     source.addEventListener("order", (event) => {
-      const incoming = JSON.parse((event as MessageEvent<string>).data) as OrderDetail;
+      let incoming: OrderDetail;
+      try {
+        incoming = JSON.parse(
+          (event as MessageEvent<string>).data,
+        ) as OrderDetail;
+      } catch {
+        return;
+      }
+      consecutiveErrors = 0;
       setLiveOrder((current) =>
         Date.parse(incoming.updatedAt) >= Date.parse(current.updatedAt)
           ? incoming
@@ -103,7 +125,9 @@ export function OrderDetailPage({
                 ? "실시간 연결됨"
                 : connection === "retrying"
                   ? "재연결 중"
-                  : "연결 중"}
+                  : connection === "stopped"
+                    ? "실시간 연결이 끊겼어요. 새로고침하면 최신 상태를 볼 수 있어요."
+                    : "연결 중"}
             </span>
           </div>
           <ol className="order-timeline">

@@ -69,17 +69,22 @@ export function getSeriesList(
 
 export async function getAllSeries(): Promise<SeriesListResponse> {
   const pageSize = 100;
+  // 추천 선반 용도이므로 전량이 아니어도 된다. 서버가 잘못된 nextPage를
+  // 돌려줘도 홈 렌더가 무한 루프에 빠지지 않도록 페이지 수를 제한한다.
+  const maxPages = 20;
   let page = 1;
   let result = await serverGetJson<SeriesListResponse>(
     seriesFilterQuery({ filter: "all" }, page, pageSize),
   );
   const items = [...result.items];
-  while (result.nextPage) {
+  let fetchedPages = 1;
+  while (result.nextPage && result.nextPage > page && fetchedPages < maxPages) {
     page = result.nextPage;
     result = await serverGetJson<SeriesListResponse>(
       seriesFilterQuery({ filter: "all" }, page, pageSize),
     );
     items.push(...result.items);
+    fetchedPages += 1;
   }
   return { ...result, items, page: 1, nextPage: null };
 }

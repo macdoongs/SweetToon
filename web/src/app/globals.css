@@ -2158,6 +2158,15 @@ button {
   color: var(--muted);
 }
 
+.order-list__more {
+  width: var(--content);
+  margin: 18px auto 0;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+
 .order-result,
 .order-detail-grid {
   width: var(--content);
@@ -2199,6 +2208,15 @@ button {
 .realtime-status--retrying i {
   background: #d99a43;
   box-shadow: 0 0 0 4px rgba(217, 154, 67, 0.13);
+}
+
+.realtime-status--stopped {
+  color: var(--muted);
+}
+
+.realtime-status--stopped i {
+  background: #b6473f;
+  box-shadow: 0 0 0 4px rgba(182, 71, 63, 0.13);
 }
 
 .order-timeline {

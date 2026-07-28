@@ -11,6 +11,6 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  const { items } = await getOrders();
-  return <OrderListPage orders={items} />;
+  const { items, nextCursor } = await getOrders();
+  return <OrderListPage initialNextCursor={nextCursor} orders={items} />;
 }

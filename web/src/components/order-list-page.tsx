@@ -1,7 +1,11 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
+import { ApiError, getJson } from "@/lib/api";
 import { formatKoreanDateTime } from "@/lib/date-time";
-import type { OrderSummary } from "@/lib/order-types";
+import type { OrderListResponse, OrderSummary } from "@/lib/order-types";
 import { DiscoverLink } from "./discover-link";
 
 const statusLabel: Record<OrderSummary["status"], string> = {
@@ -12,7 +16,39 @@ const statusLabel: Record<OrderSummary["status"], string> = {
   canceled: "취소",
 };
 
-export function OrderListPage({ orders }: { orders: OrderSummary[] }) {
+export function OrderListPage({
+  initialNextCursor,
+  orders,
+}: {
+  initialNextCursor: string | null;
+  orders: OrderSummary[];
+}) {
+  const [items, setItems] = useState(orders);
+  const [nextCursor, setNextCursor] = useState(initialNextCursor);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const response = await getJson<OrderListResponse>(
+        `/api/orders?cursor=${encodeURIComponent(nextCursor)}&limit=20`,
+      );
+      setItems((current) => [...current, ...response.items]);
+      setNextCursor(response.nextCursor);
+    } catch (reason) {
+      setLoadMoreError(
+        reason instanceof ApiError
+          ? reason.message
+          : "주문을 더 불러오지 못했습니다.",
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
   return (
     <main className="orders-page">
       <nav className="page-breadcrumb" aria-label="현재 위치">
@@ -32,7 +68,7 @@ export function OrderListPage({ orders }: { orders: OrderSummary[] }) {
         </Link>
       </header>
 
-      {orders.length === 0 ? (
+      {items.length === 0 ? (
         <section className="orders-empty">
           <h2>아직 주문한 소장본이 없어요.</h2>
           <p>완결된 시즌을 골라 첫 번째 책을 만들어 보세요.</p>
@@ -42,7 +78,7 @@ export function OrderListPage({ orders }: { orders: OrderSummary[] }) {
         </section>
       ) : (
         <section className="order-list" aria-label="주문 목록">
-          {orders.map((order) => (
+          {items.map((order) => (
             <Link
               className="order-list-card"
               href={`/orders/${encodeURIComponent(order.id)}`}
@@ -84,6 +120,20 @@ export function OrderListPage({ orders }: { orders: OrderSummary[] }) {
           ))}
         </section>
       )}
+
+      {nextCursor ? (
+        <div className="order-list__more">
+          {loadMoreError ? <p role="alert">{loadMoreError}</p> : null}
+          <button
+            className="button"
+            disabled={loadingMore}
+            onClick={() => void loadMore()}
+            type="button"
+          >
+            {loadingMore ? "불러오는 중…" : "지난 주문 더 보기"}
+          </button>
+        </div>
+      ) : null}
     </main>
   );
 }

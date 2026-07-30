@@ -381,6 +381,32 @@ test("라이트·다크·시스템 테마를 저장하고 즉시 적용한다", 
   ).toBeTruthy();
 });
 
+test("홈의 대표 데모 경로가 읽기→주문→제작 확인으로 이어진다", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page.getByRole("link", { name: "3분 데모 경로" }).click();
+  await expect(page).toHaveURL(/#demo-path$/);
+
+  const demoPath = page.locator(".demo-path");
+  await expect(
+    demoPath.getByRole("heading", {
+      name: "읽고, 주문하고, 제작을 지켜보세요",
+    }),
+  ).toBeVisible();
+  await expect(
+    demoPath.getByRole("link", { name: /무료 회차 읽기/ }),
+  ).toHaveAttribute("href", /\/series\/[^/]+#episodes$/);
+  await expect(
+    demoPath.getByRole("link", { name: /제작 상태 확인/ }),
+  ).toHaveAttribute("href", "/orders");
+
+  await demoPath.getByRole("link", { name: /완결 시즌 1권 주문/ }).click();
+  await expect(page).toHaveURL(/\/series\/[^/?]+#edition$/);
+  await expect(page.locator(".edition-card")).toBeVisible();
+});
+
 test("모바일 뷰포트에서도 핵심 내비게이션이 유지된다", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

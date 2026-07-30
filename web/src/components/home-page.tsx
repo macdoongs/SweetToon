@@ -407,6 +407,9 @@ export function HomePage({
   }
 
   const featured = data?.items[0];
+  const demoSeries =
+    data?.items.find((item) => item.slug === "moonlight-laundry") ??
+    data?.items.find((item) => item.completedSeasonCount > 0);
 
   return (
     <main>
@@ -426,6 +429,11 @@ export function HomePage({
             <DiscoverLink className="button button--primary">
               오늘의 작품 보기
             </DiscoverLink>
+            {demoSeries ? (
+              <a className="button button--ghost" href="#demo-path">
+                3분 데모 경로
+              </a>
+            ) : null}
             <span className="hero__note">
               로그인 없이 바로 읽을 수 있어요
             </span>
@@ -456,6 +464,62 @@ export function HomePage({
           </div>
         )}
       </header>
+
+      {demoSeries ? (
+        <section aria-label="대표 데모 경로" className="demo-path" id="demo-path">
+          <div className="demo-path__inner">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">3분 데모 경로</p>
+                <h2>읽고, 주문하고, 제작을 지켜보세요</h2>
+              </div>
+              <p>
+                《{demoSeries.title}》 하나로 SweetToon의 핵심 흐름을
+                끝까지 체험할 수 있어요.
+              </p>
+            </div>
+            <ol className="demo-path__steps">
+              <li>
+                <Link
+                  href={`/series/${encodeURIComponent(demoSeries.slug)}#episodes`}
+                >
+                  <span aria-hidden="true" className="demo-path__number">
+                    1
+                  </span>
+                  <strong>무료 회차 읽기</strong>
+                  <span>
+                    첫 1권(5화)은 무료예요. 읽던 위치도 기억해 드려요.
+                  </span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href={`/series/${encodeURIComponent(demoSeries.slug)}#edition`}
+                >
+                  <span aria-hidden="true" className="demo-path__number">
+                    2
+                  </span>
+                  <strong>완결 시즌 1권 주문</strong>
+                  <span>
+                    5화 묶음 소장본의 판형과 표지를 골라 Mock 주문을 접수해요.
+                  </span>
+                </Link>
+              </li>
+              <li>
+                <Link href="/orders">
+                  <span aria-hidden="true" className="demo-path__number">
+                    3
+                  </span>
+                  <strong>제작 상태 확인</strong>
+                  <span>
+                    접수부터 배송까지 제작 타임라인이 실시간으로 이어져요.
+                  </span>
+                </Link>
+              </li>
+            </ol>
+          </div>
+        </section>
+      ) : null}
 
       {livePopular?.items.length ? (
         <LivePopularRail items={livePopular.items} />

@@ -86,11 +86,13 @@ test("스튜디오의 빈 목록과 조회 실패를 구분한다", async ({ pag
   );
 
   await page.goto("/studio");
+  await page.getByRole("radio", { name: "비공개 보관" }).check();
   await expect(
     page.getByRole("heading", {
       name: "비공개 보관함을 불러오지 못했어요.",
     }),
   ).toBeVisible();
+  await page.getByRole("radio", { name: "책 패키징 신청" }).check();
   await expect(
     page.getByRole("heading", {
       name: "패키징 신청 내역을 불러오지 못했어요.",
@@ -100,6 +102,12 @@ test("스튜디오의 빈 목록과 조회 실패를 구분한다", async ({ pag
   await page.unroute("**/api/studio/drafts");
   await page.unroute("**/api/studio/packaging-requests");
   await page.getByRole("button", { name: "다시 시도" }).first().click();
+  await expect(
+    page.getByRole("heading", {
+      name: /아직 패키징 신청 내역이 없어요|책 패키징 신청 내역/,
+    }),
+  ).toBeVisible();
+  await page.getByRole("radio", { name: "비공개 보관" }).check();
   await expect(
     page.getByRole("heading", {
       name: /비공개로 보관한 회차가 없어요|비공개 보관함/,

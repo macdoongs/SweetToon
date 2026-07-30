@@ -15,7 +15,7 @@ export function SiteFooter() {
           <p>
             좋아한 웹툰의 마지막 장면 다음을,
             <br />
-            한 권의 소장본으로 이어갑니다.
+            5화씩 한 권의 소장본으로 이어갑니다.
           </p>
           <span className="site-footer__badge">Portfolio demo</span>
         </div>

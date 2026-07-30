@@ -322,10 +322,10 @@ export function SeriesDetailPage({
       <section className="edition-card" id="edition">
         <div>
           <p className="eyebrow">Shelf edition</p>
-          <h2>완결된 시즌은 한 권으로 이어집니다.</h2>
+          <h2>완결된 시즌은 5화씩 소장본으로 이어집니다.</h2>
           <p>
-            읽던 순서 그대로 묶고, 표지와 판형을 골라 소장본을 주문할 수
-            있어요. 실제 인쇄 API를 호출하지 않고 주문 기록과 제작 상태를
+            읽던 순서 그대로 5화씩 한 권에 묶고, 표지와 판형을 골라 소장본을
+            주문할 수 있어요. 실제 인쇄 API를 호출하지 않고 주문 기록과 제작 상태를
             안전한 Mock 흐름으로 먼저 경험하게 됩니다.
           </p>
         </div>

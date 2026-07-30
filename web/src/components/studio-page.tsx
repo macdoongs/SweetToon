@@ -1691,7 +1691,10 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
         </section>
       </div>
 
-      {selectedSeries && selectedSeason && selectedSeason.episodes.length > 0 ? (
+      {purpose === "publish" &&
+      selectedSeries &&
+      selectedSeason &&
+      selectedSeason.episodes.length > 0 ? (
         <section className="studio-drafts studio-episodes" aria-label="등록된 회차 관리">
           <header>
             <div>
@@ -1837,7 +1840,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
         </section>
       ) : null}
 
-      {draftsState === "loading" ? (
+      {purpose !== "draft" ? null : draftsState === "loading" ? (
         <section className="studio-drafts" aria-busy="true">
           <h2>비공개 보관함을 불러오는 중…</h2>
         </section>
@@ -1993,7 +1996,8 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
         </section>
       )}
 
-      {packagingRequestsState === "loading" ? (
+      {purpose !== "packaging" ? null : packagingRequestsState ===
+        "loading" ? (
         <section className="studio-packaging-list" aria-busy="true">
           <h2>패키징 신청 내역을 불러오는 중…</h2>
         </section>

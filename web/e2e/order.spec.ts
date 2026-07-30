@@ -55,6 +55,12 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
   await expect(
     page.getByRole("heading", { level: 1 }),
   ).toContainText("소장본 주문을 받았어요");
+  await expect(
+    page.getByRole("link", { name: "열린 회차 바로 읽기" }),
+  ).toHaveAttribute("href", /\/series\/[^/]+#episodes$/);
+  await expect(
+    page.getByRole("link", { name: "주문 목록 보기" }),
+  ).toBeVisible();
   await expect(page.getByText("E2E독자", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/E2E_PRIVATE_MARKER/)).toHaveCount(0);
 

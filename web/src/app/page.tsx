@@ -34,6 +34,12 @@ export default async function Home({
     getSeriesList(filters),
     getAllSeries(),
   ]);
+  const demoSeries =
+    recommendations.items.find(
+      (item) => item.slug === "moonlight-laundry",
+    ) ??
+    recommendations.items.find((item) => item.completedSeasonCount > 0) ??
+    null;
 
   return (
     <>
@@ -50,6 +56,11 @@ export default async function Home({
       />
       <HomePage
         activeFilters={filters}
+        demoSeries={
+          demoSeries
+            ? { slug: demoSeries.slug, title: demoSeries.title }
+            : null
+        }
         initialData={data}
         recommendationSeries={recommendations.items.map(
           ({ id, slug, title, genre, coverUrl, status, author }) => ({

@@ -396,15 +396,116 @@ test("홈의 대표 데모 경로가 읽기→주문→제작 확인으로 이�
     }),
   ).toBeVisible();
   await expect(
-    demoPath.getByRole("link", { name: /무료 회차 읽기/ }),
+    demoPath.getByRole("link", { name: /무료 회차 고르기/ }),
   ).toHaveAttribute("href", /\/series\/[^/]+#episodes$/);
   await expect(
     demoPath.getByRole("link", { name: /제작 상태 확인/ }),
   ).toHaveAttribute("href", "/orders");
 
-  await demoPath.getByRole("link", { name: /완결 시즌 1권 주문/ }).click();
+  await demoPath.getByRole("link", { name: /소장본 고르기/ }).click();
   await expect(page).toHaveURL(/\/series\/[^/?]+#edition$/);
   await expect(page.locator(".edition-card")).toBeVisible();
+
+  await page.goto("/?filter=ongoing");
+  await expect(page.locator(".demo-path")).toBeVisible();
+});
+
+test("완독한 회차는 이어보기 대신 다음 행동으로 안내한다", async ({
+  page,
+}) => {
+  const seriesResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  expect(seriesResponse.ok()).toBeTruthy();
+  const series = await seriesResponse.json();
+  const episode = series.seasons[0].episodes[0] as {
+    id: string;
+    number: number;
+    title: string;
+  };
+
+  await page.addInitScript(
+    ({ episodeId, episodeNumber, episodeTitle }) => {
+      localStorage.setItem(
+        "sweettoon:reading-progress",
+        JSON.stringify({
+          [episodeId]: {
+            seriesSlug: "moonlight-laundry",
+            episodeId,
+            episodeNumber,
+            episodeTitle,
+            pageOrder: 4,
+            percent: 100,
+            completed: true,
+            updatedAt: "2026-07-26T00:00:00.000Z",
+          },
+        }),
+      );
+    },
+    {
+      episodeId: episode.id,
+      episodeNumber: episode.number,
+      episodeTitle: episode.title,
+    },
+  );
+
+  await page.goto("/");
+  const card = page
+    .locator(".series-card")
+    .filter({ hasText: "달빛 세탁소" })
+    .first();
+  const continueLink = card.locator(".series-card__continue");
+  await expect(continueLink).toContainText(
+    `${episode.number}화 완독 · 다음 화 고르기`,
+  );
+  await expect(continueLink).toHaveAttribute(
+    "href",
+    "/series/moonlight-laundry#episodes",
+  );
+  await continueLink.click();
+  await expect(page).toHaveURL(/\/series\/moonlight-laundry#episodes$/);
+});
+
+test("데모 기록 초기화가 개인 기록만 지우고 설정은 보존한다", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("sweettoon:favorites", JSON.stringify(["demo"]));
+    localStorage.setItem(
+      "sweettoon:reading-progress",
+      JSON.stringify({ ep: { seriesSlug: "demo" } }),
+    );
+    localStorage.setItem("sweettoon:candy-wallet-token", "reset-target");
+    localStorage.setItem(
+      "sweettoon:demo-entitlements",
+      JSON.stringify({ "season:1": "token" }),
+    );
+    localStorage.setItem("sweettoon:theme", "dark");
+  });
+
+  await page.goto("/");
+  const reset = page.getByRole("button", { name: "데모 기록 초기화" });
+  await reset.scrollIntoViewIfNeeded();
+  await reset.click();
+  await page.getByRole("button", { name: "정말 초기화" }).click();
+  await expect(
+    page.getByText("찜·진행도·캔디·이용권 기록을 지웠어요."),
+  ).toBeVisible();
+
+  const remaining = await page.evaluate(() => ({
+    favorites: localStorage.getItem("sweettoon:favorites"),
+    progress: localStorage.getItem("sweettoon:reading-progress"),
+    candy: localStorage.getItem("sweettoon:candy-wallet-token"),
+    entitlements: localStorage.getItem("sweettoon:demo-entitlements"),
+    theme: localStorage.getItem("sweettoon:theme"),
+  }));
+  expect(remaining.favorites).toBeNull();
+  expect(remaining.progress).toBeNull();
+  // 헤더가 잔액 조회 중 새 지갑 토큰을 만들 수 있으므로, 기존 지갑과
+  // 분리됐는지(토큰 교체)를 검증한다.
+  expect(remaining.candy).not.toBe("reset-target");
+  expect(remaining.entitlements).toBeNull();
+  expect(remaining.theme).toBe("dark");
 });
 
 test("모바일 뷰포트에서도 핵심 내비게이션이 유지된다", async ({ page }) => {

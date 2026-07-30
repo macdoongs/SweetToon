@@ -379,7 +379,7 @@ export const openApiDocument = {
     "/api/episodes/{id}/candy-unlock": {
       post: {
         tags: ["Candy"],
-        summary: "캔디 1개로 유료 회차를 영구 해금합니다.",
+        summary: "캔디 1개로 유료 회차를 해당 지갑 토큰에 해금합니다.",
         parameters: [{ $ref: "#/components/parameters/Id" }],
         requestBody: {
           required: true,

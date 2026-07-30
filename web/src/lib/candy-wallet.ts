@@ -41,3 +41,12 @@ export function getCandyWalletToken(): string {
 export function notifyCandyUpdated() {
   window.dispatchEvent(new Event(CANDY_UPDATED_EVENT));
 }
+
+export function forgetCandyWalletToken() {
+  volatileToken = null;
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // 저장소 접근이 막혀 있으면 메모리 토큰만 비운다.
+  }
+}

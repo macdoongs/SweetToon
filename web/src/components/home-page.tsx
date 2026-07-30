@@ -74,6 +74,49 @@ function getSeriesProgressFromStore(
     )[0];
 }
 
+function SeriesContinueLink({
+  progress,
+  series,
+}: {
+  progress: ReadingProgress | undefined;
+  series: SeriesSummary;
+}) {
+  if (!progress) return null;
+  if (!progress.completed) {
+    return (
+      <Link
+        className="series-card__continue"
+        href={`/read/${encodeURIComponent(progress.episodeId)}`}
+      >
+        <span>이어보기 · {progress.episodeNumber}화</span>
+        <progress max={100} value={progress.percent} />
+      </Link>
+    );
+  }
+  if (progress.episodeNumber < series.episodeCount) {
+    return (
+      <Link
+        className="series-card__continue"
+        href={`/series/${encodeURIComponent(series.slug)}#episodes`}
+      >
+        <span>
+          {progress.episodeNumber}화 완독 · 다음 화 고르기
+        </span>
+        <progress max={100} value={100} />
+      </Link>
+    );
+  }
+  return (
+    <Link
+      className="series-card__continue"
+      href={`/series/${encodeURIComponent(series.slug)}`}
+    >
+      <span>마지막 화까지 완독 · 작품 홈 보기</span>
+      <progress max={100} value={100} />
+    </Link>
+  );
+}
+
 function formatLatestDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
     month: "short",
@@ -284,10 +327,12 @@ function LivePopularRail({
 
 export function HomePage({
   activeFilters,
+  demoSeries = null,
   initialData = null,
   recommendationSeries = [],
 }: {
   activeFilters: CatalogFilters;
+  demoSeries?: { slug: string; title: string } | null;
   initialData?: SeriesListResponse | null;
   recommendationSeries?: RecommendationSeries[];
 }) {
@@ -407,9 +452,6 @@ export function HomePage({
   }
 
   const featured = data?.items[0];
-  const demoSeries =
-    data?.items.find((item) => item.slug === "moonlight-laundry") ??
-    data?.items.find((item) => item.completedSeasonCount > 0);
 
   return (
     <main>
@@ -486,9 +528,10 @@ export function HomePage({
                   <span aria-hidden="true" className="demo-path__number">
                     1
                   </span>
-                  <strong>무료 회차 읽기</strong>
+                  <strong>무료 회차 고르기</strong>
                   <span>
-                    첫 1권(5화)은 무료예요. 읽던 위치도 기억해 드려요.
+                    회차 목록에서 첫 1권(5화)을 무료로 열 수 있어요. 읽던
+                    위치도 기억해 드려요.
                   </span>
                 </Link>
               </li>
@@ -499,9 +542,10 @@ export function HomePage({
                   <span aria-hidden="true" className="demo-path__number">
                     2
                   </span>
-                  <strong>완결 시즌 1권 주문</strong>
+                  <strong>소장본 고르기</strong>
                   <span>
-                    5화 묶음 소장본의 판형과 표지를 골라 Mock 주문을 접수해요.
+                    완결 시즌의 5화 묶음 권을 골라 판형·표지와 함께 Mock
+                    주문으로 이어져요.
                   </span>
                 </Link>
               </li>
@@ -653,42 +697,33 @@ export function HomePage({
                       </Link>
                     </h3>
                     <p className="series-card__author">{series.author.name}</p>
-                    {getSeriesProgressFromStore(
-                      readingProgress,
-                      series.slug,
-                    ) ? (
-                      <Link
-                        className="series-card__continue"
-                        href={`/read/${encodeURIComponent(getSeriesProgressFromStore(readingProgress, series.slug)?.episodeId ?? "")}`}
-                      >
-                        <span>
-                          이어보기 ·{" "}
-                          {
-                            getSeriesProgressFromStore(
-                              readingProgress,
-                              series.slug,
-                            )?.episodeNumber
-                          }
-                          화
-                        </span>
-                        <progress
-                          max={100}
-                          value={
-                            getSeriesProgressFromStore(
-                              readingProgress,
-                              series.slug,
-                            )?.percent ?? 0
-                          }
-                        />
-                      </Link>
-                    ) : null}
+                    <SeriesContinueLink
+                      progress={getSeriesProgressFromStore(
+                        readingProgress,
+                        series.slug,
+                      )}
+                      series={series}
+                    />
                     {series.latestEpisode ? (
                       <Link
                         className="series-card__latest"
-                        href={`/read/${encodeURIComponent(series.latestEpisode.id)}`}
-                        aria-label={`${series.title} 최신 ${series.latestEpisode.number}화 ${series.latestEpisode.title} 읽기`}
+                        href={
+                          series.latestEpisode.access === "locked"
+                            ? `/series/${encodeURIComponent(series.slug)}#episodes`
+                            : `/read/${encodeURIComponent(series.latestEpisode.id)}`
+                        }
+                        aria-label={
+                          series.latestEpisode.access === "locked"
+                            ? `${series.title} 최신 ${series.latestEpisode.number}화 ${series.latestEpisode.title} — 캔디가 필요해요. 회차 목록 보기`
+                            : `${series.title} 최신 ${series.latestEpisode.number}화 ${series.latestEpisode.title} 읽기`
+                        }
                       >
-                        <span>최신 {series.latestEpisode.number}화</span>
+                        <span>
+                          최신 {series.latestEpisode.number}화
+                          {series.latestEpisode.access === "locked" ? (
+                            <em className="series-card__lock">🍬 캔디 필요</em>
+                          ) : null}
+                        </span>
                         <strong>{series.latestEpisode.title}</strong>
                         <time dateTime={series.latestEpisode.publishedAt}>
                           {formatLatestDate(series.latestEpisode.publishedAt)}

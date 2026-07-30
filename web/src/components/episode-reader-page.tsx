@@ -988,8 +988,8 @@ export function EpisodeReaderPage({
           <p>
             이 회차는 시즌 {episode.season.number} ·{" "}
             {episode.access.volumeNumber}권에 수록됩니다. 캔디 1개로 이
-            회차를 영구 열람하거나, 소장본을 주문해 수록된 다섯 화를
-            함께 열 수 있습니다.
+            회차를 지금 쓰는 브라우저에서 계속 읽거나, 소장본을 주문해
+            수록된 다섯 화를 함께 열 수 있습니다.
           </p>
           <div className="reader-paywall__candy">
             <div>

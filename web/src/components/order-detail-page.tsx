@@ -120,6 +120,31 @@ export function OrderDetailPage({
             ? `보너스 캔디 ${liveOrder.candyBonus}개도 이 브라우저에 지급했어요.`
             : "수록 회차도 이 브라우저에서 바로 열렸어요."}
         </p>
+        {liveOrder.status !== "canceled" ? (
+          <div className="order-result__actions">
+            <Link
+              className="button button--primary"
+              href={`/series/${encodeURIComponent(liveOrder.series.slug)}#episodes`}
+            >
+              열린 회차 바로 읽기
+            </Link>
+            {liveOrder.candyBonus > 0 ? (
+              <Link className="button" href="/candy">
+                캔디 확인하기
+              </Link>
+            ) : (
+              <Link
+                className="button"
+                href={`/series/${encodeURIComponent(liveOrder.series.slug)}`}
+              >
+                작품 홈으로
+              </Link>
+            )}
+            <Link className="button" href="/orders">
+              주문 목록 보기
+            </Link>
+          </div>
+        ) : null}
       </header>
       {browserStorageUnavailable ? (
         <p className="form-error" role="alert">

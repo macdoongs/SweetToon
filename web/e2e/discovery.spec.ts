@@ -381,6 +381,34 @@ test("라이트·다크·시스템 테마를 저장하고 즉시 적용한다", 
   ).toBeTruthy();
 });
 
+test("모바일 뷰포트에서도 핵심 내비게이션이 유지된다", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const nav = page.getByRole("navigation", { name: "주요 메뉴" });
+  await expect(nav.getByRole("link", { name: "작품" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "주문" })).toBeVisible();
+  await expect(nav.locator(".site-nav__candy")).toBeVisible();
+
+  const moreMenu = nav.locator(".site-nav__more");
+  await expect(moreMenu).toBeVisible();
+  await moreMenu.locator("summary").click();
+  await expect(
+    moreMenu.getByRole("link", { name: "작가 스튜디오" }),
+  ).toBeVisible();
+  await moreMenu.getByRole("link", { name: "찜 목록" }).click();
+  await expect(page).toHaveURL(/\/favorites$/);
+  await expect(
+    page.getByRole("heading", { name: "찜 목록" }),
+  ).toBeVisible();
+
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
 test("설치 가능한 PWA 셸과 서비스 워커를 제공한다", async ({ page }) => {
   await page.goto("/");
 

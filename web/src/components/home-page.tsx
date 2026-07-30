@@ -419,7 +419,7 @@ export function HomePage({
             <span>책장에 오래.</span>
           </h1>
           <p className="hero__description">
-            SweetToon은 웹툰을 읽고, 완결된 시즌을 나만의 단행본으로
+            SweetToon은 웹툰을 읽고, 완결된 시즌을 5화씩 나만의 단행본으로
             소장하는 독자를 위한 공간입니다.
           </p>
           <div className="hero__actions">
@@ -471,7 +471,7 @@ export function HomePage({
               <h2>당신의 다음 웹툰</h2>
             </div>
             <p>
-              완결작은 한 권으로 소장할 수 있고,
+              완결 시즌은 5화씩 소장본으로 담을 수 있고,
               <br className="desktop-only" /> 연재작은 새 화를 이어서 볼 수
               있어요.
             </p>

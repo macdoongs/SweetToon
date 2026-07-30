@@ -178,6 +178,54 @@ button {
   color: var(--ink);
 }
 
+.site-nav__more {
+  display: none;
+  position: relative;
+}
+
+.site-nav__more summary {
+  min-width: 36px;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.site-nav__more summary::-webkit-details-marker {
+  display: none;
+}
+
+.site-nav__more-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 60;
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 16px 32px rgba(31, 24, 17, 0.16);
+}
+
+.site-nav__more-panel a {
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: var(--ink);
+}
+
+.site-nav__more-panel a:hover {
+  background: var(--surface-soft);
+}
+
 .site-nav__candy {
   align-items: center;
   background: var(--pink-surface);
@@ -1635,9 +1683,16 @@ button {
 }
 
 .page-header > p:last-child,
-.order-result > p:last-child {
+.order-result > p:last-of-type {
   margin: 18px 0 0;
   color: var(--muted);
+}
+
+.order-result__actions {
+  margin-top: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .page-header--compact {
@@ -3852,12 +3907,21 @@ body:has(.reader-page) .site-footer {
     min-height: 62px;
   }
 
-  .site-nav > a:not(.site-nav__candy) {
+  .site-nav > a.site-nav__secondary {
     display: none;
   }
 
+  .site-nav__label-tail {
+    display: none;
+  }
+
+  .site-nav__more {
+    display: block;
+  }
+
   .site-nav {
-    gap: 10px;
+    gap: 8px;
+    font-size: 0.8rem;
   }
 
   .site-nav__divider,
@@ -4246,6 +4310,16 @@ body:has(.reader-page) .site-footer {
     border-radius: 18px 18px 0 0;
     border-bottom: 0;
     padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 480px) {
+  .site-header__inner {
+    gap: 12px;
+  }
+
+  .brand__word {
+    display: none;
   }
 }
 

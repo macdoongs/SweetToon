@@ -15,12 +15,16 @@ import {
 import {
   ApiError,
   deleteRequest,
-  getJson,
   isUncertainRequestError,
   patchJson,
   postFormData,
   postJson,
 } from "@/lib/api";
+import { useSeriesDetailCache } from "@/lib/use-series-detail-cache";
+import { useStudioCollections } from "@/lib/use-studio-collections";
+import { StudioDraftsShelf } from "./studio-drafts-shelf";
+import { StudioEpisodeManager } from "./studio-episode-manager";
+import { StudioPackagingHistory } from "./studio-packaging-history";
 import type { SeriesDetail } from "@/lib/reader-types";
 import type {
   AccessPolicy,
@@ -71,13 +75,6 @@ const PURPOSE_OPTIONS: Array<{
     description: "원고 묶음으로 실물 책 패키징 서비스를 신청합니다.",
   },
 ];
-
-const PACKAGING_STATUS_LABEL: Record<PackagingRequest["status"], string> = {
-  received: "접수됨",
-  reviewing: "검토 중",
-  completed: "제작 완료",
-  canceled: "취소됨",
-};
 
 type NewSeriesDraft = Omit<CreateSeriesRequest, "requestKey">;
 type IdempotentAttempt = { fingerprint: string; requestKey: string };
@@ -157,35 +154,7 @@ export function StudioPage({
   const selectedSummary =
     availableSeries.find((item) => item.id === seriesId) ??
     availableSeries[0];
-  // 선택한 작품의 회차 상세만 클라이언트에서 조회해 캐시한다.
-  const [details, setDetails] = useState<Record<string, SeriesDetail>>({});
-  const [detailErrors, setDetailErrors] = useState<Record<string, boolean>>(
-    {},
-  );
-  const selectedSeries = selectedSummary
-    ? details[selectedSummary.id]
-    : undefined;
-  const detailFailed = Boolean(
-    selectedSummary && !selectedSeries && detailErrors[selectedSummary.id],
-  );
-  const detailLoading = Boolean(
-    selectedSummary && !selectedSeries && !detailFailed,
-  );
-  const selectedPolicy = selectedSeries
-    ? policies[selectedSeries.id]
-    : undefined;
-  const ongoingSeasons =
-    selectedSeries?.seasons.filter((season) => season.status === "ongoing") ??
-    [];
   const [seasonId, setSeasonId] = useState("");
-  const selectedSeason =
-    ongoingSeasons.find((season) => season.id === seasonId) ??
-    ongoingSeasons[0];
-
-  const [drafts, setDrafts] = useState<DraftEpisode[]>([]);
-  const [draftsState, setDraftsState] = useState<
-    "loading" | "ready" | "error"
-  >("loading");
   const [draftBusyId, setDraftBusyId] = useState<string | null>(null);
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<
@@ -196,13 +165,16 @@ export function StudioPage({
   const [episodeOverrides, setEpisodeOverrides] = useState<
     Record<string, { title: string; number: number }>
   >({});
-  const [packagingRequests, setPackagingRequests] = useState<
-    PackagingRequest[]
-  >([]);
-  const [packagingRequestsState, setPackagingRequestsState] = useState<
-    "loading" | "ready" | "error"
-  >("loading");
-  const [collectionLoadKey, setCollectionLoadKey] = useState(0);
+
+  const {
+    drafts,
+    setDrafts,
+    draftsState,
+    packagingRequests,
+    setPackagingRequests,
+    packagingState: packagingRequestsState,
+    retry: retryCollections,
+  } = useStudioCollections();
 
   const nextNumberFor = useCallback(
     (season: SeriesDetail["seasons"][number] | undefined) => {
@@ -220,14 +192,34 @@ export function StudioPage({
     [drafts],
   );
 
-  const suggestedNumber = nextNumberFor(selectedSeason);
+  const detailCache = useSeriesDetailCache(selectedSummary);
+  const selectedSeries = detailCache.selectedDetail;
+  // 공개 정책은 사용자가 편집한 값이 있으면 그 값을, 없으면 상세 응답의
+  // 현재 값을 쓴다. 상태 동기화 대신 파생으로 항상 최신을 유지한다.
+  const selectedPolicy = selectedSeries
+    ? policies[selectedSeries.id] ?? {
+        freeVolumeCount: selectedSeries.freeVolumeCount,
+        previewEpisodeCount: selectedSeries.previewEpisodeCount,
+      }
+    : undefined;
+  const ongoingSeasons =
+    selectedSeries?.seasons.filter((season) => season.status === "ongoing") ??
+    [];
+  const selectedSeason =
+    ongoingSeasons.find((season) => season.id === seasonId) ??
+    ongoingSeasons[0];
 
   const fileInput = useRef<HTMLInputElement>(null);
   const episodeAttempt = useRef<IdempotentAttempt | null>(null);
   const packagingAttempt = useRef<IdempotentAttempt | null>(null);
   const seriesAttempt = useRef<IdempotentAttempt | null>(null);
   const [preview, setPreview] = useState<UploadPreview | null>(null);
-  const [episodeNumber, setEpisodeNumber] = useState(suggestedNumber);
+  // 회차 번호도 파생이 기본값이다. 사용자가 직접 고치면 그 값을 쓰고,
+  // 작품·시즌을 바꾸거나 발행을 마치면 추천 번호로 되돌아간다.
+  const [episodeNumberOverride, setEpisodeNumberOverride] = useState<
+    number | null
+  >(null);
+  const episodeNumber = episodeNumberOverride ?? nextNumberFor(selectedSeason);
   const [title, setTitle] = useState("");
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState<"upload" | "publish" | null>(null);
@@ -249,115 +241,6 @@ export function StudioPage({
   const [packagingMemo, setPackagingMemo] = useState("");
   const [packagingResult, setPackagingResult] =
     useState<PackagingRequest | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getJson<{ items: DraftEpisode[] }>(
-      "/api/studio/drafts",
-      controller.signal,
-    )
-      .then((response) => {
-        setDrafts(response.items);
-        setDraftsState("ready");
-        // 비공개 보관 회차와 겹치지 않게 추천 회차 번호를 보정한다.
-        const season = selectedSeason;
-        if (!season) return;
-        const seasonDraftNumbers = response.items
-          .filter((draft) => draft.season.id === season.id)
-          .map((draft) => draft.number);
-        if (seasonDraftNumbers.length === 0) return;
-        setEpisodeNumber((current) =>
-          seasonDraftNumbers.includes(current)
-            ? Math.max(
-                0,
-                ...season.episodes.map((episode) => episode.number),
-                ...seasonDraftNumbers,
-              ) + 1
-            : current,
-        );
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setDraftsState("error");
-      });
-    getJson<{ items: PackagingRequest[] }>(
-      "/api/studio/packaging-requests",
-      controller.signal,
-    )
-      .then((response) => {
-        setPackagingRequests(response.items);
-        setPackagingRequestsState("ready");
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setPackagingRequestsState("error");
-        }
-      });
-    return () => controller.abort();
-  }, [collectionLoadKey]);
-
-  function retryCollections() {
-    setDraftsState("loading");
-    setPackagingRequestsState("loading");
-    setCollectionLoadKey((current) => current + 1);
-  }
-
-  useEffect(() => {
-    if (
-      !selectedSummary ||
-      details[selectedSummary.id] ||
-      detailErrors[selectedSummary.id]
-    ) {
-      return;
-    }
-    const controller = new AbortController();
-    getJson<SeriesDetail>(
-      `/api/series/${encodeURIComponent(selectedSummary.slug)}`,
-      controller.signal,
-    )
-      .then((detail) => {
-        setDetails((current) => ({ ...current, [detail.id]: detail }));
-        setPolicies((current) =>
-          current[detail.id]
-            ? current
-            : {
-                ...current,
-                [detail.id]: {
-                  freeVolumeCount: detail.freeVolumeCount,
-                  previewEpisodeCount: detail.previewEpisodeCount,
-                },
-              },
-        );
-        // 선택 시즌과 추천 회차를 도착한 상세에 맞춘다. 사용자가 다른
-        // 작품으로 이동했다면 요청이 abort되어 여기 도달하지 않는다.
-        const ongoing = detail.seasons.filter(
-          (season) => season.status === "ongoing",
-        );
-        setSeasonId((current) =>
-          ongoing.some((season) => season.id === current)
-            ? current
-            : ongoing[0]?.id ?? "",
-        );
-        setEpisodeNumber(nextNumberFor(ongoing[0]));
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setDetailErrors((current) => ({
-          ...current,
-          [selectedSummary.id]: true,
-        }));
-      });
-    return () => controller.abort();
-  }, [selectedSummary, details, detailErrors, nextNumberFor]);
-
-  function retryDetail() {
-    if (!selectedSummary) return;
-    setDetailErrors((current) => {
-      if (!current[selectedSummary.id]) return current;
-      const next = { ...current };
-      delete next[selectedSummary.id];
-      return next;
-    });
-  }
 
   function applyPurpose(next: UploadPurpose) {
     setPurpose(next);
@@ -389,27 +272,22 @@ export function StudioPage({
     return () => window.removeEventListener("popstate", restore);
   }, []);
 
-  function invalidateDetail(targetSeriesId: string) {
-    setDetails((current) => {
-      if (!current[targetSeriesId]) return current;
-      const next = { ...current };
-      delete next[targetSeriesId];
-      return next;
-    });
-  }
-
   function chooseSeries(nextSeriesId: string) {
     setSeriesId(nextSeriesId);
     setPolicyMessage(null);
     setSeriesEdit(null);
     setSeriesEditMessage(null);
-    const cached = details[nextSeriesId];
-    // 캐시된 상세가 있으면 즉시, 없으면 조회 완료 시점에 시즌을 맞춘다.
-    const nextSeason = cached?.seasons.find(
-      (season) => season.status === "ongoing",
-    );
-    setSeasonId(nextSeason?.id ?? "");
-    setEpisodeNumber(nextNumberFor(nextSeason));
+    // 시즌은 새 작품의 첫 연재 시즌으로, 회차 번호는 추천값으로 돌아간다.
+    setSeasonId("");
+    setEpisodeNumberOverride(null);
+  }
+
+  function handleDeleteClick(episodeId: string) {
+    if (deleteConfirmId === episodeId) {
+      void removeEpisode(episodeId);
+    } else {
+      setDeleteConfirmId(episodeId);
+    }
   }
 
   const displayedSeriesTitle = selectedSeries
@@ -497,11 +375,8 @@ export function StudioPage({
   }
 
   function chooseSeason(nextSeasonId: string) {
-    const nextSeason = ongoingSeasons.find(
-      (season) => season.id === nextSeasonId,
-    );
     setSeasonId(nextSeasonId);
-    setEpisodeNumber(nextNumberFor(nextSeason));
+    setEpisodeNumberOverride(null);
   }
 
   async function uploadArchive(file: File | undefined) {
@@ -593,7 +468,7 @@ export function StudioPage({
       setPreview(null);
       if (result.visibility === "public" && selectedSeries) {
         // 공개 발행은 등록 회차 목록과 추천 번호에 바로 반영한다.
-        invalidateDetail(selectedSeries.id);
+        detailCache.invalidate(selectedSeries.id);
       }
       if (result.visibility === "private" && selectedSeries) {
         setDrafts((current) => [
@@ -741,7 +616,7 @@ export function StudioPage({
           ? `시즌 ${updated.number}을 완결 처리했어요. 이제 독자가 소장본을 주문할 수 있습니다.`
           : `시즌 ${updated.number} 연재를 다시 시작했어요.`,
       );
-      invalidateDetail(updated.seriesId);
+      detailCache.invalidate(updated.seriesId);
       router.refresh();
     } catch (reason) {
       setSeasonMessage(
@@ -769,7 +644,7 @@ export function StudioPage({
         mutationHeaders,
       );
       setSeasonMessage(`시즌 ${created.number} 연재를 시작했어요.`);
-      invalidateDetail(created.seriesId);
+      detailCache.invalidate(created.seriesId);
       router.refresh();
     } catch (reason) {
       setSeasonMessage(
@@ -1236,15 +1111,15 @@ export function StudioPage({
                   ))}
                 </select>
               </label>
-              {detailLoading ? (
+              {detailCache.loading ? (
                 <p aria-busy="true">작품 정보를 불러오는 중…</p>
               ) : null}
-              {detailFailed ? (
+              {detailCache.failed ? (
                 <p role="alert">
                   작품 정보를 불러오지 못했어요.{" "}
                   <button
                     className="button button--ghost"
-                    onClick={retryDetail}
+                    onClick={detailCache.retry}
                     type="button"
                   >
                     다시 시도
@@ -1391,7 +1266,9 @@ export function StudioPage({
                       <input
                         min={1}
                         onChange={(event) =>
-                          setEpisodeNumber(event.target.valueAsNumber || 0)
+                          setEpisodeNumberOverride(
+                            event.target.valueAsNumber || 0,
+                          )
                         }
                         type="number"
                         value={episodeNumber}
@@ -1752,7 +1629,8 @@ export function StudioPage({
                   onClick={() => {
                     setCreated(null);
                     setTitle("");
-                    setEpisodeNumber((current) => current + 1);
+                    // 추천 번호가 방금 발행분을 반영하므로 파생값으로 복귀
+                    setEpisodeNumberOverride(null);
                   }}
                   type="button"
                 >
@@ -1821,369 +1699,59 @@ export function StudioPage({
         </section>
       </div>
 
+
       {purpose === "publish" &&
       selectedSeries &&
       selectedSeason &&
       selectedSeason.episodes.length > 0 ? (
-        <section className="studio-drafts studio-episodes" aria-label="등록된 회차 관리">
-          <header>
-            <div>
-              <p className="eyebrow">Episodes</p>
-              <h2>등록된 회차 관리</h2>
-            </div>
-            <p>
-              {displayedSeriesTitle} · 시즌 {selectedSeason.number} — 압축
-              파일명은 페이지 정렬에만 쓰이며, 제목은 여기서 언제든 고칠 수
-              있어요.
-            </p>
-          </header>
-          {renameMessage ? <p aria-live="polite">{renameMessage}</p> : null}
-          <ul>
-            {selectedSeason.episodes
-              .filter((episode) => !deletedEpisodeIds.has(episode.id))
-              .map((episode) => (
-              <li key={episode.id}>
-                {renameTarget?.id === episode.id ? (
-                  <>
-                    <label className="field studio-rename-number">
-                      <span>회차 번호</span>
-                      <input
-                        min={1}
-                        onChange={(event) =>
-                          setRenameTarget({
-                            ...renameTarget,
-                            number: Number(event.target.value),
-                          })
-                        }
-                        type="number"
-                        value={renameTarget.number}
-                      />
-                    </label>
-                    <label className="field studio-rename-field">
-                      <span>에피소드 제목</span>
-                      <input
-                        maxLength={80}
-                        onChange={(event) =>
-                          setRenameTarget({
-                            ...renameTarget,
-                            title: event.target.value,
-                          })
-                        }
-                        value={renameTarget.title}
-                      />
-                    </label>
-                    <div className="studio-drafts__actions">
-                      <button
-                        className="button button--ghost"
-                        disabled={renameBusy}
-                        onClick={() => setRenameTarget(null)}
-                        type="button"
-                      >
-                        취소
-                      </button>
-                      <button
-                        className="button button--primary"
-                        disabled={renameBusy}
-                        onClick={() => void saveRename()}
-                        type="button"
-                      >
-                        {renameBusy ? "저장 중…" : "저장"}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <strong>
-                        {episodeOverrides[episode.id]?.number ??
-                          episode.number}
-                        화
-                      </strong>
-                      <span>
-                        {episodeOverrides[episode.id]?.title ??
-                          episode.title}
-                      </span>
-                    </div>
-                    <div className="studio-drafts__actions">
-                      <Link
-                        className="button button--ghost"
-                        href={`/read/${encodeURIComponent(episode.id)}`}
-                      >
-                        보기
-                      </Link>
-                      <button
-                        className="button button--ghost"
-                        onClick={() =>
-                          startReplace({
-                            id: episode.id,
-                            number:
-                              episodeOverrides[episode.id]?.number ??
-                              episode.number,
-                            title:
-                              episodeOverrides[episode.id]?.title ??
-                              episode.title,
-                          })
-                        }
-                        type="button"
-                      >
-                        원고 교체
-                      </button>
-                      <button
-                        className="button button--primary"
-                        onClick={() =>
-                          setRenameTarget({
-                            id: episode.id,
-                            number:
-                              episodeOverrides[episode.id]?.number ??
-                              episode.number,
-                            title:
-                              episodeOverrides[episode.id]?.title ??
-                              episode.title,
-                          })
-                        }
-                        type="button"
-                      >
-                        정보 수정
-                      </button>
-                      <button
-                        className="button button--danger"
-                        disabled={deleteBusyId !== null}
-                        onClick={() =>
-                          deleteConfirmId === episode.id
-                            ? void removeEpisode(episode.id)
-                            : setDeleteConfirmId(episode.id)
-                        }
-                        type="button"
-                      >
-                        {deleteBusyId === episode.id
-                          ? "삭제 중…"
-                          : deleteConfirmId === episode.id
-                            ? "정말 삭제"
-                            : "삭제"}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
+        <StudioEpisodeManager
+          deleteBusyId={deleteBusyId}
+          deleteConfirmId={deleteConfirmId}
+          deletedEpisodeIds={deletedEpisodeIds}
+          episodeOverrides={episodeOverrides}
+          episodes={selectedSeason.episodes}
+          onDeleteClick={handleDeleteClick}
+          onRenameCancel={() => setRenameTarget(null)}
+          onRenameChange={setRenameTarget}
+          onRenameSave={() => void saveRename()}
+          onRenameStart={setRenameTarget}
+          onReplaceStart={startReplace}
+          renameBusy={renameBusy}
+          renameMessage={renameMessage}
+          renameTarget={renameTarget}
+          seasonNumber={selectedSeason.number}
+          seriesTitle={displayedSeriesTitle}
+        />
       ) : null}
 
-      {purpose !== "draft" ? null : draftsState === "loading" ? (
-        <section className="studio-drafts" aria-busy="true">
-          <h2>비공개 보관함을 불러오는 중…</h2>
-        </section>
-      ) : draftsState === "error" ? (
-        <section className="studio-drafts" role="alert">
-          <h2>비공개 보관함을 불러오지 못했어요.</h2>
-          <button
-            className="button button--ghost"
-            onClick={retryCollections}
-            type="button"
-          >
-            다시 시도
-          </button>
-        </section>
-      ) : drafts.length > 0 ? (
-        <section className="studio-drafts" aria-label="비공개 보관함">
-          <header>
-            <div>
-              <p className="eyebrow">Private shelf</p>
-              <h2>비공개 보관함</h2>
-            </div>
-            <p>링크를 아는 사람만 볼 수 있어요. 준비되면 공개로 전환하세요.</p>
-          </header>
-          {draftMessage ? <p aria-live="polite">{draftMessage}</p> : null}
-          <ul>
-            {drafts.map((draft) => (
-              <li key={draft.id}>
-                {renameTarget?.id === draft.id ? (
-                  <>
-                    <label className="field studio-rename-number">
-                      <span>회차 번호</span>
-                      <input
-                        min={1}
-                        onChange={(event) =>
-                          setRenameTarget({
-                            ...renameTarget,
-                            number: Number(event.target.value),
-                          })
-                        }
-                        type="number"
-                        value={renameTarget.number}
-                      />
-                    </label>
-                    <label className="field studio-rename-field">
-                      <span>에피소드 제목</span>
-                      <input
-                        maxLength={80}
-                        onChange={(event) =>
-                          setRenameTarget({
-                            ...renameTarget,
-                            title: event.target.value,
-                          })
-                        }
-                        value={renameTarget.title}
-                      />
-                    </label>
-                    <div className="studio-drafts__actions">
-                      <button
-                        className="button button--ghost"
-                        disabled={renameBusy}
-                        onClick={() => setRenameTarget(null)}
-                        type="button"
-                      >
-                        취소
-                      </button>
-                      <button
-                        className="button button--primary"
-                        disabled={renameBusy}
-                        onClick={() => void saveRename()}
-                        type="button"
-                      >
-                        {renameBusy ? "저장 중…" : "저장"}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <strong>
-                        {draft.series.title} · 시즌 {draft.season.number} ·{" "}
-                        {draft.number}화
-                      </strong>
-                      <span>{draft.title}</span>
-                    </div>
-                    <div className="studio-drafts__actions">
-                      <Link
-                        className="button button--ghost"
-                        href={`/read/${encodeURIComponent(draft.id)}`}
-                      >
-                        미리보기
-                      </Link>
-                      <button
-                        className="button button--ghost"
-                        onClick={() =>
-                          setRenameTarget({
-                            id: draft.id,
-                            number: draft.number,
-                            title: draft.title,
-                          })
-                        }
-                        type="button"
-                      >
-                        정보 수정
-                      </button>
-                      <button
-                        className="button button--ghost"
-                        onClick={() =>
-                          startReplace({
-                            id: draft.id,
-                            number: draft.number,
-                            title: draft.title,
-                          })
-                        }
-                        type="button"
-                      >
-                        원고 교체
-                      </button>
-                      <button
-                        className="button button--primary"
-                        disabled={draftBusyId !== null}
-                        onClick={() => void publishDraft(draft.id)}
-                        type="button"
-                      >
-                        {draftBusyId === draft.id ? "공개 중…" : "공개하기"}
-                      </button>
-                      <button
-                        className="button button--danger"
-                        disabled={deleteBusyId !== null}
-                        onClick={() =>
-                          deleteConfirmId === draft.id
-                            ? void removeEpisode(draft.id)
-                            : setDeleteConfirmId(draft.id)
-                        }
-                        type="button"
-                      >
-                        {deleteBusyId === draft.id
-                          ? "삭제 중…"
-                          : deleteConfirmId === draft.id
-                            ? "정말 삭제"
-                            : "삭제"}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : (
-        <section className="studio-drafts">
-          <h2>비공개로 보관한 회차가 없어요.</h2>
-          <p>원고 업로드 목적에서 ‘비공개 보관’을 선택해 추가할 수 있어요.</p>
-        </section>
-      )}
+      {purpose === "draft" ? (
+        <StudioDraftsShelf
+          deleteBusyId={deleteBusyId}
+          deleteConfirmId={deleteConfirmId}
+          draftBusyId={draftBusyId}
+          draftMessage={draftMessage}
+          drafts={drafts}
+          draftsState={draftsState}
+          onDeleteClick={handleDeleteClick}
+          onPublishDraft={(episodeId) => void publishDraft(episodeId)}
+          onRenameCancel={() => setRenameTarget(null)}
+          onRenameChange={setRenameTarget}
+          onRenameSave={() => void saveRename()}
+          onRenameStart={setRenameTarget}
+          onReplaceStart={startReplace}
+          onRetry={retryCollections}
+          renameBusy={renameBusy}
+          renameTarget={renameTarget}
+        />
+      ) : null}
 
-      {purpose !== "packaging" ? null : packagingRequestsState ===
-        "loading" ? (
-        <section className="studio-packaging-list" aria-busy="true">
-          <h2>패키징 신청 내역을 불러오는 중…</h2>
-        </section>
-      ) : packagingRequestsState === "error" ? (
-        <section className="studio-packaging-list" role="alert">
-          <h2>패키징 신청 내역을 불러오지 못했어요.</h2>
-          <button
-            className="button button--ghost"
-            onClick={retryCollections}
-            type="button"
-          >
-            다시 시도
-          </button>
-        </section>
-      ) : packagingRequests.length > 0 ? (
-        <section
-          className="studio-packaging-list"
-          aria-label="패키징 신청 내역"
-        >
-          <header>
-            <div>
-              <p className="eyebrow">Packaging</p>
-              <h2>책 패키징 신청 내역</h2>
-            </div>
-            <p>실제 인쇄 없이 접수와 상태만 관리하는 데모 흐름입니다.</p>
-          </header>
-          <ul>
-            {packagingRequests.map((request) => (
-              <li key={request.id}>
-                <div>
-                  <strong>《{request.bookTitle}》</strong>
-                  <span>
-                    {request.applicantName} · 내지 {request.pageCount}쪽 ·{" "}
-                    {request.bookSize} ·{" "}
-                    {request.coverType === "hardcover"
-                      ? "하드커버"
-                      : "소프트커버"}{" "}
-                    · {request.quantity}부
-                  </span>
-                  {request.memo ? <small>{request.memo}</small> : null}
-                </div>
-                <span
-                  className={`studio-packaging-status studio-packaging-status--${request.status}`}
-                >
-                  {PACKAGING_STATUS_LABEL[request.status]}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : (
-        <section className="studio-packaging-list">
-          <h2>아직 패키징 신청 내역이 없어요.</h2>
-          <p>원고 업로드 목적에서 ‘책 패키징 신청’을 선택해 접수할 수 있어요.</p>
-        </section>
-      )}
+      {purpose === "packaging" ? (
+        <StudioPackagingHistory
+          onRetry={retryCollections}
+          requests={packagingRequests}
+          state={packagingRequestsState}
+        />
+      ) : null}
     </main>
   );
 }

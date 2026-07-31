@@ -16,7 +16,6 @@ import {
   isUncertainRequestError,
   postJson,
 } from "@/lib/api";
-import { startBackoffPolling } from "@/lib/polling";
 import { getDemoEntitlement } from "@/lib/demo-entitlements";
 import {
   getCandyWalletToken,
@@ -27,13 +26,11 @@ import {
 import { episodeLabel } from "@/lib/episode-label";
 import type { EpisodeReader } from "@/lib/reader-types";
 import {
-  getReaderSessionId,
-  type PresenceResponse,
-} from "@/lib/realtime";
-import {
   getEpisodeProgress,
   saveReadingProgress,
 } from "@/lib/reading-progress";
+import { useReaderPresence } from "@/lib/use-reader-presence";
+import { ReaderPaywall } from "./reader-paywall";
 import { ErrorState, PageLoading } from "./reader-states";
 
 type ReaderMode = "webtoon" | "double";
@@ -211,7 +208,6 @@ export function EpisodeReaderPage({
   const [candyBalance, setCandyBalance] = useState<number | null>(null);
   const [candyBusy, setCandyBusy] = useState(false);
   const [candyMessage, setCandyMessage] = useState<string | null>(null);
-  const [viewerCount, setViewerCount] = useState<number | null>(null);
   const chromeHideTimer = useRef<number | null>(null);
   const lastScrollY = useRef(0);
   const lastSavedPercent = useRef(-10);
@@ -234,39 +230,7 @@ export function EpisodeReaderPage({
     setRequestKey((current) => current + 1);
   }, []);
 
-  useEffect(() => {
-    const seriesSlug = episode?.series.slug;
-    if (!seriesSlug) return;
-    let active = true;
-    const heartbeat = async () => {
-      // 숨겨진 탭은 실패가 아니므로 backoff를 키우지 않는다.
-      if (document.visibilityState !== "visible") return true;
-      try {
-        const response = await postJson<
-          { sessionId: string },
-          PresenceResponse
-        >(`/api/series/${encodeURIComponent(seriesSlug)}/presence`, {
-          sessionId: getReaderSessionId(),
-        });
-        if (active) setViewerCount(response.viewerCount);
-        return true;
-      } catch {
-        if (active) setViewerCount(null);
-        return false;
-      }
-    };
-    const stop = startBackoffPolling(heartbeat, {
-      intervalMs: 20_000,
-      maxIntervalMs: 160_000,
-    });
-    const onVisibilityChange = () => void heartbeat();
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      active = false;
-      stop();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [episode?.series.slug]);
+  const viewerCount = useReaderPresence(episode?.series.slug);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -974,54 +938,14 @@ export function EpisodeReaderPage({
       ) : null}
 
       {episode.access.state === "locked" ? (
-        <section className="reader-paywall">
-          <span aria-hidden="true">🔒</span>
-          <p className="eyebrow">무료 미리보기 종료</p>
-          <h2>
-            {episode.access.freeVolumeCount > 0
-              ? episode.access.previewEpisodeCount > 0
-                ? `${episode.access.freeVolumeCount}권과 다음 ${episode.access.previewEpisodeCount}화`
-                : `첫 ${episode.access.freeVolumeCount}권(${episode.access.freeVolumeCount * 5}화)`
-              : `첫 ${episode.access.previewEpisodeCount}화`}
-            까지 무료로 읽을 수 있어요.
-          </h2>
-          <p>
-            이 회차는 시즌 {episode.season.number} ·{" "}
-            {episode.access.volumeNumber}권에 수록됩니다. 캔디 1개로 이
-            회차를 지금 쓰는 브라우저에서 계속 읽거나, 소장본을 주문해
-            수록된 다섯 화를 함께 열 수 있습니다.
-          </p>
-          <div className="reader-paywall__candy">
-            <div>
-              <strong>🍬 캔디 {candyBalance ?? "—"}개</strong>
-              <span>1개 = 100원 · 유료 회차 1편</span>
-            </div>
-            <button
-              className="button button--primary"
-              disabled={candyBusy || candyBalance === 0}
-              onClick={unlockWithCandy}
-              type="button"
-            >
-              {candyBusy ? "회차 여는 중…" : "캔디 1개로 이 화 보기"}
-            </button>
-          </div>
-          {candyMessage ? (
-            <p className="reader-paywall__message" role="status">
-              {candyMessage}
-            </p>
-          ) : null}
-          <Link className="button button--primary" href={orderHref}>
-            {episode.access.volumeNumber === 1
-              ? "1권 소장하고 캔디 5개 받기"
-              : `${episode.access.volumeNumber}권 소장하고 다섯 화 열기`}
-          </Link>
-          <Link
-            className="reader-finish__back"
-            href={`/series/${encodeURIComponent(episode.series.slug)}#episodes`}
-          >
-            무료 회차 목록으로
-          </Link>
-        </section>
+        <ReaderPaywall
+          candyBalance={candyBalance}
+          candyBusy={candyBusy}
+          candyMessage={candyMessage}
+          episode={episode}
+          onUnlockWithCandy={() => void unlockWithCandy()}
+          orderHref={orderHref}
+        />
       ) : episode.pages.length === 0 ? (
         <div className="reader-empty">
           <h2>아직 등록된 원고가 없어요.</h2>

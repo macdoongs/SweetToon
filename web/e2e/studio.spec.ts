@@ -17,10 +17,26 @@ function episodeArchive(): Buffer {
 test("등록 회차를 시즌·권·검색으로 좁히고 관리 메뉴를 연다", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/studio/series/moonlight-laundry");
 
   const manager = page.getByRole("region", { name: "등록된 회차 관리" });
   await expect(manager).toBeVisible();
+
+  const manageGrid = page.locator(".studio-manage-grid");
+  const [managerBox, manageGridBox] = await Promise.all([
+    manager.boundingBox(),
+    manageGrid.boundingBox(),
+  ]);
+  expect(managerBox).not.toBeNull();
+  expect(manageGridBox).not.toBeNull();
+  expect(Math.abs(managerBox!.x - manageGridBox!.x)).toBeLessThan(1);
+  expect(
+    Math.abs(
+      managerBox!.x + managerBox!.width -
+        (manageGridBox!.x + manageGridBox!.width),
+    ),
+  ).toBeLessThan(1);
 
   const season = manager.getByLabel("관리할 시즌");
   await expect(season.locator("option")).toHaveCount(2);

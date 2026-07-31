@@ -15,6 +15,7 @@ import type {
 } from "@/lib/order-types";
 import type { SeriesDetail } from "@/lib/reader-types";
 import { saveDemoEntitlement } from "@/lib/demo-entitlements";
+import { saveMyOrder } from "@/lib/my-orders";
 import {
   getCandyWalletToken,
   notifyCandyUpdated,
@@ -139,6 +140,13 @@ export function OrderFormPage({
         created.entitlementToken,
       );
       if (created.candyBonus > 0) notifyCandyUpdated();
+      saveMyOrder({
+        id: created.id,
+        seriesTitle: created.series.title,
+        seasonNumber: created.season.number,
+        volumeNumber: created.volumeNumber,
+        createdAt: created.createdAt,
+      });
       const storageNotice = entitlementSaved ? "" : "?storage=unavailable";
       router.push(
         `/orders/${encodeURIComponent(created.id)}${storageNotice}`,

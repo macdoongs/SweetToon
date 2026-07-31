@@ -375,6 +375,23 @@ export class PrismaOrderRepository implements OrderRepository {
 
   async listOrders(query: OrderListQuery): Promise<OrderListResponse> {
     const orders = await this.prisma.order.findMany({
+      where: {
+        ...(query.status === "active"
+          ? { status: { in: ["pending", "processing", "shipped"] } }
+          : query.status === "done"
+            ? { status: { in: ["completed", "canceled"] } }
+            : {}),
+        ...(query.source ? { isDemo: query.source === "bot" } : {}),
+        ...(query.series
+          ? {
+              season: {
+                series: {
+                  title: { contains: query.series, mode: "insensitive" },
+                },
+              },
+            }
+          : {}),
+      },
       ...(query.cursor
         ? { cursor: { id: query.cursor }, skip: 1 }
         : {}),

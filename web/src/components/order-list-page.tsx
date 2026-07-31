@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, getJson } from "@/lib/api";
+import { getMyOrders, type MyOrderRecord } from "@/lib/my-orders";
 import { formatKoreanDateTime } from "@/lib/date-time";
 import type { OrderListResponse, OrderSummary } from "@/lib/order-types";
 import { DiscoverLink } from "./discover-link";
@@ -25,6 +26,11 @@ export function OrderListPage({
 }) {
   const [items, setItems] = useState(orders);
   const [nextCursor, setNextCursor] = useState(initialNextCursor);
+  const [myOrders, setMyOrders] = useState<MyOrderRecord[]>([]);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setMyOrders(getMyOrders()));
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
@@ -67,6 +73,32 @@ export function OrderListPage({
           데모 운영자 화면에서 상태 변경하기 →
         </Link>
       </header>
+
+      {myOrders.length > 0 ? (
+        <section className="my-orders" aria-label="이 브라우저의 주문">
+          <div className="section-heading section-heading--compact">
+            <div>
+              <p className="eyebrow">My orders</p>
+              <h2>이 브라우저에서 만든 주문</h2>
+            </div>
+            <p>주문 기록은 이 브라우저에만 저장돼요.</p>
+          </div>
+          <ul>
+            {myOrders.map((order) => (
+              <li key={order.id}>
+                <Link href={`/orders/${encodeURIComponent(order.id)}`}>
+                  <strong>
+                    {order.seriesTitle} · 시즌 {order.seasonNumber} ·{" "}
+                    {order.volumeNumber}권
+                  </strong>
+                  <span>{formatKoreanDateTime(order.createdAt)} 주문</span>
+                  <em>제작 타임라인 보기 →</em>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {items.length === 0 ? (
         <section className="orders-empty">

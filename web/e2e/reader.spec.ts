@@ -1,9 +1,4 @@
 import { expect, test } from "@playwright/test";
-import {
-  expectSameCardPositions,
-  prepareLoopBoundary,
-  snapshotVisibleCards,
-} from "./circular-rail";
 
 test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", async ({ page }) => {
   await page.goto("/");
@@ -333,30 +328,24 @@ test("작품을 찜하고 목록에서 확인한 뒤 해제한다", async ({ pag
 
   await page.goto("/favorites");
   await expect(page.getByRole("heading", { name: "찜 목록" })).toBeVisible();
-  const rail = page.locator(".favorites-rail");
-  await expect(rail).toHaveAttribute(
-    "aria-roledescription",
-    "순환형 캐러셀",
-  );
-  await expect(rail).toHaveCSS("scrollbar-width", "none");
-  await expect(rail.locator(".favorite-card")).toHaveCount(10);
+  await expect(page.getByText("찜한 작품 2개를 모아두었어요.")).toBeVisible();
+  const grid = page.locator(".favorites-grid");
+  // 캐러셀 복제 없이 찜한 수만큼만 카드를 렌더링한다.
+  await expect(grid.locator(".favorite-card")).toHaveCount(2);
 
-  const originalCards = rail.locator(".favorite-card:not([aria-hidden])");
-  await expect(originalCards).toHaveCount(2);
-  const beforeBoundary = await prepareLoopBoundary(rail);
-  await rail.dispatchEvent("scrollend");
-  await page.waitForTimeout(100);
-  const afterBoundary = await snapshotVisibleCards(rail);
-  expectSameCardPositions(beforeBoundary, afterBoundary, "favorites rail");
+  await page.getByLabel("제목 검색").fill("달빛");
+  await expect(grid.locator(".favorite-card")).toHaveCount(1);
+  await page.getByLabel("제목 검색").fill("");
 
-  const card = originalCards.filter({ hasText: "달빛 세탁소" });
+  const card = grid
+    .locator(".favorite-card")
+    .filter({ hasText: "달빛 세탁소" });
   await expect(card.getByRole("heading", { name: "달빛 세탁소" })).toBeVisible();
   await expect(card.locator("img")).toBeVisible();
 
   await card.getByRole("button", { name: "찜 해제" }).click();
-  await expect(rail).toHaveAttribute("aria-roledescription", "작품 목록");
-  await expect(rail.locator(".favorite-card")).toHaveCount(1);
-  await rail.getByRole("button", { name: "찜 해제" }).click();
+  await expect(grid.locator(".favorite-card")).toHaveCount(1);
+  await grid.getByRole("button", { name: "찜 해제" }).click();
   await expect(
     page.getByRole("heading", { name: "아직 찜한 작품이 없어요" }),
   ).toBeVisible();

@@ -489,7 +489,7 @@ test("데모 기록 초기화가 개인 기록만 지우고 설정은 보존한�
   await reset.click();
   await page.getByRole("button", { name: "정말 초기화" }).click();
   await expect(
-    page.getByText("찜·진행도·캔디·이용권 기록을 지웠어요."),
+    page.getByText("찜·진행도·캔디·이용권·주문 기록을 지웠어요."),
   ).toBeVisible();
 
   const remaining = await page.evaluate(() => ({

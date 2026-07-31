@@ -14,6 +14,46 @@ function episodeArchive(): Buffer {
   return archive.toBuffer();
 }
 
+test("스튜디오가 전체 작품을 보여주고 새 작품을 드롭다운에 바로 반영한다", async ({
+  page,
+}) => {
+  await page.goto("/studio");
+
+  // 공개 목록 한 페이지(12개)에 갇히지 않고 시드 전체가 보여야 한다.
+  const manage = page.locator(".studio-season-manage");
+  await manage.locator("summary").click();
+  expect(
+    await manage.getByLabel("관리할 작품").locator("option").count(),
+  ).toBeGreaterThan(12);
+
+  const newSeriesForm = page.locator(".studio-new-series");
+  await newSeriesForm.locator("summary").click();
+  const uniqueSlug = `e2e-night-market-${Date.now()}`;
+  await newSeriesForm.getByLabel("주소(slug)").fill(uniqueSlug);
+  await newSeriesForm.getByLabel("새 작품 제목").fill("E2E 밤의 시장");
+  await newSeriesForm.getByLabel("줄거리").fill("밤에만 열리는 시장 이야기");
+  await newSeriesForm.getByLabel("장르").fill("판타지");
+  await newSeriesForm.getByLabel("작가 이름").fill("E2E작가");
+  await newSeriesForm
+    .getByRole("button", { name: "작품 만들기" })
+    .click();
+  await expect(
+    page.getByText("《E2E 밤의 시장》 시즌 1이 준비됐어요", { exact: false }),
+  ).toBeVisible();
+
+  // 새 작품이 발행 대상 드롭다운에 나타나고 선택돼 있어야 한다.
+  const seriesSelect = page.getByRole("combobox", {
+    name: "작품",
+    exact: true,
+  });
+  await expect(seriesSelect.locator("option:checked")).toHaveText(
+    "E2E 밤의 시장",
+  );
+  await expect(
+    page.getByRole("spinbutton", { name: "회차", exact: true }),
+  ).toHaveValue("1");
+});
+
 test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드를 발행한다", async ({
   page,
 }) => {

@@ -16,6 +16,24 @@ export type EpisodeVisibility = "public" | "private";
 
 export type UploadPurpose = "publish" | "draft" | "packaging";
 
+export type StudioSeriesSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  coverUrl: string | null;
+  seasons: Array<{
+    id: string;
+    number: number;
+    title: string | null;
+    status: "ongoing" | "completed";
+    episodeCount: number;
+  }>;
+};
+
+export type StudioSeriesListResponse = {
+  items: StudioSeriesSummary[];
+};
+
 export type CreateEpisodeRequest = {
   requestKey: string;
   sessionId: string;

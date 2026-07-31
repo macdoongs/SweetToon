@@ -134,6 +134,7 @@ function makeDependencies(malwareScanner?: MalwareScanner) {
       },
     }),
     replaceEpisodePages: jest.fn().mockResolvedValue(undefined),
+    listStudioSeries: jest.fn().mockResolvedValue([]),
     listDraftEpisodes: jest.fn().mockResolvedValue([]),
     createPackagingRequest: jest.fn().mockImplementation(
       async (request) => ({

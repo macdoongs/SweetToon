@@ -9,6 +9,7 @@ import {
   type CatalogFilters,
 } from "./series-filter";
 import type { OrderDetail, OrderListResponse } from "./order-types";
+import type { StudioSeriesListResponse } from "./studio-types";
 import type {
   RecentEpisodesResponse,
   SitemapDiscoveryResponse,
@@ -58,6 +59,10 @@ async function serverGetJson<T>(
   }
 
   return (await response.json()) as T;
+}
+
+export function getStudioSeriesList(): Promise<StudioSeriesListResponse> {
+  return serverGetJson("/api/studio/series", { fresh: true });
 }
 
 export function getSeriesList(

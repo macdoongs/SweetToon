@@ -38,6 +38,7 @@ import type {
   StudioSeasonResponse,
   UpdateSeriesInfoRequest,
   UploadPreview,
+  StudioSeriesSummary,
   UploadPurpose,
 } from "@/lib/studio-types";
 import {
@@ -100,7 +101,13 @@ const WEEKDAY_LABEL: Record<CreateSeriesRequest["weekday"], string> = {
   sun: "일",
 };
 
-export function StudioPage({ series }: { series: SeriesDetail[] }) {
+export function StudioPage({
+  initialPurpose = "publish",
+  seriesList,
+}: {
+  initialPurpose?: UploadPurpose;
+  seriesList: StudioSeriesSummary[];
+}) {
   const router = useRouter();
   const [accessKey, setAccessKey] = useState(() =>
     loadSecurityAccessKey("studio"),
@@ -110,24 +117,14 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     : {};
   const availableSeries = useMemo(
     () =>
-      series.filter((item) =>
+      seriesList.filter((item) =>
         item.seasons.some((season) => season.status === "ongoing"),
       ),
-    [series],
+    [seriesList],
   );
-  const [purpose, setPurpose] = useState<UploadPurpose>("publish");
+  const [purpose, setPurpose] = useState<UploadPurpose>(initialPurpose);
   const [seriesId, setSeriesId] = useState(availableSeries[0]?.id ?? "");
-  const [policies, setPolicies] = useState<Record<string, AccessPolicy>>(() =>
-    Object.fromEntries(
-      series.map((item) => [
-        item.id,
-        {
-          freeVolumeCount: item.freeVolumeCount,
-          previewEpisodeCount: item.previewEpisodeCount,
-        },
-      ]),
-    ),
-  );
+  const [policies, setPolicies] = useState<Record<string, AccessPolicy>>({});
   const [policyBusy, setPolicyBusy] = useState(false);
   const [policyMessage, setPolicyMessage] = useState<string | null>(null);
   const [seriesOverrides, setSeriesOverrides] = useState<
@@ -147,7 +144,9 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [newSeriesMessage, setNewSeriesMessage] = useState<string | null>(
     null,
   );
-  const [manageSeriesId, setManageSeriesId] = useState(series[0]?.id ?? "");
+  const [manageSeriesId, setManageSeriesId] = useState(
+    seriesList[0]?.id ?? "",
+  );
   const [seasonBusyId, setSeasonBusyId] = useState<string | null>(null);
   const [seasonMessage, setSeasonMessage] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -155,16 +154,30 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   const [deletedEpisodeIds, setDeletedEpisodeIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const selectedSeries =
+  const selectedSummary =
     availableSeries.find((item) => item.id === seriesId) ??
     availableSeries[0];
+  // 선택한 작품의 회차 상세만 클라이언트에서 조회해 캐시한다.
+  const [details, setDetails] = useState<Record<string, SeriesDetail>>({});
+  const [detailErrors, setDetailErrors] = useState<Record<string, boolean>>(
+    {},
+  );
+  const selectedSeries = selectedSummary
+    ? details[selectedSummary.id]
+    : undefined;
+  const detailFailed = Boolean(
+    selectedSummary && !selectedSeries && detailErrors[selectedSummary.id],
+  );
+  const detailLoading = Boolean(
+    selectedSummary && !selectedSeries && !detailFailed,
+  );
   const selectedPolicy = selectedSeries
     ? policies[selectedSeries.id]
     : undefined;
   const ongoingSeasons =
     selectedSeries?.seasons.filter((season) => season.status === "ongoing") ??
     [];
-  const [seasonId, setSeasonId] = useState(ongoingSeasons[0]?.id ?? "");
+  const [seasonId, setSeasonId] = useState("");
   const selectedSeason =
     ongoingSeasons.find((season) => season.id === seasonId) ??
     ongoingSeasons[0];
@@ -288,17 +301,113 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
     setCollectionLoadKey((current) => current + 1);
   }
 
+  useEffect(() => {
+    if (
+      !selectedSummary ||
+      details[selectedSummary.id] ||
+      detailErrors[selectedSummary.id]
+    ) {
+      return;
+    }
+    const controller = new AbortController();
+    getJson<SeriesDetail>(
+      `/api/series/${encodeURIComponent(selectedSummary.slug)}`,
+      controller.signal,
+    )
+      .then((detail) => {
+        setDetails((current) => ({ ...current, [detail.id]: detail }));
+        setPolicies((current) =>
+          current[detail.id]
+            ? current
+            : {
+                ...current,
+                [detail.id]: {
+                  freeVolumeCount: detail.freeVolumeCount,
+                  previewEpisodeCount: detail.previewEpisodeCount,
+                },
+              },
+        );
+        // 선택 시즌과 추천 회차를 도착한 상세에 맞춘다. 사용자가 다른
+        // 작품으로 이동했다면 요청이 abort되어 여기 도달하지 않는다.
+        const ongoing = detail.seasons.filter(
+          (season) => season.status === "ongoing",
+        );
+        setSeasonId((current) =>
+          ongoing.some((season) => season.id === current)
+            ? current
+            : ongoing[0]?.id ?? "",
+        );
+        setEpisodeNumber(nextNumberFor(ongoing[0]));
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setDetailErrors((current) => ({
+          ...current,
+          [selectedSummary.id]: true,
+        }));
+      });
+    return () => controller.abort();
+  }, [selectedSummary, details, detailErrors, nextNumberFor]);
+
+  function retryDetail() {
+    if (!selectedSummary) return;
+    setDetailErrors((current) => {
+      if (!current[selectedSummary.id]) return current;
+      const next = { ...current };
+      delete next[selectedSummary.id];
+      return next;
+    });
+  }
+
+  function applyPurpose(next: UploadPurpose) {
+    setPurpose(next);
+    setError(null);
+    setCreated(null);
+    setPackagingResult(null);
+  }
+
+  // 업로드 목적을 URL과 동기화해 새로고침·공유·뒤로가기에서 복원한다.
+  function changePurpose(next: UploadPurpose) {
+    if (next === purpose) return;
+    applyPurpose(next);
+    const nextUrl =
+      next === "publish" ? "/studio" : `/studio?mode=${next}`;
+    window.history.pushState(window.history.state, "", nextUrl);
+  }
+
+  useEffect(() => {
+    const restore = () => {
+      const mode = new URLSearchParams(window.location.search).get("mode");
+      const next =
+        mode === "draft" || mode === "packaging" ? mode : "publish";
+      setPurpose(next);
+      setError(null);
+      setCreated(null);
+      setPackagingResult(null);
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+
+  function invalidateDetail(targetSeriesId: string) {
+    setDetails((current) => {
+      if (!current[targetSeriesId]) return current;
+      const next = { ...current };
+      delete next[targetSeriesId];
+      return next;
+    });
+  }
+
   function chooseSeries(nextSeriesId: string) {
-    const nextSeries = availableSeries.find(
-      (item) => item.id === nextSeriesId,
-    );
-    const nextSeason = nextSeries?.seasons.find(
-      (season) => season.status === "ongoing",
-    );
     setSeriesId(nextSeriesId);
     setPolicyMessage(null);
     setSeriesEdit(null);
     setSeriesEditMessage(null);
+    const cached = details[nextSeriesId];
+    // 캐시된 상세가 있으면 즉시, 없으면 조회 완료 시점에 시즌을 맞춘다.
+    const nextSeason = cached?.seasons.find(
+      (season) => season.status === "ongoing",
+    );
     setSeasonId(nextSeason?.id ?? "");
     setEpisodeNumber(nextNumberFor(nextSeason));
   }
@@ -482,6 +591,10 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
       episodeAttempt.current = null;
       setCreated(result);
       setPreview(null);
+      if (result.visibility === "public" && selectedSeries) {
+        // 공개 발행은 등록 회차 목록과 추천 번호에 바로 반영한다.
+        invalidateDetail(selectedSeries.id);
+      }
       if (result.visibility === "private" && selectedSeries) {
         setDrafts((current) => [
           {
@@ -568,7 +681,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
   }
 
   const manageSeries =
-    series.find((item) => item.id === manageSeriesId) ?? series[0];
+    seriesList.find((item) => item.id === manageSeriesId) ?? seriesList[0];
 
   async function uploadCover(file: File | undefined) {
     if (!selectedSeries || !file) return;
@@ -628,6 +741,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
           ? `시즌 ${updated.number}을 완결 처리했어요. 이제 독자가 소장본을 주문할 수 있습니다.`
           : `시즌 ${updated.number} 연재를 다시 시작했어요.`,
       );
+      invalidateDetail(updated.seriesId);
       router.refresh();
     } catch (reason) {
       setSeasonMessage(
@@ -655,6 +769,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
         mutationHeaders,
       );
       setSeasonMessage(`시즌 ${created.number} 연재를 시작했어요.`);
+      invalidateDetail(created.seriesId);
       router.refresh();
     } catch (reason) {
       setSeasonMessage(
@@ -909,12 +1024,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                 <input
                   checked={purpose === option.value}
                   name="upload-purpose"
-                  onChange={() => {
-                    setPurpose(option.value);
-                    setError(null);
-                    setCreated(null);
-                    setPackagingResult(null);
-                  }}
+                  onChange={() => changePurpose(option.value)}
                   type="radio"
                 />
                 <span>
@@ -1043,7 +1153,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                   }}
                   value={manageSeries.id}
                 >
-                  {series.map((item) => (
+                  {seriesList.map((item) => (
                     <option key={item.id} value={item.id}>
                       {seriesOverrides[item.id]?.title ?? item.title}
                     </option>
@@ -1117,7 +1227,7 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                 <span>작품</span>
                 <select
                   onChange={(event) => chooseSeries(event.target.value)}
-                  value={selectedSeries?.id}
+                  value={selectedSummary?.id}
                 >
                   {availableSeries.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -1126,6 +1236,21 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                   ))}
                 </select>
               </label>
+              {detailLoading ? (
+                <p aria-busy="true">작품 정보를 불러오는 중…</p>
+              ) : null}
+              {detailFailed ? (
+                <p role="alert">
+                  작품 정보를 불러오지 못했어요.{" "}
+                  <button
+                    className="button button--ghost"
+                    onClick={retryDetail}
+                    type="button"
+                  >
+                    다시 시도
+                  </button>
+                </p>
+              ) : null}
               {selectedSeries ? (
                 <details className="studio-security-access studio-series-edit">
                   <summary>작품 정보 수정</summary>
@@ -1245,43 +1370,48 @@ export function StudioPage({ series }: { series: SeriesDetail[] }) {
                   ) : null}
                 </section>
               ) : null}
-              <label className="field">
-                <span>시즌</span>
-                <select
-                  onChange={(event) => chooseSeason(event.target.value)}
-                  value={selectedSeason?.id}
-                >
-                  {ongoingSeasons.map((season) => (
-                    <option key={season.id} value={season.id}>
-                      시즌 {season.number} · {season.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="studio-number-title">
-                <label className="field">
-                  <span>회차</span>
-                  <input
-                    min={1}
-                    onChange={(event) =>
-                      setEpisodeNumber(event.target.valueAsNumber || 0)
-                    }
-                    type="number"
-                    value={episodeNumber}
-                  />
-                </label>
-                <label className="field">
-                  <span>
-                    제목 <small>비우면 “{episodeNumber}화”로 저장돼요</small>
-                  </span>
-                  <input
-                    maxLength={80}
-                    onChange={(event) => setTitle(event.target.value)}
-                    placeholder={`${episodeNumber}화`}
-                    value={title}
-                  />
-                </label>
-              </div>
+              {selectedSeries ? (
+                <>
+                  <label className="field">
+                    <span>시즌</span>
+                    <select
+                      onChange={(event) => chooseSeason(event.target.value)}
+                      value={selectedSeason?.id}
+                    >
+                      {ongoingSeasons.map((season) => (
+                        <option key={season.id} value={season.id}>
+                          시즌 {season.number} · {season.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="studio-number-title">
+                    <label className="field">
+                      <span>회차</span>
+                      <input
+                        min={1}
+                        onChange={(event) =>
+                          setEpisodeNumber(event.target.valueAsNumber || 0)
+                        }
+                        type="number"
+                        value={episodeNumber}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>
+                        제목{" "}
+                        <small>비우면 “{episodeNumber}화”로 저장돼요</small>
+                      </span>
+                      <input
+                        maxLength={80}
+                        onChange={(event) => setTitle(event.target.value)}
+                        placeholder={`${episodeNumber}화`}
+                        value={title}
+                      />
+                    </label>
+                  </div>
+                </>
+              ) : null}
             </>
           ) : null}
 

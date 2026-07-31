@@ -464,6 +464,26 @@ test("완독한 회차는 이어보기 대신 다음 행동으로 안내한다",
   );
   await continueLink.click();
   await expect(page).toHaveURL(/\/series\/moonlight-laundry#episodes$/);
+
+  // 작품 상세 대표 CTA도 읽기 기록을 반영한다: 1화 완독 → 다음 화 읽기.
+  const hero = page.locator(".series-hero__actions");
+  await expect(
+    hero.getByRole("link", { name: "다음 화 읽기" }),
+  ).toBeVisible();
+  await expect(
+    hero.getByRole("link", { name: "첫 화부터 읽기" }),
+  ).toBeVisible();
+
+  // 권 필터를 선택하면 주문 카드도 같은 권을 가리킨다.
+  await page
+    .getByRole("navigation", { name: "권별 에피소드 필터" })
+    .getByRole("link", { name: "시즌 1 · 2권" })
+    .click();
+  await expect(
+    page.locator(".edition-card").getByRole("link", {
+      name: /선택한 2권 주문하기/,
+    }),
+  ).toHaveAttribute("href", /volume=2$/);
 });
 
 test("데모 기록 초기화가 개인 기록만 지우고 설정은 보존한다", async ({

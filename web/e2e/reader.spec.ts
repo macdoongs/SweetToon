@@ -371,6 +371,64 @@ test("실제 결제 없이 고정 패키지로 캔디를 충전한다", async ({
   );
 });
 
+test("0캔디 페이월에서 충전소를 왕복해 회차를 해금한다", async ({ page }) => {
+  const detailResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  const series = await detailResponse.json();
+  const season = series.seasons.find(
+    (candidate: { number: number }) => candidate.number === 1,
+  );
+  const episode = season.episodes.find(
+    (candidate: { number: number }) => candidate.number === 6,
+  );
+
+  await page.goto(`/read/${episode.id}`);
+  await page.getByRole("link", { name: "캔디 충전하고 돌아오기" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/candy\\?returnTo=%2Fread%2F${episode.id}$`),
+  );
+
+  await page.getByRole("button", { name: "데모로 충전" }).first().click();
+  const returnLink = page.getByRole("link", {
+    name: "읽던 회차로 돌아가기 →",
+  });
+  await expect(returnLink).toBeVisible();
+  await returnLink.click();
+  await expect(page).toHaveURL(new RegExp(`/read/${episode.id}$`));
+  await expect(
+    page.getByRole("button", { name: "캔디 1개로 이 화 보기" }),
+  ).toBeEnabled();
+});
+
+test("다음 화 이동이 시즌 경계를 넘어 이어진다", async ({ page }) => {
+  const detailResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  const series = await detailResponse.json();
+  const seasonOne = series.seasons.find(
+    (candidate: { number: number }) => candidate.number === 1,
+  );
+  const seasonTwo = series.seasons.find(
+    (candidate: { number: number }) => candidate.number === 2,
+  );
+  const lastOfSeasonOne = seasonOne.episodes.at(-1);
+  const firstOfSeasonTwo = seasonTwo.episodes[0];
+
+  const readerResponse = await page.request.get(
+    `/api/episodes/${lastOfSeasonOne.id}`,
+  );
+  const reader = await readerResponse.json();
+  expect(reader.navigation.nextEpisodeId).toBe(firstOfSeasonTwo.id);
+  expect(reader.navigation.nextEpisodeSeasonNumber).toBe(2);
+
+  const nextReaderResponse = await page.request.get(
+    `/api/episodes/${firstOfSeasonTwo.id}`,
+  );
+  const nextReader = await nextReaderResponse.json();
+  expect(nextReader.navigation.previousEpisodeId).toBe(lastOfSeasonOne.id);
+});
+
 test("1권 주문 보너스 캔디로 유료 회차를 한 번만 차감해 해금한다", async ({
   page,
 }) => {

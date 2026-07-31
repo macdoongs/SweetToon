@@ -418,9 +418,27 @@ export class PrismaReaderRepository implements ReaderRepository {
       return null;
     }
 
-    const episodeIndex = episode.season.episodes.findIndex(
+    // 이전·다음 이동은 시즌 경계를 넘어 작품 전체의
+    // (시즌 번호, 회차 번호) 순서로 계산한다.
+    const seriesEpisodes = await this.prisma.episode.findMany({
+      where: {
+        ...PUBLIC_EPISODES,
+        season: { seriesId: episode.season.seriesId },
+      },
+      orderBy: [{ season: { number: "asc" } }, { number: "asc" }],
+      select: {
+        id: true,
+        number: true,
+        season: { select: { number: true } },
+      },
+    });
+    const episodeIndex = seriesEpisodes.findIndex(
       (candidate) => candidate.id === episode.id,
     );
+    const nextEpisode =
+      episodeIndex >= 0 && episodeIndex < seriesEpisodes.length - 1
+        ? seriesEpisodes[episodeIndex + 1]
+        : null;
     const volumeNumber = Math.ceil(episode.number / 5);
     const isFree =
       episode.number <=
@@ -486,14 +504,10 @@ export class PrismaReaderRepository implements ReaderRepository {
       },
       navigation: {
         previousEpisodeId:
-          episodeIndex > 0
-            ? episode.season.episodes[episodeIndex - 1].id
-            : null,
-        nextEpisodeId:
-          episodeIndex >= 0 &&
-          episodeIndex < episode.season.episodes.length - 1
-            ? episode.season.episodes[episodeIndex + 1].id
-            : null,
+          episodeIndex > 0 ? seriesEpisodes[episodeIndex - 1].id : null,
+        nextEpisodeId: nextEpisode?.id ?? null,
+        // 다음 화가 다른 시즌이면 리더가 시즌 시작 CTA를 보여줄 수 있다.
+        nextEpisodeSeasonNumber: nextEpisode?.season.number ?? null,
       },
     };
   }

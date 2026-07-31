@@ -112,6 +112,7 @@ export const EpisodeReaderSchema = z.object({
   navigation: z.object({
     previousEpisodeId: z.string().nullable(),
     nextEpisodeId: z.string().nullable(),
+    nextEpisodeSeasonNumber: z.number().int().positive().nullable(),
   }),
 });
 

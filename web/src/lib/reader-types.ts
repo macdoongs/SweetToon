@@ -86,5 +86,6 @@ export type EpisodeReader = {
   navigation: {
     previousEpisodeId: string | null;
     nextEpisodeId: string | null;
+    nextEpisodeSeasonNumber: number | null;
   };
 };

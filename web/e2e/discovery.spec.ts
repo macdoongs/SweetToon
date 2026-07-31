@@ -212,6 +212,12 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   await expect(
     personalizedShelf.getByRole("link", { name: /달빛 세탁소/ }),
   ).toHaveCount(0);
+  const recommendedSlugs = await recommendations
+    .locator('.recommendation-card:not([aria-hidden]) > a')
+    .evaluateAll((links) =>
+      links.map((link) => new URL((link as HTMLAnchorElement).href).pathname),
+    );
+  expect(new Set(recommendedSlugs).size).toBe(recommendedSlugs.length);
 
   const rail = personalizedShelf.locator(".recommendation-rail");
   await expect

@@ -142,6 +142,7 @@ function genreShelves(
   candidates: RecommendationSeries[],
   preferredGenres: string[],
   limit: number,
+  initiallyUsedSlugs: ReadonlySet<string> = new Set(),
 ) {
   const catalogGenres = [...new Set(candidates.map((series) => series.genre))];
   const orderedGenres = [
@@ -157,59 +158,69 @@ function genreShelves(
       ),
   );
 
-  return orderedGenres
-    .map((genre): RecommendationShelf | null => {
-      const items = candidates
-        .map((series) => ({
-          series,
-          affinity: genreAffinity(series.genre, genre),
-        }))
-        .filter(({ affinity }) => affinity > 0)
-        .sort(
-          (left, right) =>
-            right.affinity - left.affinity ||
-            byCoverThenTitle(left.series, right.series),
-        )
-        .slice(0, 8)
-        .map(({ series }) => series);
-      if (items.length < 2) return null;
-      const baseGenre =
-        genreTokens(genre).size > 1
-          ? [...genreTokens(genre)].at(-1) ?? genre
-          : genre;
-      return {
-        id: `genre-${encodeURIComponent(genre)}`,
-        eyebrow: "Explore by genre",
-        title: genreCopy[genre] ?? genreCopy[baseGenre] ?? `${genre} 추천`,
-        description: `${genre} 작품을 한 번에 둘러보세요.`,
-        items,
-      };
-    })
-    .filter((shelf): shelf is RecommendationShelf => shelf !== null)
-    .slice(0, limit);
+  const usedSlugs = new Set(initiallyUsedSlugs);
+  const shelves: RecommendationShelf[] = [];
+
+  for (const genre of orderedGenres) {
+    const items = candidates
+      .filter((series) => !usedSlugs.has(series.slug))
+      .map((series) => ({
+        series,
+        affinity: genreAffinity(series.genre, genre),
+      }))
+      .filter(({ affinity }) => affinity > 0)
+      .sort(
+        (left, right) =>
+          right.affinity - left.affinity ||
+          byCoverThenTitle(left.series, right.series),
+      )
+      .slice(0, 8)
+      .map(({ series }) => series);
+    if (items.length < 2) continue;
+
+    const baseGenre =
+      genreTokens(genre).size > 1
+        ? [...genreTokens(genre)].at(-1) ?? genre
+        : genre;
+    shelves.push({
+      id: `genre-${encodeURIComponent(genre)}`,
+      eyebrow: "Explore by genre",
+      title: genreCopy[genre] ?? genreCopy[baseGenre] ?? `${genre} 추천`,
+      description: `${genre} 작품을 한 번에 둘러보세요.`,
+      items,
+    });
+    items.forEach((item) => usedSlugs.add(item.slug));
+    if (shelves.length === limit) break;
+  }
+
+  return shelves;
 }
 
 function discoveryShelves(candidates: RecommendationSeries[]) {
-  const shelves = discoveryGroups
-    .map((group): RecommendationShelf | null => {
-      const items = candidates
-        .filter((series) =>
-          group.genres.some(
-            (genre) => genreAffinity(series.genre, genre) > 0,
-          ),
-        )
-        .sort(byCoverThenTitle)
-        .slice(0, 10);
-      if (items.length < 2) return null;
-      return {
-        id: `discover-${group.id}`,
-        eyebrow: group.eyebrow,
-        title: group.title,
-        description: group.description,
-        items,
-      };
-    })
-    .filter((shelf): shelf is RecommendationShelf => shelf !== null);
+  const usedSlugs = new Set<string>();
+  const shelves: RecommendationShelf[] = [];
+
+  for (const group of discoveryGroups) {
+    const items = candidates
+      .filter((series) => !usedSlugs.has(series.slug))
+      .filter((series) =>
+        group.genres.some(
+          (genre) => genreAffinity(series.genre, genre) > 0,
+        ),
+      )
+      .sort(byCoverThenTitle)
+      .slice(0, 10);
+    if (items.length < 2) continue;
+
+    shelves.push({
+      id: `discover-${group.id}`,
+      eyebrow: group.eyebrow,
+      title: group.title,
+      description: group.description,
+      items,
+    });
+    items.forEach((item) => usedSlugs.add(item.slug));
+  }
 
   return shelves.length
     ? shelves
@@ -267,6 +278,7 @@ export function buildRecommendationShelves(
         !personalized.items.some((item) => item.genre === genre),
     ),
     personalized ? 2 : 3,
+    new Set(personalized?.items.map((item) => item.slug)),
   );
 
   return personalized ? [personalized, ...shelves] : shelves;

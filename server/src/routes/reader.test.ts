@@ -108,6 +108,7 @@ const episode: EpisodeReader = {
   navigation: {
     previousEpisodeId: null,
     nextEpisodeId: "episode-2",
+    nextEpisodeSeasonNumber: 1,
   },
 };
 
@@ -246,6 +247,7 @@ describe("reader routes", () => {
       response.body.pages.map((page: { order: number }) => page.order),
     ).toEqual([1, 2]);
     expect(response.body.navigation.nextEpisodeId).toBe("episode-2");
+    expect(response.body.navigation.nextEpisodeSeasonNumber).toBe(1);
   });
 
   it("returns public sitemap discovery data", async () => {

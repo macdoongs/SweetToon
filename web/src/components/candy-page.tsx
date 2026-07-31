@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getJson, isUncertainRequestError, postJson } from "@/lib/api";
 import {
@@ -16,7 +17,12 @@ function formatWon(value: number) {
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
 
-export function CandyPage() {
+export function CandyPage({
+  returnTo = null,
+}: {
+  returnTo?: string | null;
+}) {
+  const [chargedOnce, setChargedOnce] = useState(false);
   const chargeRequest = useRef<{
     candyAmount: CandyChargeAmount;
     requestKey: string;
@@ -78,6 +84,7 @@ export function CandyPage() {
       setWallet(result);
       setWalletState("ready");
       notifyCandyUpdated();
+      setChargedOnce(true);
       setMessage(
         `데모 캔디 ${result.chargedCandy}개를 충전했습니다. 현재 ${result.balance}개예요.`,
       );
@@ -152,6 +159,13 @@ export function CandyPage() {
       {message ? (
         <p className="candy-page__message" role="status">
           {message}
+        </p>
+      ) : null}
+      {returnTo && chargedOnce ? (
+        <p className="candy-page__return">
+          <Link className="button button--primary" href={returnTo}>
+            읽던 회차로 돌아가기 →
+          </Link>
         </p>
       ) : null}
       {error ? (

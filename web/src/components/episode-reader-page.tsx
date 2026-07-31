@@ -1096,7 +1096,11 @@ export function EpisodeReaderPage({
                 className="button button--light"
                 href={`/read/${encodeURIComponent(episode.navigation.nextEpisodeId)}`}
               >
-                다음 화 이어보기 →
+                {episode.navigation.nextEpisodeSeasonNumber !== null &&
+                episode.navigation.nextEpisodeSeasonNumber !==
+                  episode.season.number
+                  ? `시즌 ${episode.navigation.nextEpisodeSeasonNumber} · 1화 시작하기 →`
+                  : "다음 화 이어보기 →"}
               </Link>
             ) : (
               <Link

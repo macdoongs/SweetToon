@@ -51,6 +51,14 @@ export function ReaderPaywall({
           {candyBusy ? "회차 여는 중…" : "캔디 1개로 이 화 보기"}
         </button>
       </div>
+      {candyBalance === 0 ? (
+        <Link
+          className="button button--light"
+          href={`/candy?returnTo=${encodeURIComponent(`/read/${episode.id}`)}`}
+        >
+          캔디 충전하고 돌아오기
+        </Link>
+      ) : null}
       {candyMessage ? (
         <p className="reader-paywall__message" role="status">
           {candyMessage}

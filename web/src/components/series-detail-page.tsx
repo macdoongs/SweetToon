@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, getJson } from "@/lib/api";
 import type { SeriesDetail } from "@/lib/reader-types";
@@ -41,6 +42,7 @@ export function SeriesDetailPage({
     Record<string, ReadingProgress>
   >({});
   const [selectedEditionKey, setSelectedEditionKey] = useState("");
+  const router = useRouter();
 
   const retry = useCallback(() => {
     setError(null);
@@ -116,9 +118,65 @@ export function SeriesDetailPage({
   const completedVolumes = volumeOptions.filter(
     (volume) => volume.season.status === "completed",
   );
+  // URL의 권 필터가 주문 선택의 단일 기준이다. 필터한 권이 완결이면 주문
+  // 대상도 같은 권으로 맞추고, 연재 중이면 별도 안내를 보여준다.
+  const activeVolumeOption = activeVolume
+    ? volumeOptions.find((volume) => volume.key === activeVolume)
+    : undefined;
+  const activeVolumeOrderable =
+    activeVolumeOption?.season.status === "completed";
   const selectedEdition =
+    (activeVolumeOrderable ? activeVolumeOption : undefined) ??
     completedVolumes.find((volume) => volume.key === selectedEditionKey) ??
     completedVolumes[0];
+  // 대표 CTA는 브라우저의 읽기 기록을 우선한다: 미완독 이어보기 →
+  // 완독이면 다음 화 → 전부 완독이면 마지막 화 다시 보기.
+  const allEpisodes = series.seasons.flatMap((season) =>
+    season.episodes.map((episode) => ({ episode, season })),
+  );
+  const latestProgress = Object.values(readingProgress)
+    .filter((progress) => progress.seriesSlug === series.slug)
+    .sort(
+      (left, right) =>
+        Date.parse(right.updatedAt) - Date.parse(left.updatedAt),
+    )[0];
+  let primaryCta = firstEpisode
+    ? {
+        href: `/read/${encodeURIComponent(firstEpisode.id)}`,
+        label: "첫 화부터 읽기",
+      }
+    : null;
+  let firstEpisodeAsSecondary = false;
+  if (latestProgress && firstEpisode) {
+    const progressIndex = allEpisodes.findIndex(
+      ({ episode }) => episode.id === latestProgress.episodeId,
+    );
+    if (progressIndex >= 0) {
+      const current = allEpisodes[progressIndex];
+      if (!latestProgress.completed) {
+        primaryCta = {
+          href: `/read/${encodeURIComponent(current.episode.id)}`,
+          label: `시즌 ${current.season.number} · ${current.episode.number}화 이어보기`,
+        };
+      } else if (progressIndex < allEpisodes.length - 1) {
+        const next = allEpisodes[progressIndex + 1];
+        primaryCta = {
+          href: `/read/${encodeURIComponent(next.episode.id)}`,
+          label:
+            next.season.number !== current.season.number
+              ? `시즌 ${next.season.number} · 1화 읽기`
+              : "다음 화 읽기",
+        };
+      } else {
+        primaryCta = {
+          href: `/read/${encodeURIComponent(current.episode.id)}`,
+          label: "마지막 화 다시 보기",
+        };
+      }
+      firstEpisodeAsSecondary = true;
+    }
+  }
+
   const orderedVolumes = [...volumeOptions].sort((left, right) => {
     const direction = activeSort === "latest" ? -1 : 1;
     const seasonDifference = left.season.number - right.season.number;
@@ -185,9 +243,14 @@ export function SeriesDetailPage({
             </div>
           </div>
           <div className="series-hero__actions">
-            {firstEpisode ? (
+            {primaryCta ? (
+              <Link className="button button--primary" href={primaryCta.href}>
+                {primaryCta.label}
+              </Link>
+            ) : null}
+            {firstEpisodeAsSecondary && firstEpisode ? (
               <Link
-                className="button button--primary"
+                className="button button--ghost"
                 href={`/read/${encodeURIComponent(firstEpisode.id)}`}
               >
                 첫 화부터 읽기
@@ -258,6 +321,18 @@ export function SeriesDetailPage({
         </div>
 
         <div className="season-list">
+          {activeVolume && selectedVolumes.length === 0 ? (
+            <section className="orders-empty">
+              <h2>해당 권을 찾을 수 없어요.</h2>
+              <p>주소의 권 정보가 잘못됐거나 회차 구성이 바뀌었을 수 있어요.</p>
+              <Link
+                className="button button--primary"
+                href={filterHref(activeSort)}
+              >
+                전체 회차 보기
+              </Link>
+            </section>
+          ) : null}
           {selectedVolumes.map(
             ({ key, season, volumeNumber, episodes }) => (
             <section className="season-panel" key={key}>
@@ -334,14 +409,26 @@ export function SeriesDetailPage({
             <strong>{completedVolumes.length}</strong>
             <span>소장 가능한 권</span>
           </div>
+          {activeVolumeOption && !activeVolumeOrderable ? (
+            <p className="edition-card__notice" role="status">
+              시즌 {activeVolumeOption.season.number} ·{" "}
+              {activeVolumeOption.volumeNumber}권은 아직 연재 중이라 주문할
+              수 없어요. 완결된 다른 권을 골라 보세요.
+            </p>
+          ) : null}
           {selectedEdition ? (
             <div className="edition-card__picker">
               <label>
                 <span>주문할 소장본</span>
                 <select
-                  onChange={(event) =>
-                    setSelectedEditionKey(event.target.value)
-                  }
+                  onChange={(event) => {
+                    setSelectedEditionKey(event.target.value);
+                    // 에피소드 필터와 주문 선택이 같은 URL 기준을 쓴다.
+                    router.replace(
+                      filterHref(activeSort, event.target.value),
+                      { scroll: false },
+                    );
+                  }}
                   value={selectedEdition.key}
                 >
                   {completedVolumes.map(

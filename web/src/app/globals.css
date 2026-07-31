@@ -2471,6 +2471,21 @@ button {
   font-size: 0.62rem;
 }
 
+.edition-card__notice {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--pink-line);
+  border-radius: 12px;
+  background: var(--pink-surface);
+  color: var(--pink-ink);
+  font-size: 0.85rem;
+}
+
+.candy-page__return {
+  width: var(--content);
+  margin: 14px auto 0;
+}
+
 .studio-home-grid {
   width: var(--content);
   margin: 0 auto 34px;

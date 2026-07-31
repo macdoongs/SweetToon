@@ -3185,6 +3185,144 @@ button {
   gap: 8px;
 }
 
+.studio-episodes {
+  width: var(--content);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.studio-episodes__toolbar {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.4fr)
+    minmax(200px, 1fr)
+    minmax(120px, 0.6fr)
+    minmax(150px, 0.7fr);
+  gap: 12px;
+  background: var(--paper);
+}
+
+.studio-episodes__toolbar .field {
+  gap: 5px;
+}
+
+.studio-episodes__summary {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.studio-episodes__summary strong {
+  color: var(--ink);
+}
+
+.studio-episode-row__identity {
+  flex: 1;
+}
+
+.studio-episode-row__identity > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.studio-episode-row__identity > div span {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-episode-row__identity small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.studio-episode-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.studio-episode-actions-menu {
+  position: relative;
+}
+
+.studio-episode-actions-menu summary {
+  min-width: 72px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio-episode-actions-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio-episode-actions-menu > div {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 156px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 6px;
+  background: var(--surface);
+  box-shadow: 0 16px 32px rgba(31, 24, 17, 0.16);
+}
+
+.studio-episode-actions-menu > div .button {
+  width: 100%;
+}
+
+.studio-episodes__empty {
+  margin-top: 18px;
+  padding: 32px 18px;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.studio-episodes__empty h3 {
+  margin: 0 0 14px;
+  font-size: 1rem;
+}
+
+.studio-episodes__pagination {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.studio-episodes__pagination nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studio-episodes__pagination nav strong {
+  min-width: 54px;
+  color: var(--ink);
+  text-align: center;
+}
+
 .studio-rename-field {
   flex: 1;
   min-width: 200px;
@@ -4221,6 +4359,10 @@ body:has(.reader-page) .site-footer {
   .page-preview-list {
     grid-template-columns: 1fr;
   }
+
+  .studio-episodes__toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 700px) {
@@ -4234,6 +4376,63 @@ body:has(.reader-page) .site-footer {
 
   .demo-path__steps {
     grid-template-columns: 1fr;
+  }
+
+  .studio-episodes {
+    padding: 20px 16px;
+  }
+
+  .studio-episodes header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .studio-episodes__toolbar {
+    padding: 12px;
+    grid-template-columns: 1fr;
+  }
+
+  .studio-episodes__summary,
+  .studio-episodes__pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .studio-episodes li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .studio-episode-row__identity > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .studio-episode-row__identity > div span {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .studio-episode-row__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .studio-episode-row__actions > .button,
+  .studio-episode-actions-menu summary {
+    width: 100%;
+  }
+
+  .studio-episode-actions-menu > div {
+    right: 0;
+    left: auto;
+    width: min(240px, calc(100vw - 60px));
+  }
+
+  .studio-episodes__pagination nav {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .site-nav > a.site-nav__secondary {

@@ -14,6 +14,54 @@ function episodeArchive(): Buffer {
   return archive.toBuffer();
 }
 
+test("등록 회차를 시즌·권·검색으로 좁히고 관리 메뉴를 연다", async ({
+  page,
+}) => {
+  await page.goto("/studio/series/moonlight-laundry");
+
+  const manager = page.getByRole("region", { name: "등록된 회차 관리" });
+  await expect(manager).toBeVisible();
+
+  const season = manager.getByLabel("관리할 시즌");
+  await expect(season.locator("option")).toHaveCount(2);
+  await season.selectOption({ index: 0 });
+  await expect(manager.getByText("전체 60화")).toBeVisible();
+
+  const search = manager.getByLabel("회차 검색");
+  await search.fill("60");
+  await expect(manager.locator("ul > li")).toHaveCount(1);
+  await expect(manager.locator("ul > li").first()).toContainText("60화");
+
+  await search.fill("");
+  await manager.getByLabel("소장본 권").selectOption("12");
+  await expect(manager.locator("ul > li")).toHaveCount(5);
+  await expect(manager.locator("ul > li").first()).toContainText("60화");
+
+  await manager.getByLabel("소장본 권").selectOption("all");
+  await expect(manager.locator("ul > li")).toHaveCount(12);
+  await expect(
+    manager.getByRole("navigation", { name: "등록 회차 페이지" }),
+  ).toBeVisible();
+
+  await manager.getByLabel(/화 관리 메뉴/).first().click();
+  await expect(
+    manager.getByRole("button", { name: "정보 수정" }).first(),
+  ).toBeVisible();
+  await expect(
+    manager.getByRole("button", { name: "원고 교체" }).first(),
+  ).toBeVisible();
+  await expect(
+    manager.getByRole("button", { name: "회차 삭제" }).first(),
+  ).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
 test("스튜디오 홈이 전체 작품을 보여주고 새 작품 관리로 바로 이동한다", async ({
   page,
 }) => {

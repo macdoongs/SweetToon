@@ -49,6 +49,12 @@ export function StudioSeriesManagePage({ detail }: { detail: SeriesDetail }) {
   const [renameMessage, setRenameMessage] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const defaultManagedSeason =
+    detail.seasons.find((season) => season.status === "ongoing") ??
+    detail.seasons.at(-1);
+  const [managedSeasonId, setManagedSeasonId] = useState(
+    defaultManagedSeason?.id ?? "",
+  );
 
   // 편집 중 값이 없으면 서버 상세의 현재 값을 그대로 쓴다.
   const policy = policyEdit ?? {
@@ -57,10 +63,9 @@ export function StudioSeriesManagePage({ detail }: { detail: SeriesDetail }) {
   };
   const editTitle = seriesEdit?.title ?? detail.title;
   const editSynopsis = seriesEdit?.synopsis ?? detail.synopsis;
-  const ongoingSeasons = detail.seasons.filter(
-    (season) => season.status === "ongoing",
-  );
-  const managedSeason = ongoingSeasons[0] ?? detail.seasons.at(-1);
+  const managedSeason =
+    detail.seasons.find((season) => season.id === managedSeasonId) ??
+    defaultManagedSeason;
 
   async function saveSeriesInfo() {
     const nextTitle = editTitle.trim();
@@ -208,6 +213,7 @@ export function StudioSeriesManagePage({ detail }: { detail: SeriesDetail }) {
         studioHeaders(),
       );
       setSeasonMessage(`시즌 ${created.number} 연재를 시작했어요.`);
+      setManagedSeasonId(created.seasonId);
       router.refresh();
     } catch (reason) {
       setSeasonMessage(
@@ -471,7 +477,7 @@ export function StudioSeriesManagePage({ detail }: { detail: SeriesDetail }) {
         </section>
       </div>
 
-      {managedSeason && managedSeason.episodes.length > 0 ? (
+      {managedSeason ? (
         <StudioEpisodeManager
           deleteBusyId={deleteBusyId}
           deleteConfirmId={deleteConfirmId}
@@ -491,8 +497,17 @@ export function StudioSeriesManagePage({ detail }: { detail: SeriesDetail }) {
           renameBusy={renameBusy}
           renameMessage={renameMessage}
           renameTarget={renameTarget}
+          seasonId={managedSeason.id}
           seasonNumber={managedSeason.number}
+          seasonOptions={detail.seasons.map((season) => ({
+            episodeCount: season.episodes.length,
+            id: season.id,
+            number: season.number,
+            status: season.status,
+            title: season.title,
+          }))}
           seriesTitle={detail.title}
+          onSeasonChange={setManagedSeasonId}
         />
       ) : null}
     </>

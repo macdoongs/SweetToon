@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { StudioPage } from "@/components/studio-page";
+import { redirect } from "next/navigation";
+import { StudioHomePage } from "@/components/studio-home-page";
 import { getStudioSeriesList } from "@/lib/server-api";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "작가 스튜디오",
-  description: "ZIP 또는 CBZ 원고를 미리 보고 새 웹툰 에피소드로 등록합니다.",
+  description: "작품을 고르고 회차 발행·시즌·공개 범위를 관리합니다.",
   robots: { index: false, follow: false },
 };
 
@@ -17,10 +18,10 @@ export default async function Page({
 }) {
   const query = await searchParams;
   const rawMode = Array.isArray(query.mode) ? query.mode[0] : query.mode;
-  const initialPurpose =
-    rawMode === "draft" || rawMode === "packaging" ? rawMode : "publish";
-  // 스튜디오 전용 경량 목록으로 모든 작품을 노출하고, 무거운 회차 상세는
-  // 선택한 작품에 대해서만 클라이언트에서 조회한다.
+  // 이전 ?mode= 주소는 분리된 하위 라우트로 안내한다.
+  if (rawMode === "draft") redirect("/studio/drafts");
+  if (rawMode === "packaging") redirect("/studio/packaging");
+
   const list = await getStudioSeriesList();
-  return <StudioPage initialPurpose={initialPurpose} seriesList={list.items} />;
+  return <StudioHomePage seriesList={list.items} />;
 }

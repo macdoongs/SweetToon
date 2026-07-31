@@ -11,7 +11,7 @@ export function DemoResetButton() {
   if (state === "done") {
     return (
       <span className="demo-reset__done" role="status">
-        찜·진행도·캔디·이용권 기록을 지웠어요.
+        찜·진행도·캔디·이용권·주문 기록을 지웠어요.
       </span>
     );
   }

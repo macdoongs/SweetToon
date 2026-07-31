@@ -7,6 +7,7 @@ const DEMO_RECORD_KEYS = [
   "sweettoon:favorites",
   "sweettoon:reading-progress",
   "sweettoon:demo-entitlements",
+  "sweettoon:my-orders",
 ];
 
 export function clearDemoRecords(): boolean {

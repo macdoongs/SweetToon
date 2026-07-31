@@ -77,6 +77,11 @@ export const OrderTransitionRequestSchema = z.object({
 export const OrderListQuerySchema = z.object({
   cursor: OrderIdParamSchema.optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
+  // active=제작 진행(pending/processing/shipped), done=완료·취소
+  status: z.enum(["active", "done"]).optional(),
+  // reader=실제 데모 사용자 주문, bot=봇 데모 주문
+  source: z.enum(["reader", "bot"]).optional(),
+  series: z.string().trim().min(1).max(80).optional(),
 });
 
 export const OrderEventSchema = z.object({

@@ -1397,6 +1397,18 @@ button {
   font-size: 0.8rem;
 }
 
+.skeleton--order-card {
+  height: 120px;
+  border-radius: 18px;
+}
+
+.orders-error__actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .skeleton {
   background: linear-gradient(
     100deg,
@@ -2457,6 +2469,54 @@ button {
   overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 0.62rem;
+}
+
+.operations-filters {
+  width: var(--content);
+  margin: 0 auto 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px 26px;
+}
+
+.operations-filters nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.operations-filters nav strong {
+  margin-right: 4px;
+}
+
+.operations-filter {
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.operations-filter[aria-pressed="true"] {
+  border-color: var(--coral);
+  background: var(--coral);
+  color: white;
+}
+
+.operations-filters form {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.operations-filters form input {
+  min-width: 200px;
 }
 
 .operations-list,
@@ -3761,14 +3821,59 @@ body:has(.reader-page) .site-footer {
   color: var(--muted);
 }
 
-.favorites-rail {
-  --circular-rail-card-width: clamp(380px, 40vw, 520px);
+.favorites-grid {
+  margin: 42px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 22px;
-  margin-top: 42px;
+  list-style: none;
 }
 
-.favorites-page__controls {
+.favorites-page__search {
+  max-width: 320px;
   margin-top: 18px;
+}
+
+.my-orders {
+  width: var(--content);
+  margin: 0 auto 34px;
+}
+
+.my-orders ul {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  list-style: none;
+}
+
+.my-orders li a {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.my-orders li a:hover {
+  border-color: var(--coral);
+}
+
+.my-orders li span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.my-orders li em {
+  margin-left: auto;
+  color: var(--coral-dark);
+  font-size: 0.85rem;
+  font-style: normal;
+  font-weight: 750;
 }
 
 .favorite-card {
@@ -4144,8 +4249,8 @@ body:has(.reader-page) .site-footer {
     --circular-rail-card-width: min(44vw, 180px);
   }
 
-  .favorites-rail {
-    --circular-rail-card-width: min(86vw, 420px);
+  .favorites-grid {
+    grid-template-columns: 1fr;
   }
 
   .discover-section,

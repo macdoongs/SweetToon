@@ -202,6 +202,26 @@ describe("order routes", () => {
     expect(service.list).toHaveBeenCalledWith({ limit: 20 });
   });
 
+  it("passes status, source, and series filters to the order use case", async () => {
+    const service = makeService();
+    await request(makeApp(service))
+      .get("/api/orders?status=active&source=bot&series=%EB%8B%AC%EB%B9%9B")
+      .expect(200);
+
+    expect(service.list).toHaveBeenCalledWith({
+      limit: 20,
+      status: "active",
+      source: "bot",
+      series: "달빛",
+    });
+  });
+
+  it("rejects an unknown status filter", async () => {
+    await request(makeApp(makeService()))
+      .get("/api/orders?status=archived")
+      .expect(400);
+  });
+
   it("passes a bounded cursor page to the order use case", async () => {
     const service = makeService();
     await request(makeApp(service))

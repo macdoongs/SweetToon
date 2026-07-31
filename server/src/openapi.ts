@@ -475,6 +475,24 @@ export const openApiDocument = {
               default: 20,
             },
           },
+          {
+            name: "status",
+            in: "query",
+            description: "active=제작 진행, done=완료·취소",
+            schema: { type: "string", enum: ["active", "done"] },
+          },
+          {
+            name: "source",
+            in: "query",
+            description: "reader=독자 주문, bot=봇 데모 주문",
+            schema: { type: "string", enum: ["reader", "bot"] },
+          },
+          {
+            name: "series",
+            in: "query",
+            description: "작품 제목 부분 일치 검색",
+            schema: { type: "string", maxLength: 80 },
+          },
         ],
         responses: {
           "200": {

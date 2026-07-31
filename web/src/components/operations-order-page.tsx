@@ -57,6 +57,21 @@ const packagingNextAction: Partial<
   reviewing: { status: "completed", label: "제작 완료 처리" },
 };
 
+type OrdersFilter = {
+  status: "" | "active" | "done";
+  source: "" | "reader" | "bot";
+  series: string;
+};
+
+function buildOrdersQuery(filters: OrdersFilter) {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.source) params.set("source", filters.source);
+  if (filters.series.trim()) params.set("series", filters.series.trim());
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export function OperationsOrderPage({
   initialResponse,
 }: {
@@ -86,13 +101,57 @@ export function OperationsOrderPage({
   const [accessKey, setAccessKey] = useState(() =>
     loadSecurityAccessKey("operations"),
   );
+  // 필터는 서버 쿼리로 적용해 다음 페이지 주문도 누락하지 않는다.
+  const [filters, setFilters] = useState<OrdersFilter>(() => {
+    if (typeof window === "undefined") {
+      return { status: "", source: "", series: "" };
+    }
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("status");
+    const source = params.get("source");
+    return {
+      status: status === "active" || status === "done" ? status : "",
+      source: source === "reader" || source === "bot" ? source : "",
+      series: params.get("series") ?? "",
+    };
+  });
+  const [seriesInput, setSeriesInput] = useState(filters.series);
+  const ordersQuery = buildOrdersQuery(filters);
+  const matchesFilters = useCallback(
+    (order: OrderSummary) => {
+      if (filters.status === "active" && ["completed", "canceled"].includes(order.status)) {
+        return false;
+      }
+      if (filters.status === "done" && !["completed", "canceled"].includes(order.status)) {
+        return false;
+      }
+      if (filters.source && (filters.source === "bot") !== order.isDemo) {
+        return false;
+      }
+      const keyword = filters.series.trim().toLowerCase();
+      return !keyword || order.series.title.toLowerCase().includes(keyword);
+    },
+    [filters],
+  );
+
+  function applyFilters(next: OrdersFilter) {
+    setFilters(next);
+    setOrders([]);
+    setNextCursor(null);
+    const query = buildOrdersQuery(next);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `/operations/orders${query}`,
+    );
+  }
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     if (refreshInFlight.current) return;
     refreshInFlight.current = true;
     try {
       await Promise.allSettled([
-        getJson<OrderListResponse>("/api/orders", signal).then(
+        getJson<OrderListResponse>(`/api/orders${ordersQuery}`, signal).then(
           (orderResponse) => {
             if (signal?.aborted) return;
             setOrdersRefreshFailed(false);
@@ -100,9 +159,14 @@ export function OperationsOrderPage({
               const refreshedIds = new Set(
                 orderResponse.items.map((order) => order.id),
               );
+              // 커서로 불러온 이전 페이지는 유지하되, 현재 필터에 맞지
+              // 않는 항목(예: 필터 없는 SSR 초기 목록)은 걷어낸다.
               return [
                 ...orderResponse.items,
-                ...current.filter((order) => !refreshedIds.has(order.id)),
+                ...current.filter(
+                  (order) =>
+                    !refreshedIds.has(order.id) && matchesFilters(order),
+                ),
               ];
             });
           },
@@ -137,7 +201,7 @@ export function OperationsOrderPage({
     } finally {
       refreshInFlight.current = false;
     }
-  }, []);
+  }, [ordersQuery, matchesFilters]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -264,7 +328,9 @@ export function OperationsOrderPage({
     setError(null);
     try {
       const response = await getJson<OrderListResponse>(
-        `/api/orders?cursor=${encodeURIComponent(nextCursor)}&limit=20`,
+        `/api/orders?cursor=${encodeURIComponent(nextCursor)}&limit=20${
+          ordersQuery ? `&${ordersQuery.slice(1)}` : ""
+        }`,
       );
       setOrders((current) => {
         const currentIds = new Set(current.map((order) => order.id));
@@ -435,6 +501,68 @@ export function OperationsOrderPage({
           다시 시도합니다.
         </p>
       ) : null}
+
+      <section className="operations-filters" aria-label="주문 필터">
+        <nav aria-label="제작 상태 필터">
+          <strong>상태</strong>
+          {(
+            [
+              ["", "전체"],
+              ["active", "처리 필요"],
+              ["done", "완료"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              aria-pressed={filters.status === value}
+              className="operations-filter"
+              key={value || "all"}
+              onClick={() => applyFilters({ ...filters, status: value })}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <nav aria-label="주문 출처 필터">
+          <strong>출처</strong>
+          {(
+            [
+              ["", "전체"],
+              ["reader", "독자 주문"],
+              ["bot", "봇 데모"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              aria-pressed={filters.source === value}
+              className="operations-filter"
+              key={value || "all"}
+              onClick={() => applyFilters({ ...filters, source: value })}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            applyFilters({ ...filters, series: seriesInput });
+          }}
+        >
+          <label className="field">
+            <span>작품명</span>
+            <input
+              maxLength={80}
+              onChange={(event) => setSeriesInput(event.target.value)}
+              placeholder="작품 제목으로 검색"
+              value={seriesInput}
+            />
+          </label>
+          <button className="button button--ghost" type="submit">
+            검색
+          </button>
+        </form>
+      </section>
 
       <section className="operations-list" aria-label="제작 주문 목록">
         {orders.length === 0 ? (

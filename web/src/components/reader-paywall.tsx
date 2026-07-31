@@ -53,7 +53,7 @@ export function ReaderPaywall({
       </div>
       {candyBalance === 0 ? (
         <Link
-          className="button button--light"
+          className="button button--primary"
           href={`/candy?returnTo=${encodeURIComponent(`/read/${episode.id}`)}`}
         >
           캔디 충전하고 돌아오기
@@ -64,11 +64,18 @@ export function ReaderPaywall({
           {candyMessage}
         </p>
       ) : null}
-      <Link className="button button--primary" href={orderHref}>
-        {episode.access.volumeNumber === 1
-          ? "1권 소장하고 캔디 5개 받기"
-          : `${episode.access.volumeNumber}권 소장하고 다섯 화 열기`}
-      </Link>
+      {episode.season.status === "completed" ? (
+        <Link className="button button--primary" href={orderHref}>
+          {episode.access.volumeNumber === 1
+            ? "1권 소장하고 캔디 5개 받기"
+            : `${episode.access.volumeNumber}권 소장하고 다섯 화 열기`}
+        </Link>
+      ) : (
+        <p className="reader-paywall__message" role="status">
+          이 권은 시즌 {episode.season.number} 완결 후 소장본으로 주문할 수
+          있어요. 지금은 캔디로 한 화씩 열 수 있습니다.
+        </p>
+      )}
       <Link
         className="reader-finish__back"
         href={`/series/${encodeURIComponent(episode.series.slug)}#episodes`}

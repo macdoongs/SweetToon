@@ -96,3 +96,25 @@ digest로 애플리케이션 컨테이너를 되돌린다.
 audit 잡이나 Slack 알림을 추가하려면 Jenkins 잡, 알림 플러그인과 credential
 소유자를 먼저 정한다. 이 계약 없이 현재 보안 게이트를 non-blocking으로 낮추거나
 존재하지 않는 알림 채널을 Jenkinsfile에 추가하지 않는다.
+
+## 공용 데모 상태 복원
+
+demo 보안 모드에서는 방문자가 시즌 완결 상태와 공개 정책을 바꿀 수 있다.
+대표 시연 작품이 기준값에서 벗어나면 서버 컨테이너에서 아래를 실행해
+시드 기준으로 되돌린다. (주문·캔디 원장은 건드리지 않는다.)
+
+```bash
+docker compose exec db psql -U sweettoon -d sweettoon <<'SQL'
+-- 달빛 세탁소: 시즌 1 완결, 시즌 2 연재, 무료 1권·미리보기 0화
+UPDATE "Season" s SET status = CASE s.number WHEN 1 THEN 'completed' ELSE 'ongoing' END
+FROM "Series" x WHERE s."seriesId" = x.id AND x.slug = 'moonlight-laundry';
+UPDATE "Series" SET "freeVolumeCount" = 1, "previewEpisodeCount" = 0
+WHERE slug = 'moonlight-laundry';
+-- 옥상 정원 클럽: 시즌 1 연재 유지
+UPDATE "Season" s SET status = 'ongoing'
+FROM "Series" x WHERE s."seriesId" = x.id AND x.slug = 'rooftop-garden';
+SQL
+```
+
+봇이 만든 데모 주문은 운영 화면(`/operations`)의 "데모 데이터 초기화"로
+정리한다.

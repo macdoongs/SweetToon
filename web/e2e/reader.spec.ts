@@ -429,6 +429,51 @@ test("다음 화 이동이 시즌 경계를 넘어 이어진다", async ({ page 
   expect(nextReader.navigation.previousEpisodeId).toBe(lastOfSeasonOne.id);
 });
 
+test("연재 중 시즌의 잠긴 회차는 주문 대신 캔디를 안내한다", async ({
+  page,
+}) => {
+  const detailResponse = await page.request.get("/api/series/rooftop-garden");
+  const series = await detailResponse.json();
+  const season = series.seasons.find(
+    (candidate: { number: number }) => candidate.number === 1,
+  );
+  const episode = season.episodes.find(
+    (candidate: { number: number }) => candidate.number === 6,
+  );
+
+  // 전제: 이 회차는 잠겨 있고 시즌은 연재 중이다.
+  const readerResponse = await page.request.get(
+    `/api/episodes/${episode.id}`,
+  );
+  const reader = await readerResponse.json();
+  expect(reader.access.state).toBe("locked");
+  expect(reader.season.status).toBe("ongoing");
+
+  await page.goto(`/read/${episode.id}`);
+  const paywall = page.locator(".reader-paywall");
+  await expect(
+    paywall.getByText("완결 후 소장본으로 주문할 수 있어요", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    paywall.getByRole("link", { name: /소장하고/ }),
+  ).toHaveCount(0);
+  await expect(
+    paywall.getByRole("button", { name: "캔디 1개로 이 화 보기" }),
+  ).toBeVisible();
+
+  // 연재 시즌 주문 딥링크는 404가 아니라 주문 불가 안내를 보여준다.
+  await page.goto(
+    `/series/rooftop-garden/order?season=${season.id}&volume=2`,
+  );
+  await expect(
+    page.getByRole("heading", {
+      name: "이 권은 시즌 완결 후 주문할 수 있어요.",
+    }),
+  ).toBeVisible();
+});
+
 test("1권 주문 보너스 캔디로 유료 회차를 한 번만 차감해 해금한다", async ({
   page,
 }) => {

@@ -94,6 +94,7 @@ const episode: EpisodeReader = {
     id: "season-1",
     number: 1,
     title: "얼룩의 계절",
+    status: "completed",
   },
   pages: [
     { id: "page-1", order: 1, imageUrl: "/api/images/page-1.svg" },

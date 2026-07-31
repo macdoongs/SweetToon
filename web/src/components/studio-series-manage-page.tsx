@@ -297,6 +297,14 @@ export function StudioSeriesManagePage({ detail }: { detail: SeriesDetail }) {
         >
           새 회차 올리기
         </Link>
+        <a
+          className="operations-link"
+          href={`/series/${encodeURIComponent(detail.slug)}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          새 탭에서 독자 화면 확인 →
+        </a>
       </header>
 
       <div className="studio-manage-grid">

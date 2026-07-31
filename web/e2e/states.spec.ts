@@ -136,10 +136,22 @@ test("운영 보조 API 하나가 실패해도 다른 상태를 분리해 표시
     }),
   );
 
-  await page.goto("/operations/orders");
+  // 봇 API 실패는 봇 화면에만 나타난다.
+  await page.goto("/operations");
   await expect(page.getByText("봇 상태를 불러오지 못했어요.")).toBeVisible();
+
+  // 주문·패키징 화면은 봇 실패와 무관하게 정상 동작한다.
+  await page.getByRole("link", { name: "소장본 주문" }).click();
+  await expect(page).toHaveURL(/\/operations\/orders$/);
   await expect(
-    page.getByRole("heading", { name: "책 패키징 신청 관리" }),
+    page.getByRole("heading", { level: 1, name: "소장본 제작 관리" }),
+  ).toBeVisible();
+  await expect(page.getByText("봇 상태를 불러오지 못했어요.")).toHaveCount(0);
+
+  await page.getByRole("link", { name: "패키징 신청" }).click();
+  await expect(page).toHaveURL(/\/operations\/packaging$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "책 패키징 신청 관리" }),
   ).toBeVisible();
   await expect(
     page.getByText("패키징 신청을 불러오는 중…"),

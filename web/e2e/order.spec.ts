@@ -152,18 +152,21 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
   ).toBeVisible();
   await expect(page.getByRole("status")).toContainText("실시간 연결됨");
 
-  await page.goto("/operations/orders");
+  // 봇 제어는 /operations, 주문 관리는 /operations/orders로 분리됐다.
+  await page.goto("/operations");
   await expect(
-    page.getByRole("heading", { level: 1, name: "소장본 제작 관리" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { level: 2, name: "실시간 데모 봇" }),
+    page.getByRole("heading", { level: 1, name: "실시간 데모 봇" }),
   ).toBeVisible();
   await page.getByLabel("변경 속도").selectOption("fast");
   await page.getByRole("button", { name: "봇 일시정지" }).click();
   await expect(page.locator(".demo-bot-status")).toHaveText("정지");
   await page.getByRole("button", { name: "봇 시작" }).click();
   await expect(page.locator(".demo-bot-status")).toHaveText("실행 중");
+
+  await page.getByRole("link", { name: "소장본 주문" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "소장본 제작 관리" }),
+  ).toBeVisible();
   await expect(page.locator(".demo-order-badge").first()).toBeVisible({
     timeout: 12_000,
   });

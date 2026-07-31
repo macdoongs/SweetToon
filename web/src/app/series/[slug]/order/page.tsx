@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderFormPage } from "@/components/order-form-page";
 import { getSeriesDetail, ServerApiError } from "@/lib/server-api";
@@ -37,10 +38,31 @@ export default async function Page({ params, searchParams }: Props) {
     throw error;
   }
 
-  const season = series.seasons.find(
-    (candidate) =>
-      candidate.id === seasonId && candidate.status === "completed",
+  const matchedSeason = series.seasons.find(
+    (candidate) => candidate.id === seasonId,
   );
+  // 실제로 존재하는 연재 중 시즌은 404 대신 주문 불가 안내로 방어한다.
+  if (matchedSeason && matchedSeason.status !== "completed") {
+    return (
+      <main className="orders-error">
+        <section className="orders-empty">
+          <h2>이 권은 시즌 완결 후 주문할 수 있어요.</h2>
+          <p>
+            시즌 {matchedSeason.number}은 아직 연재 중입니다. 완결되면
+            소장본으로 주문할 수 있어요. 그동안은 캔디로 유료 회차를 열 수
+            있습니다.
+          </p>
+          <Link
+            className="button button--primary"
+            href={`/series/${encodeURIComponent(series.slug)}#episodes`}
+          >
+            회차 목록으로 돌아가기
+          </Link>
+        </section>
+      </main>
+    );
+  }
+  const season = matchedSeason;
   if (!season) {
     notFound();
   }

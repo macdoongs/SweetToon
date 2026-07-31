@@ -71,7 +71,12 @@ export type EpisodeReader = {
   visibility?: "public" | "private";
   publishedAt: string;
   series: { id: string; slug: string; title: string };
-  season: { id: string; number: number; title: string | null };
+  season: {
+    id: string;
+    number: number;
+    title: string | null;
+    status: PublicationStatus;
+  };
   pages: Array<{
     id: string;
     order: number;

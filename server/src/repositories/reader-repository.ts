@@ -490,6 +490,8 @@ export class PrismaReaderRepository implements ReaderRepository {
         id: episode.season.id,
         number: episode.season.number,
         title: episode.season.title,
+        status:
+          episode.season.status === "completed" ? "completed" : "ongoing",
       },
       pages: pages.map((page) => ({
         id: page.id,

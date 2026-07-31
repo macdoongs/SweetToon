@@ -101,6 +101,7 @@ export const EpisodeReaderSchema = z.object({
     id: z.string(),
     number: z.number().int().positive(),
     title: z.string().nullable(),
+    status: z.enum(["ongoing", "completed"]),
   }),
   pages: z.array(PageImageSchema),
   access: z.object({

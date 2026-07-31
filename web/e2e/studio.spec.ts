@@ -14,40 +14,32 @@ function episodeArchive(): Buffer {
   return archive.toBuffer();
 }
 
-test("스튜디오가 전체 작품을 보여주고 새 작품을 드롭다운에 바로 반영한다", async ({
+test("스튜디오 홈이 전체 작품을 보여주고 새 작품 관리로 바로 이동한다", async ({
   page,
 }) => {
   await page.goto("/studio");
 
   // 공개 목록 한 페이지(12개)에 갇히지 않고 시드 전체가 보여야 한다.
-  const manage = page.locator(".studio-season-manage");
-  await manage.locator("summary").click();
-  expect(
-    await manage.getByLabel("관리할 작품").locator("option").count(),
-  ).toBeGreaterThan(12);
+  expect(await page.locator(".studio-home-card").count()).toBeGreaterThan(12);
 
-  const newSeriesForm = page.locator(".studio-new-series");
-  await newSeriesForm.locator("summary").click();
   const uniqueSlug = `e2e-night-market-${Date.now()}`;
+  const newSeriesForm = page.locator(".studio-new-series-form");
   await newSeriesForm.getByLabel("주소(slug)").fill(uniqueSlug);
   await newSeriesForm.getByLabel("새 작품 제목").fill("E2E 밤의 시장");
   await newSeriesForm.getByLabel("줄거리").fill("밤에만 열리는 시장 이야기");
   await newSeriesForm.getByLabel("장르").fill("판타지");
   await newSeriesForm.getByLabel("작가 이름").fill("E2E작가");
-  await newSeriesForm
-    .getByRole("button", { name: "작품 만들기" })
-    .click();
+  await newSeriesForm.getByRole("button", { name: "작품 만들기" }).click();
+
+  // 생성 즉시 새 작품 관리 화면으로 이동한다.
+  await expect(page).toHaveURL(new RegExp(`/studio/series/${uniqueSlug}$`));
   await expect(
-    page.getByText("《E2E 밤의 시장》 시즌 1이 준비됐어요", { exact: false }),
+    page.getByRole("heading", { level: 1, name: "E2E 밤의 시장" }),
   ).toBeVisible();
 
-  // 새 작품이 발행 대상 드롭다운에 나타나고 선택돼 있어야 한다.
-  const seriesSelect = page.getByRole("combobox", {
-    name: "작품",
-    exact: true,
-  });
-  await expect(seriesSelect.locator("option:checked")).toHaveText(
-    "E2E 밤의 시장",
+  await page.getByRole("link", { name: "새 회차 올리기" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/studio/series/${uniqueSlug}/episodes/new$`),
   );
   await expect(
     page.getByRole("spinbutton", { name: "회차", exact: true }),
@@ -58,22 +50,23 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/studio");
+
+  // 새 회차 화면에서 추천 번호를 읽고, 작품 관리에서 공개 범위를 맞춘다.
+  await page.goto("/studio/series/rooftop-garden/episodes/new");
+  const nextEpisodeNumber = Number(
+    await page
+      .getByRole("spinbutton", { name: "회차", exact: true })
+      .inputValue(),
+  );
+
+  await page.goto("/studio/series/rooftop-garden");
   await expect(page.getByText("독자 공개 범위")).toBeVisible();
-  await page
-    .getByRole("combobox", { name: "작품", exact: true })
-    .selectOption({ label: "옥상 정원 클럽" });
   const freeVolumeInput = page.getByLabel("무료 공개 권 수");
   const previewSelect = page.getByLabel("다음 권 미리보기");
   const originalPolicy = {
     freeVolumeCount: Number(await freeVolumeInput.inputValue()),
     previewEpisodeCount: Number(await previewSelect.inputValue()),
   };
-  const nextEpisodeNumber = Number(
-    await page
-      .getByRole("spinbutton", { name: "회차", exact: true })
-      .inputValue(),
-  );
   await freeVolumeInput.fill(String(Math.ceil(nextEpisodeNumber / 5)));
   await previewSelect.selectOption("0");
   const policyResponse = page.waitForResponse(
@@ -86,6 +79,7 @@ test("작가가 모바일 화면에서 ZIP 순서를 확인하고 에피소드�
   const updatedPolicy = await (await policyResponse).json();
   await expect(page.getByText("독자 공개 범위를 저장했어요.")).toBeVisible();
 
+  await page.goto("/studio/series/rooftop-garden/episodes/new");
   await expect(
     page.getByRole("heading", { level: 1 }),
   ).toContainText("원고 한 묶음을");

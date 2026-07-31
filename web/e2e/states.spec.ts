@@ -85,29 +85,21 @@ test("스튜디오의 빈 목록과 조회 실패를 구분한다", async ({ pag
     }),
   );
 
-  await page.goto("/studio");
-  await page.getByRole("radio", { name: "비공개 보관" }).check();
-  await expect(page).toHaveURL(/\/studio\?mode=draft$/);
+  // 이전 ?mode= 주소는 분리된 하위 라우트로 이동한다.
+  await page.goto("/studio?mode=draft");
+  await expect(page).toHaveURL(/\/studio\/drafts$/);
   await expect(
     page.getByRole("heading", {
       name: "비공개 보관함을 불러오지 못했어요.",
     }),
   ).toBeVisible();
-  await page.getByRole("radio", { name: "책 패키징 신청" }).check();
-  await expect(page).toHaveURL(/\/studio\?mode=packaging$/);
+
+  await page.goto("/studio/packaging");
   await expect(
     page.getByRole("heading", {
       name: "패키징 신청 내역을 불러오지 못했어요.",
     }),
   ).toBeVisible();
-  // 뒤로가기는 이전 업로드 목적을 복원한다.
-  await page.goBack();
-  await expect(page).toHaveURL(/\/studio\?mode=draft$/);
-  await expect(
-    page.getByRole("radio", { name: "비공개 보관" }),
-  ).toBeChecked();
-  await page.goForward();
-  await expect(page).toHaveURL(/\/studio\?mode=packaging$/);
 
   await page.unroute("**/api/studio/drafts");
   await page.unroute("**/api/studio/packaging-requests");
@@ -117,9 +109,11 @@ test("스튜디오의 빈 목록과 조회 실패를 구분한다", async ({ pag
       name: /아직 패키징 신청 내역이 없어요|책 패키징 신청 내역/,
     }),
   ).toBeVisible();
-  await page.getByRole("radio", { name: "비공개 보관" }).check();
+  await page.getByRole("link", { name: "비공개 보관함" }).click();
+  await expect(page).toHaveURL(/\/studio\/drafts$/);
   await expect(
     page.getByRole("heading", {
+      level: 2,
       name: /비공개로 보관한 회차가 없어요|비공개 보관함/,
     }),
   ).toBeVisible();

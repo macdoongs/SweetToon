@@ -2,9 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ApiError, getJson } from "@/lib/api";
-import { getMyOrders, type MyOrderRecord } from "@/lib/my-orders";
 import { formatKoreanDateTime } from "@/lib/date-time";
 import type { OrderListResponse, OrderSummary } from "@/lib/order-types";
 import { DiscoverLink } from "./discover-link";
@@ -26,11 +25,6 @@ export function OrderListPage({
 }) {
   const [items, setItems] = useState(orders);
   const [nextCursor, setNextCursor] = useState(initialNextCursor);
-  const [myOrders, setMyOrders] = useState<MyOrderRecord[]>([]);
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setMyOrders(getMyOrders()));
-    return () => cancelAnimationFrame(frame);
-  }, []);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
@@ -60,45 +54,21 @@ export function OrderListPage({
       <nav className="page-breadcrumb" aria-label="현재 위치">
         <Link href="/">홈</Link>
         <span aria-hidden="true">/</span>
-        <strong aria-current="page">주문 현황</strong>
+        <Link href="/orders">주문 현황</Link>
+        <span aria-hidden="true">/</span>
+        <strong aria-current="page">공용 데모 피드</strong>
       </nav>
       <header className="page-header page-header--compact">
         <p className="eyebrow">Shared demo</p>
-        <h1>데모 주문 현황</h1>
+        <h1>공용 데모 주문 피드</h1>
         <p>
-          로그인 없는 공용 데모입니다. 소장본 제작 흐름과 상태 변화를
-          확인해 보세요.
+          로그인 없는 공용 데모입니다. 모든 방문자와 봇의 소장본 제작
+          흐름과 상태 변화를 확인해 보세요.
         </p>
         <Link className="operations-link" href="/operations/orders">
           데모 운영자 화면에서 상태 변경하기 →
         </Link>
       </header>
-
-      {myOrders.length > 0 ? (
-        <section className="my-orders" aria-label="이 브라우저의 주문">
-          <div className="section-heading section-heading--compact">
-            <div>
-              <p className="eyebrow">My orders</p>
-              <h2>이 브라우저에서 만든 주문</h2>
-            </div>
-            <p>주문 기록은 이 브라우저에만 저장돼요.</p>
-          </div>
-          <ul>
-            {myOrders.map((order) => (
-              <li key={order.id}>
-                <Link href={`/orders/${encodeURIComponent(order.id)}`}>
-                  <strong>
-                    {order.seriesTitle} · 시즌 {order.seasonNumber} ·{" "}
-                    {order.volumeNumber}권
-                  </strong>
-                  <span>{formatKoreanDateTime(order.createdAt)} 주문</span>
-                  <em>제작 타임라인 보기 →</em>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
 
       {items.length === 0 ? (
         <section className="orders-empty">

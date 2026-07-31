@@ -2471,6 +2471,35 @@ button {
   font-size: 0.62rem;
 }
 
+.operations-nav {
+  width: var(--content);
+  margin: 26px auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.operations-nav a {
+  padding: 7px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+
+.operations-nav a[aria-current="page"] {
+  border-color: var(--coral);
+  background: var(--coral);
+  color: white;
+}
+
+.operations-security-access {
+  width: var(--content);
+  margin: 14px auto 0;
+}
+
 .operations-filters {
   width: var(--content);
   margin: 0 auto 18px;

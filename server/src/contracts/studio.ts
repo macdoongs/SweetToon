@@ -154,6 +154,26 @@ export const StudioSeasonResponseSchema = z.object({
   status: SeasonStatusSchema,
 });
 
+export const StudioSeriesSummarySchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  coverUrl: z.string().nullable(),
+  seasons: z.array(
+    z.object({
+      id: z.string(),
+      number: z.number().int().positive(),
+      title: z.string().nullable(),
+      status: SeasonStatusSchema,
+      episodeCount: z.number().int().min(0),
+    }),
+  ),
+});
+
+export const StudioSeriesListSchema = z.object({
+  items: z.array(StudioSeriesSummarySchema),
+});
+
 export const DraftEpisodeSchema = z.object({
   id: z.string(),
   number: z.number().int().positive(),
@@ -269,6 +289,7 @@ export type StudioSeasonResponse = z.infer<
   typeof StudioSeasonResponseSchema
 >;
 export type DraftEpisode = z.infer<typeof DraftEpisodeSchema>;
+export type StudioSeriesSummary = z.infer<typeof StudioSeriesSummarySchema>;
 export type CreatePackagingRequest = z.infer<
   typeof CreatePackagingRequestSchema
 >;

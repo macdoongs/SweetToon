@@ -19,6 +19,7 @@ import {
   SeriesCoverResponseSchema,
   SeriesInfoResponseSchema,
   StudioSeasonResponseSchema,
+  StudioSeriesListSchema,
   UpdateEpisodeRequestSchema,
   UpdateEpisodeVisibilityRequestSchema,
   UpdatePackagingStatusRequestSchema,
@@ -301,6 +302,14 @@ export function createStudioRouter(
       res.json(CreatedEpisodeSchema.parse(replaced));
     },
   );
+
+  router.get("/studio/series", async (_req, res) => {
+    res.json(
+      StudioSeriesListSchema.parse({
+        items: await service.listStudioSeries(),
+      }),
+    );
+  });
 
   router.get("/studio/drafts", async (_req, res) => {
     res.json(

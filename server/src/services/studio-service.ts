@@ -8,6 +8,7 @@ import type {
   CreateSeriesRequest,
   CreateSeriesResponse,
   DraftEpisode,
+  StudioSeriesSummary,
   EpisodeVisibility,
   PackagingRequest,
   ReplaceEpisodePagesRequest,
@@ -93,6 +94,7 @@ export interface StudioUseCases {
     episodeId: string,
     input: ReplaceEpisodePagesRequest,
   ): Promise<CreatedEpisode>;
+  listStudioSeries(): Promise<StudioSeriesSummary[]>;
   listDraftEpisodes(): Promise<DraftEpisode[]>;
   createPackagingRequest(
     input: CreatePackagingRequest,
@@ -557,6 +559,10 @@ export class StudioService implements StudioUseCases {
       readerUrl: `/read/${episode.id}`,
       visibility: episode.visibility,
     };
+  }
+
+  async listStudioSeries(): Promise<StudioSeriesSummary[]> {
+    return this.repository.listStudioSeries();
   }
 
   async listDraftEpisodes(): Promise<DraftEpisode[]> {

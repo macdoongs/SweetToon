@@ -87,17 +87,27 @@ test("스튜디오의 빈 목록과 조회 실패를 구분한다", async ({ pag
 
   await page.goto("/studio");
   await page.getByRole("radio", { name: "비공개 보관" }).check();
+  await expect(page).toHaveURL(/\/studio\?mode=draft$/);
   await expect(
     page.getByRole("heading", {
       name: "비공개 보관함을 불러오지 못했어요.",
     }),
   ).toBeVisible();
   await page.getByRole("radio", { name: "책 패키징 신청" }).check();
+  await expect(page).toHaveURL(/\/studio\?mode=packaging$/);
   await expect(
     page.getByRole("heading", {
       name: "패키징 신청 내역을 불러오지 못했어요.",
     }),
   ).toBeVisible();
+  // 뒤로가기는 이전 업로드 목적을 복원한다.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/studio\?mode=draft$/);
+  await expect(
+    page.getByRole("radio", { name: "비공개 보관" }),
+  ).toBeChecked();
+  await page.goForward();
+  await expect(page).toHaveURL(/\/studio\?mode=packaging$/);
 
   await page.unroute("**/api/studio/drafts");
   await page.unroute("**/api/studio/packaging-requests");

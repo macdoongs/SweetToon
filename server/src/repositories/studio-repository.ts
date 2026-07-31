@@ -10,6 +10,7 @@ import type {
   SeriesCoverResponse,
   SeriesInfoResponse,
   StudioSeasonResponse,
+  StudioSeriesSummary,
   UpdateEpisodeRequest,
   UpdateSeriesInfoRequest,
 } from "../contracts/studio";
@@ -146,6 +147,7 @@ export interface StudioRepository {
     imageUrls: string[],
     manuscriptDir: string,
   ): Promise<void>;
+  listStudioSeries(): Promise<StudioSeriesSummary[]>;
   listDraftEpisodes(): Promise<DraftEpisode[]>;
   createPackagingRequest(
     input: CreatePackagingRequestInput,
@@ -515,6 +517,35 @@ export class PrismaStudioRepository implements StudioRepository {
         data: { manuscriptDir },
       });
     });
+  }
+
+  async listStudioSeries(): Promise<StudioSeriesSummary[]> {
+    const series = await this.prisma.series.findMany({
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: {
+        seasons: {
+          orderBy: { number: "asc" },
+          include: {
+            _count: {
+              select: { episodes: { where: { visibility: "public" } } },
+            },
+          },
+        },
+      },
+    });
+    return series.map((item) => ({
+      id: item.id,
+      slug: item.slug,
+      title: item.title,
+      coverUrl: item.coverUrl,
+      seasons: item.seasons.map((season) => ({
+        id: season.id,
+        number: season.number,
+        title: season.title,
+        status: season.status === "completed" ? "completed" : "ongoing",
+        episodeCount: season._count.episodes,
+      })),
+    }));
   }
 
   async listDraftEpisodes(): Promise<DraftEpisode[]> {

@@ -963,6 +963,14 @@ export const openApiDocument = {
       },
     },
     "/api/studio/series": {
+      get: {
+        tags: ["Studio"],
+        summary:
+          "스튜디오 관리용 전체 작품 목록을 최신 생성 순으로 조회합니다.",
+        responses: {
+          "200": { description: "작품·시즌 요약 목록" },
+        },
+      },
       post: {
         tags: ["Studio"],
         summary: "새 작품과 첫 연재 시즌을 만듭니다.",

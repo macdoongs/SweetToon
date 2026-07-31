@@ -124,6 +124,23 @@ function studioService(): jest.Mocked<StudioUseCases> {
       readerUrl: "/read/episode-12",
       visibility: "public",
     }),
+    listStudioSeries: jest.fn().mockResolvedValue([
+      {
+        id: "series-new",
+        slug: "night-market",
+        title: "밤의 시장",
+        coverUrl: null,
+        seasons: [
+          {
+            id: "season-new",
+            number: 1,
+            title: null,
+            status: "ongoing",
+            episodeCount: 0,
+          },
+        ],
+      },
+    ]),
     listDraftEpisodes: jest.fn().mockResolvedValue([]),
     createPackagingRequest: jest.fn().mockResolvedValue({
       id: "packaging-1",
@@ -528,6 +545,20 @@ describe("studio routes", () => {
 
     expect(drafts.body).toEqual({ items: [] });
     expect(packaging.body).toEqual({ items: [] });
+  });
+
+  it("lists every studio series with season summaries", async () => {
+    const service = studioService();
+    const response = await request(app(service))
+      .get("/api/studio/series")
+      .expect(200);
+
+    expect(service.listStudioSeries).toHaveBeenCalled();
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0]).toMatchObject({
+      slug: "night-market",
+      seasons: [{ number: 1, status: "ongoing", episodeCount: 0 }],
+    });
   });
 
   it("cleans up a canceled upload session", async () => {

@@ -1,5 +1,28 @@
 import { expect, test } from "@playwright/test";
 
+test("다크 테마에서도 주문 요약의 배경과 글자가 구분된다 @demo", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("sweettoon:theme", "dark");
+  });
+  await page.goto("/series/moonlight-laundry");
+  await page
+    .getByRole("link", { name: /선택한 \d+권 주문하기/ })
+    .click();
+
+  const summary = page.locator(".order-summary");
+  await expect(summary).toBeVisible();
+  await expect
+    .poll(() =>
+      summary.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return `${style.backgroundColor}|${style.color}`;
+      }),
+    )
+    .toBe("rgb(43, 37, 34)|rgb(246, 238, 229)");
+});
+
 test("브라우저 저장소가 막혀도 성공한 주문을 실패로 되돌리지 않는다", async ({
   page,
 }) => {

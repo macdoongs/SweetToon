@@ -111,7 +111,17 @@ test("독자가 소장본을 주문하고 공개 응답에서 개인정보가 �
   await expect(
     myOrders.locator(`a[href="/orders/${createdOrderId}"]`),
   ).toBeVisible();
-  await page.goBack();
+
+  // 공용 피드는 /orders/demo로 분리되어 있고 방금 주문도 포함한다.
+  await page.getByRole("link", { name: "공용 데모 주문 피드 보기 →" }).click();
+  await expect(page).toHaveURL(/\/orders\/demo$/);
+  await expect(
+    page.getByRole("heading", { name: "공용 데모 주문 피드" }),
+  ).toBeVisible();
+  await expect(
+    page.locator(`a[href="/orders/${createdOrderId}"]`),
+  ).toBeVisible();
+  await page.goto(`/orders/${createdOrderId}`);
   await expect(page.getByText(/E2E_PRIVATE_MARKER/)).toHaveCount(0);
 
   const orderId = new URL(page.url()).pathname.split("/").at(-1);

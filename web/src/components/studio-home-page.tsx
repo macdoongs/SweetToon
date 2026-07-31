@@ -162,7 +162,10 @@ export function StudioHomePage({
         })}
       </section>
 
-      <section className="studio-drafts" aria-label="새 작품 만들기">
+      <section
+        className="studio-drafts studio-home-new-series"
+        aria-label="새 작품 만들기"
+      >
         <header>
           <div>
             <p className="eyebrow">New series</p>

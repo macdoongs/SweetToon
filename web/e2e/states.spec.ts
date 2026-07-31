@@ -119,7 +119,7 @@ test("스튜디오의 빈 목록과 조회 실패를 구분한다", async ({ pag
   ).toBeVisible();
 });
 
-test("운영 보조 API 하나가 실패해도 다른 상태를 분리해 표시한다", async ({
+test("운영 보조 API 하나가 실패해도 다른 상태를 분리해 표시한다 @demo", async ({
   page,
 }) => {
   await page.route("**/api/realtime/demo-bot", (route) =>

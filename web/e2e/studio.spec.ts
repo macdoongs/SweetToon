@@ -78,13 +78,20 @@ test("등록 회차를 시즌·권·검색으로 좁히고 관리 메뉴를 연�
   ).toBeTruthy();
 });
 
-test("스튜디오 홈이 전체 작품을 보여주고 새 작품 관리로 바로 이동한다", async ({
+test("스튜디오 홈이 전체 작품을 보여주고 새 작품 관리로 바로 이동한다 @demo", async ({
   page,
 }) => {
   await page.goto("/studio");
 
   // 공개 목록 한 페이지(12개)에 갇히지 않고 시드 전체가 보여야 한다.
   expect(await page.locator(".studio-home-card").count()).toBeGreaterThan(12);
+
+  const seriesGridBox = await page.locator(".studio-home-grid").boundingBox();
+  const newSeriesBox = await page
+    .getByRole("region", { name: "새 작품 만들기" })
+    .boundingBox();
+  expect(newSeriesBox?.x).toBe(seriesGridBox?.x);
+  expect(newSeriesBox?.width).toBe(seriesGridBox?.width);
 
   const uniqueSlug = `e2e-night-market-${Date.now()}`;
   const newSeriesForm = page.locator(".studio-new-series-form");

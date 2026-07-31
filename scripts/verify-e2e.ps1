@@ -3,7 +3,8 @@ param(
     [string]$ProjectName = "sweettoon-e2e-$PID",
     [switch]$SkipBuild,
     [switch]$SkipInstall,
-    [switch]$SkipBrowserInstall
+    [switch]$SkipBrowserInstall,
+    [switch]$Demo
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,7 +35,8 @@ $managedEnvironment = @(
     "DB_PORT",
     "SERVER_PORT",
     "WEB_PORT",
-    "E2E_BASE_URL"
+    "E2E_BASE_URL",
+    "E2E_DEMO"
 )
 $previousEnvironment = @{}
 
@@ -50,6 +52,12 @@ $env:COMPOSE_PROJECT_NAME = $ProjectName
 $env:DB_PORT = "0"
 $env:SERVER_PORT = "0"
 $env:WEB_PORT = "0"
+if ($Demo) {
+    $env:E2E_DEMO = "true"
+}
+else {
+    $env:E2E_DEMO = "false"
+}
 $composeTouched = $false
 
 Push-Location $repositoryRoot
@@ -91,7 +99,14 @@ try {
                 npx playwright install chromium
             } "Playwright Chromium install"
         }
-        Invoke-Checked { npm run test:e2e } "Playwright browser E2E"
+        if ($Demo) {
+            Invoke-Checked {
+                npx playwright test --grep "@demo"
+            } "Playwright visible demo"
+        }
+        else {
+            Invoke-Checked { npm run test:e2e } "Playwright browser E2E"
+        }
     }
     finally {
         Pop-Location

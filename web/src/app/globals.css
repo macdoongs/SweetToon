@@ -1617,8 +1617,11 @@ button {
 }
 
 .episode-list {
+  margin: 0;
+  padding: 0;
   display: grid;
   gap: 8px;
+  list-style: none;
 }
 
 .episode-list__item {
@@ -2128,12 +2131,12 @@ button {
   position: sticky;
   top: 98px;
   padding: 30px;
-  background: var(--ink);
-  color: white;
+  background: var(--feature-surface);
+  color: var(--feature-ink);
 }
 
 .order-summary > p {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--feature-muted);
 }
 
 .order-summary dl,
@@ -2151,7 +2154,7 @@ button {
 }
 
 .order-summary dt {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--feature-muted);
 }
 
 .order-summary dt,
@@ -2175,7 +2178,7 @@ button {
 .quote-total span,
 .quote-total small {
   display: block;
-  color: rgba(255, 255, 255, 0.54);
+  color: var(--feature-muted);
   font-size: 0.7rem;
 }
 
@@ -2212,7 +2215,7 @@ button {
 }
 
 .order-benefit span {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--feature-muted);
   font-size: 0.75rem;
   line-height: 1.55;
 }
@@ -2563,6 +2566,12 @@ button {
   display: grid;
   gap: 12px;
   max-width: 560px;
+}
+
+.studio-home-new-series {
+  width: var(--content);
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .operations-nav {
@@ -3568,8 +3577,8 @@ body:has(.reader-page) .site-footer {
   pointer-events: none;
 }
 
-.reader-page--chrome-hidden .reader-toolbar:focus-within,
-.reader-page--chrome-hidden .reader-controls:focus-within {
+.reader-page--chrome-hidden .reader-toolbar:has(:focus-visible),
+.reader-page--chrome-hidden .reader-controls:has(:focus-visible) {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;

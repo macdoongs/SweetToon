@@ -18,6 +18,10 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
     seriesTitle ?? "",
   );
   await expect(page.locator(".episode-list__item")).toHaveCount(105);
+  await expect(page.locator(".episode-list").first()).toHaveCSS(
+    "list-style-type",
+    "none",
+  );
   await page.getByRole("link", { name: "첫 화부터 읽기" }).click();
 
   await expect(page).toHaveURL(/\/read\/[^/]+$/);
@@ -70,6 +74,24 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(page.locator(".reader-finish--double")).toContainText(
     "모두 읽었습니다",
   );
+  await page.getByRole("button", { name: "책갈피" }).click();
+  const bookmarkToast = page.locator(".reader-bookmark-toast");
+  await expect(bookmarkToast).toContainText("책갈피에 저장");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const saved = JSON.parse(
+          localStorage.getItem("sweettoon:reading-progress") ?? "{}",
+        ) as Record<string, { pageOrder?: number; percent?: number }>;
+        return Object.values(saved).some(
+          (progress) =>
+            (progress.pageOrder ?? 0) > 0 &&
+            (progress.percent ?? 0) > 0,
+        );
+      }),
+    )
+    .toBe(true);
+  await expect(bookmarkToast).toBeHidden({ timeout: 5_000 });
   await page.getByRole("button", { name: "세로 스크롤" }).click();
 
   const firstCut = page.locator(".webtoon-strip__cut img").first();
@@ -95,24 +117,6 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(page.locator(".reader-page")).not.toHaveClass(
     /reader-page--chrome-hidden/,
   );
-  await page.getByRole("button", { name: "책갈피" }).click();
-  await expect(page.locator(".reader-bookmark-toast")).toContainText(
-    "책갈피에 저장",
-  );
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const saved = JSON.parse(
-          localStorage.getItem("sweettoon:reading-progress") ?? "{}",
-        ) as Record<string, { pageOrder?: number; percent?: number }>;
-        return Object.values(saved).some(
-          (progress) =>
-            (progress.pageOrder ?? 0) > 0 &&
-            (progress.percent ?? 0) > 0,
-        );
-      }),
-    )
-    .toBe(true);
 
   await page.evaluate(() =>
     window.scrollTo(0, document.documentElement.scrollHeight),
@@ -135,6 +139,40 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(
     livePopular.getByRole("link", { name: /달빛 세탁소/ }),
   ).toBeVisible();
+});
+
+test("양면 보기 전환 후 스크롤하면 뷰어 도구 전체가 숨는다 @demo", async ({
+  page,
+}) => {
+  const seriesResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  expect(seriesResponse.ok()).toBeTruthy();
+  const series = await seriesResponse.json();
+  const episodeId = series.seasons[0].episodes[0].id as string;
+
+  await page.goto(`/read/${episodeId}`);
+  await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await page.mouse.move(200, 200);
+
+  await page.getByRole("button", { name: "양면 보기" }).click();
+  const paged = page.locator(".reader-paged");
+  await expect(paged).toBeVisible();
+  const counter = page.locator(".reader-paged__counter");
+  const firstCounter = await counter.innerText();
+  await page.getByRole("button", { name: "다음 양면" }).click();
+  await expect(counter).not.toHaveText(firstCounter);
+
+  await page.getByRole("button", { name: "세로 스크롤" }).click();
+  await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await page.locator(".webtoon-strip").hover({ position: { x: 20, y: 200 } });
+  await page.mouse.wheel(0, 900);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await expect(page.locator(".reader-page")).toHaveClass(
+    /reader-page--chrome-hidden/,
+  );
+  await expect(page.locator(".reader-toolbar")).toHaveCSS("opacity", "0");
+  await expect(page.locator(".reader-controls")).toHaveCSS("opacity", "0");
 });
 
 test("저장된 페이지를 양면 모드에서 복원한 뒤 모드 전환에도 진행도를 보존한다", async ({

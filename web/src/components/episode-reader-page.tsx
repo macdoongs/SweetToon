@@ -1085,6 +1085,7 @@ export function EpisodeReaderPage({
               <Link
                 className="button button--dark-ghost"
                 href={`/read/${encodeURIComponent(episode.navigation.previousEpisodeId)}`}
+                scroll={false}
               >
                 ← 이전 화
               </Link>
@@ -1095,6 +1096,7 @@ export function EpisodeReaderPage({
               <Link
                 className="button button--light"
                 href={`/read/${encodeURIComponent(episode.navigation.nextEpisodeId)}`}
+                scroll={false}
               >
                 {episode.navigation.nextEpisodeSeasonNumber !== null &&
                 episode.navigation.nextEpisodeSeasonNumber !==

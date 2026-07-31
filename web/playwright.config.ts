@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const demo = process.env.E2E_DEMO === "true";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -16,6 +18,8 @@ export default defineConfig({
   ],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000",
+    headless: !demo,
+    launchOptions: demo ? { slowMo: 350 } : undefined,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure",

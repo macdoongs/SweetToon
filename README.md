@@ -282,6 +282,15 @@ pwsh -File scripts/verify-e2e.ps1
 pwsh -File scripts/verify-lighthouse.ps1
 ```
 
+자동화 과정을 직접 보려면 데모 모드로 실행합니다. 격리된 Compose 환경을 띄운
+뒤 실제 Chromium 창에서 읽기·양면 보기·주문·스튜디오·운영 화면의 대표 흐름을
+천천히 재생합니다. 창이 닫히거나 테스트가 끝나면 데모 전용 컨테이너와 볼륨만
+정리합니다. 전체 회귀 검증은 `-Demo` 없이 실행합니다.
+
+```powershell
+pwsh -File scripts/verify-e2e.ps1 -Demo
+```
+
 Compose 스모크 스크립트는 `sweettoon-verify-*` 이름의 독립 project와 임의 호스트
 포트를 사용하며 성공·실패 여부와 관계없이 자신이 만든 컨테이너와 볼륨을 정리합니다.
 브라우저 E2E도 같은 방식으로 독립 DB와 업로드 볼륨을 만들고 URL 기반 작품 탐색,

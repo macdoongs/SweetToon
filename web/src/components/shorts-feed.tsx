@@ -19,7 +19,7 @@ import type {
 import { FavoriteButton } from "./favorite-button";
 
 const PRELOAD_AHEAD = 2;
-const THUMBNAIL_DURATION_MS = 1800;
+const THUMBNAIL_DURATION_MS = 1000;
 const DRAG_THRESHOLD_PX = 56;
 
 type ShortsEventName =
@@ -383,9 +383,10 @@ export function ShortsFeed({
               <ShortsPreviewMedia
                 active={active}
                 item={item}
-                onComplete={() =>
-                  trackShortsEvent("shorts_preview_complete", item, index)
-                }
+                onComplete={() => {
+                  trackShortsEvent("shorts_preview_complete", item, index);
+                  if (index < items.length - 1) moveTo(index + 1);
+                }}
                 paused={active && paused}
                 shouldLoad={shouldLoad}
               />

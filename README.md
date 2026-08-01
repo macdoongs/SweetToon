@@ -304,6 +304,15 @@ Compose 스모크 스크립트는 `sweettoon-verify-*` 이름의 독립 project�
 리포트를 남깁니다. Jenkins도 같은 스크립트를 호출하므로 로컬 검증과 CI 계약이
 분리되지 않습니다.
 
+기본 filesystem 저장소 대신 S3 호환 경계로 같은 스모크를 돌리려면 `COMPOSE_FILE`에
+MinIO 오버레이를 얹습니다. 원고 원본은 비공개 버킷에, 리더용 WebP 파생본만 공개
+버킷에 올라가므로 이미지 URL이 상대 경로가 아니라 절대 URL이 됩니다.
+
+```powershell
+$env:COMPOSE_FILE = "docker-compose.yml;docker-compose.minio.yml"
+pwsh -File scripts/smoke-compose.ps1
+```
+
 웹 번들 크기와 import chain은 빌드와 분리된 `npm run analyze --prefix web`으로
 확인합니다. 결과는 `web/.next/diagnostics/analyze`에 생성됩니다. 데이터베이스
 관계도 원본은 `server/prisma/schema.prisma`이며 `npm run db:docs --prefix server`가

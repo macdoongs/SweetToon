@@ -18,6 +18,7 @@ describe("OpenAPI documentation", () => {
     const response = await request(app).get("/openapi.json").expect(200);
     expect(response.body.openapi).toBe("3.1.0");
     expect(response.body.paths).toHaveProperty("/api/episodes/{id}");
+    expect(response.body.paths).toHaveProperty("/api/episodes/{id}/like");
     expect(response.body.paths).toHaveProperty(
       "/api/discovery/sitemap",
     );

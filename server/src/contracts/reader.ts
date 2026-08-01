@@ -92,6 +92,7 @@ export const EpisodeReaderSchema = z.object({
   title: z.string(),
   visibility: z.enum(["public", "private"]).default("public"),
   publishedAt: z.string().datetime(),
+  likeCount: z.number().int().nonnegative(),
   series: z.object({
     id: z.string(),
     slug: z.string(),

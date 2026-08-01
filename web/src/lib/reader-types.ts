@@ -70,6 +70,7 @@ export type EpisodeReader = {
   title: string;
   visibility?: "public" | "private";
   publishedAt: string;
+  likeCount: number;
   series: { id: string; slug: string; title: string };
   season: {
     id: string;

@@ -66,6 +66,7 @@ const shortsSeriesSelect = {
           id: true,
           number: true,
           title: true,
+          likeCount: true,
           pages: {
             orderBy: { order: "asc" as const },
             take: 2,
@@ -407,6 +408,7 @@ export class PrismaReaderRepository implements ReaderRepository {
             id: episode.id,
             number: episode.number,
             title: episode.title,
+            likeCount: episode.likeCount,
           },
           pages: episode.pages,
         },
@@ -568,6 +570,7 @@ export class PrismaReaderRepository implements ReaderRepository {
       title: episode.title,
       visibility: episode.visibility === "private" ? "private" : "public",
       publishedAt: episode.publishedAt.toISOString(),
+      likeCount: episode.likeCount,
       series: {
         id: episode.season.series.id,
         slug: episode.season.series.slug,

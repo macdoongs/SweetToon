@@ -21,6 +21,8 @@ import { CandyService } from "./services/candy-service";
 import { createRealtimeService } from "./realtime/realtime-service";
 import { DemoBotService } from "./realtime/demo-bot-service";
 import type { DemoBotSpeed } from "./contracts/demo-bot";
+import { PrismaEpisodeLikeRepository } from "./repositories/episode-like-repository";
+import { EpisodeLikeService } from "./services/episode-like-service";
 
 const PORT = Number(process.env.PORT ?? 4000);
 export const UPLOAD_DIR = process.env.UPLOAD_DIR
@@ -77,6 +79,9 @@ async function main() {
     printProvider,
     orderService,
     candyService: new CandyService(new PrismaCandyRepository(prisma)),
+    episodeLikeService: new EpisodeLikeService(
+      new PrismaEpisodeLikeRepository(prisma),
+    ),
     studioService: new StudioService(
       new PrismaStudioRepository(prisma),
       studioStorage,

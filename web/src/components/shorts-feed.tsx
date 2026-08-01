@@ -17,6 +17,7 @@ import type {
   ShortsPreviewResponse,
 } from "@/lib/shorts-types";
 import { FavoriteButton } from "./favorite-button";
+import { EpisodeLikeButton } from "./episode-like-button";
 
 const PRELOAD_AHEAD = 2;
 const THUMBNAIL_DURATION_MS = 1000;
@@ -384,6 +385,7 @@ export function ShortsFeed({
             <article
               aria-label={`${item.series.title} 미리보기`}
               className={`shorts-card${active ? " shorts-card--active" : ""}`}
+              data-episode-id={item.episode.id}
               data-index={index}
               key={`${item.series.slug}-${item.episode.id}`}
               ref={(element) => {
@@ -409,6 +411,11 @@ export function ShortsFeed({
                   {episodeLabel(item.episode.number, item.episode.title)} · 첫 {item.pages.length}페이지 미리보기
                 </small>
                 <div className="shorts-card__actions">
+                  <EpisodeLikeButton
+                    episodeId={item.episode.id}
+                    initialCount={item.episode.likeCount}
+                    variant="shorts"
+                  />
                   <FavoriteButton
                     series={{
                       slug: item.series.slug,

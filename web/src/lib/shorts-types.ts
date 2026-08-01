@@ -11,6 +11,7 @@ export type ShortsPreviewItem = {
     id: string;
     number: number;
     title: string;
+    likeCount: number;
   };
   pages: Array<{
     id: string;

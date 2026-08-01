@@ -5017,7 +5017,7 @@ body:has(.reader-page) .site-footer {
 }
 
 .shorts-preview__strip--active {
-  animation: shorts-preview-pan 14s linear forwards;
+  animation: shorts-preview-pan var(--shorts-pan-duration, 10s) linear forwards;
 }
 
 .shorts-preview__strip img {

@@ -43,7 +43,7 @@ export function StudioAccessKey() {
     loadSecurityAccessKey("studio"),
   );
   return (
-    <details className="operations-security-access">
+    <details className="studio-security-access">
       <summary>운영 보안 설정</summary>
       <label className="field">
         <span>스튜디오 접근 키</span>

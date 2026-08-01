@@ -14,6 +14,60 @@ function episodeArchive(): Buffer {
   return archive.toBuffer();
 }
 
+async function expectStudioContentAlignment(
+  page: import("@playwright/test").Page,
+  selectors: string[],
+) {
+  const headerBox = await page.locator(".page-header").boundingBox();
+  expect(headerBox).not.toBeNull();
+  for (const selector of selectors) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box, `${selector} should be visible`).not.toBeNull();
+    expect(Math.abs(box!.x - headerBox!.x), selector).toBeLessThan(1);
+    expect(Math.abs(box!.width - headerBox!.width), selector).toBeLessThan(1);
+  }
+}
+
+test("비공개 보관함과 책 패키징이 공통 콘텐츠 여백을 유지한다", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/studio/drafts");
+  await expect(page.locator(".studio-drafts")).toBeVisible();
+  await expectStudioContentAlignment(page, [
+    ".studio-security-access",
+    ".studio-drafts",
+  ]);
+
+  await page.goto("/studio/packaging");
+  await expect(page.locator(".studio-packaging-list")).toBeVisible();
+  await expectStudioContentAlignment(page, [
+    ".studio-security-access",
+    ".studio-packaging-form",
+    ".studio-workspace",
+    ".studio-packaging-list",
+  ]);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/studio/drafts");
+  await expectStudioContentAlignment(page, [
+    ".studio-security-access",
+    ".studio-drafts",
+  ]);
+  await page.goto("/studio/packaging");
+  await expectStudioContentAlignment(page, [
+    ".studio-security-access",
+    ".studio-packaging-form",
+    ".studio-workspace",
+    ".studio-packaging-list",
+  ]);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
 test("등록 회차를 시즌·권·검색으로 좁히고 관리 메뉴를 연다", async ({
   page,
 }) => {

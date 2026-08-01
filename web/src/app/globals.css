@@ -1944,7 +1944,8 @@ button {
 }
 
 .studio-security-access {
-  margin-top: 18px;
+  width: var(--content);
+  margin: 18px auto 0;
   padding: 12px 14px;
   background: var(--paper);
 }
@@ -2999,6 +3000,9 @@ button {
 }
 
 .studio-success {
+  width: var(--content);
+  margin-right: auto;
+  margin-left: auto;
   min-height: 520px;
   padding: 50px;
   border: 1px solid var(--line);
@@ -3036,7 +3040,8 @@ button {
 }
 
 .studio-error {
-  margin: 14px 0 0;
+  width: var(--content);
+  margin: 14px auto 0;
   padding: 14px 16px;
   border: 1px solid rgba(201, 75, 48, 0.18);
   border-radius: 14px;
@@ -3092,7 +3097,8 @@ button {
 }
 
 .studio-packaging-form {
-  margin-top: 18px;
+  width: var(--content);
+  margin: 18px auto 0;
   padding: 16px;
   border: 1px solid rgba(216, 105, 74, 0.25);
   border-radius: 16px;
@@ -3119,6 +3125,14 @@ button {
   border: 1px solid var(--line);
   border-radius: 24px;
   background: var(--cream);
+}
+
+.studio-page > .studio-drafts,
+.studio-page > .studio-packaging-list,
+.studio-page > .studio-workspace {
+  width: var(--content);
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .studio-drafts header,

@@ -102,6 +102,7 @@ function dependencies() {
       .fn()
       .mockResolvedValue({ series: [], episodes: [] }),
     listRecentEpisodes: jest.fn().mockResolvedValue([]),
+    listShortsPreviews: jest.fn().mockResolvedValue([]),
   };
   const orderService: jest.Mocked<DemoOrderUseCases> = {
     quote: jest.fn(),

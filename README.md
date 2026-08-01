@@ -125,6 +125,7 @@ Core Web Vitals 수집을 함께 켤 수 있습니다. 기본값은 비활성이
 - **추가 구현:** SEO, 이미지 검증·WebP 파생,
   PWA 설치·오프라인 폴백, RSS, Swagger/OpenAPI, 선택형 R2 저장,
   Mock 계약, 찜·개인화 추천, 주문 SSE·실시간 독자 presence와 데모 봇,
+  공개·무료 첫 회차를 두 페이지씩 보여주는 랜덤 웹툰 쇼츠,
   자동화된 Compose/E2E 검증
 - **의도적 비대상:** 회원/권한, 실제 결제·배송사, 알림, 계정 기반 추천·댓글,
   Komga 연동, 실제 Book Print API 호출
@@ -283,9 +284,9 @@ pwsh -File scripts/verify-lighthouse.ps1
 ```
 
 자동화 과정을 직접 보려면 데모 모드로 실행합니다. 격리된 Compose 환경을 띄운
-뒤 실제 Chromium 창에서 읽기·양면 보기·주문·스튜디오·운영 화면의 대표 흐름을
-천천히 재생합니다. 창이 닫히거나 테스트가 끝나면 데모 전용 컨테이너와 볼륨만
-정리합니다. 전체 회귀 검증은 `-Demo` 없이 실행합니다.
+뒤 실제 Chromium 창에서 쇼츠·읽기·양면 보기·주문·스튜디오·운영 화면의 대표
+흐름을 천천히 재생합니다. 창이 닫히거나 테스트가 끝나면 데모 전용 컨테이너와
+볼륨만 정리합니다. 전체 회귀 검증은 `-Demo` 없이 실행합니다.
 
 ```powershell
 pwsh -File scripts/verify-e2e.ps1 -Demo
@@ -294,9 +295,10 @@ pwsh -File scripts/verify-e2e.ps1 -Demo
 Compose 스모크 스크립트는 `sweettoon-verify-*` 이름의 독립 project와 임의 호스트
 포트를 사용하며 성공·실패 여부와 관계없이 자신이 만든 컨테이너와 볼륨을 정리합니다.
 브라우저 E2E도 같은 방식으로 독립 DB와 업로드 볼륨을 만들고 URL 기반 작품 탐색,
-PWA·RSS, 독자 감상, 소장본 주문, 모바일 작가 스튜디오 흐름을 검증합니다. 실패하면
-Playwright trace, 스크린샷, 비디오와 HTML 리포트를 남깁니다. Jenkins도 같은
-스크립트를 호출하므로 로컬 검증과 CI 계약이 분리되지 않습니다.
+쇼츠 선로딩·모바일 모션 축소, PWA·RSS, 독자 감상, 소장본 주문, 모바일 작가
+스튜디오 흐름을 검증합니다. 실패하면 Playwright trace, 스크린샷, 비디오와 HTML
+리포트를 남깁니다. Jenkins도 같은 스크립트를 호출하므로 로컬 검증과 CI 계약이
+분리되지 않습니다.
 
 웹 번들 크기와 import chain은 빌드와 분리된 `npm run analyze --prefix web`으로
 확인합니다. 결과는 `web/.next/diagnostics/analyze`에 생성됩니다. 데이터베이스

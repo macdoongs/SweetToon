@@ -25,6 +25,7 @@ export function SiteFooter() {
           <div>
             <strong>서비스</strong>
             <DiscoverLink>작품 둘러보기</DiscoverLink>
+            <Link href="/shorts">웹툰 쇼츠</Link>
             <Link href="/orders">주문 현황</Link>
             <Link href="/studio">작가 스튜디오</Link>
           </div>

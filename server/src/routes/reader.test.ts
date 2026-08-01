@@ -160,6 +160,24 @@ function makeRepository(): jest.Mocked<ReaderRepository> {
       ],
     }),
     listRecentEpisodes: jest.fn().mockResolvedValue([]),
+    listShortsPreviews: jest.fn().mockResolvedValue([
+      {
+        series: {
+          slug: seriesDetail.slug,
+          title: seriesDetail.title,
+          synopsis: seriesDetail.synopsis,
+          genre: seriesDetail.genre,
+          coverUrl: seriesDetail.coverUrl,
+          authorName: seriesDetail.author.name,
+        },
+        episode: {
+          id: episode.id,
+          number: episode.number,
+          title: episode.title,
+        },
+        pages: episode.pages,
+      },
+    ]),
   };
 }
 
@@ -277,6 +295,27 @@ describe("reader routes", () => {
     await request(app)
       .get("/api/discovery/recent-episodes?limit=51")
       .expect(400);
+  });
+
+  it("returns only the requested number of shorts preview bundles", async () => {
+    const repository = makeRepository();
+    const app = createApp({
+      readerRepository: repository,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+    });
+
+    const response = await request(app)
+      .get("/api/discovery/shorts?limit=6")
+      .expect(200);
+
+    expect(repository.listShortsPreviews).toHaveBeenCalledWith(6);
+    expect(response.body.items[0].pages).toHaveLength(2);
+    expect(response.headers["cache-control"]).toContain("private");
+
+    const invalid = await request(app)
+      .get("/api/discovery/shorts?limit=21")
+      .expect(400);
+    expect(invalid.body.code).toBe("INVALID_SHORTS_LIMIT");
   });
 
   it("passes an anonymous demo entitlement to the repository", async () => {

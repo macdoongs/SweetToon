@@ -13,6 +13,10 @@ import {
   RecentEpisodesResponseSchema,
   SitemapDiscoveryResponseSchema,
 } from "../contracts/discovery";
+import {
+  ShortsPreviewQuerySchema,
+  ShortsPreviewResponseSchema,
+} from "../contracts/shorts";
 
 export function createReaderRouter(repository: ReaderRepository): Router {
   const router = Router();
@@ -77,6 +81,22 @@ export function createReaderRouter(repository: ReaderRepository): Router {
         items: await repository.listRecentEpisodes(query.data.limit),
       }),
     );
+  });
+
+  router.get("/discovery/shorts", async (req, res) => {
+    const query = ShortsPreviewQuerySchema.safeParse(req.query);
+    if (!query.success) {
+      res.status(400).json({
+        code: "INVALID_SHORTS_LIMIT",
+        message: "쇼츠 미리보기 개수가 올바르지 않습니다.",
+      });
+      return;
+    }
+    const result = ShortsPreviewResponseSchema.parse({
+      items: await repository.listShortsPreviews(query.data.limit),
+    });
+    res.setHeader("Cache-Control", "private, max-age=60");
+    res.json(result);
   });
 
   router.get("/episodes/:id", async (req, res) => {

@@ -11,6 +11,7 @@ import type {
   DiscoveryEpisode,
   SitemapDiscoveryResponse,
 } from "../contracts/discovery";
+import type { ShortsPreviewItem } from "../contracts/shorts";
 
 export interface ReaderRepository {
   listSeries(query: SeriesListQuery): Promise<SeriesListResponse>;
@@ -24,6 +25,7 @@ export interface ReaderRepository {
   ): Promise<EpisodeReader | null>;
   listSitemapDiscovery(): Promise<SitemapDiscoveryResponse>;
   listRecentEpisodes(limit: number): Promise<DiscoveryEpisode[]>;
+  listShortsPreviews(limit: number): Promise<ShortsPreviewItem[]>;
 }
 
 const PUBLIC_EPISODES = { visibility: "public" } as const;
@@ -44,6 +46,36 @@ const seriesSummaryInclude = {
     },
   },
 } satisfies Prisma.SeriesInclude;
+
+const shortsSeriesSelect = {
+  slug: true,
+  title: true,
+  synopsis: true,
+  genre: true,
+  coverUrl: true,
+  freeVolumeCount: true,
+  previewEpisodeCount: true,
+  author: { select: { name: true } },
+  seasons: {
+    orderBy: { number: "asc" as const },
+    select: {
+      episodes: {
+        where: PUBLIC_EPISODES,
+        orderBy: [{ number: "asc" as const }, { id: "asc" as const }],
+        select: {
+          id: true,
+          number: true,
+          title: true,
+          pages: {
+            orderBy: { order: "asc" as const },
+            take: 2,
+            select: { id: true, order: true, imageUrl: true },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.SeriesSelect;
 
 const WEEKDAY_ORDER = new Map(
   WeekdaySchema.options.map((weekday, index) => [weekday, index]),
@@ -334,6 +366,61 @@ export class PrismaReaderRepository implements ReaderRepository {
     return episodes.map((episode) =>
       toDiscoveryEpisode(episode, episode.season.series),
     );
+  }
+
+  async listShortsPreviews(limit: number): Promise<ShortsPreviewItem[]> {
+    const series = await this.prisma.series.findMany({
+      where: {
+        seasons: {
+          some: {
+            episodes: {
+              some: { ...PUBLIC_EPISODES, pages: { some: {} } },
+            },
+          },
+        },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: shortsSeriesSelect,
+    });
+
+    const candidates = series.flatMap((item) => {
+      const freeEpisodeLimit =
+        item.freeVolumeCount * 5 + item.previewEpisodeCount;
+      const episode = item.seasons
+        .flatMap((season) => season.episodes)
+        .find(
+          (candidate) =>
+            candidate.number <= freeEpisodeLimit && candidate.pages.length > 0,
+        );
+      if (!episode) return [];
+      return [
+        {
+          series: {
+            slug: item.slug,
+            title: item.title,
+            synopsis: item.synopsis,
+            genre: item.genre,
+            coverUrl: item.coverUrl,
+            authorName: item.author.name,
+          },
+          episode: {
+            id: episode.id,
+            number: episode.number,
+            title: episode.title,
+          },
+          pages: episode.pages,
+        },
+      ];
+    });
+
+    for (let index = candidates.length - 1; index > 0; index -= 1) {
+      const target = Math.floor(Math.random() * (index + 1));
+      [candidates[index], candidates[target]] = [
+        candidates[target],
+        candidates[index],
+      ];
+    }
+    return candidates.slice(0, limit);
   }
 
   async findSeriesBySlug(slug: string): Promise<SeriesDetail | null> {

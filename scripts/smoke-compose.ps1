@@ -461,11 +461,28 @@ try {
             if (episode.pages.length !== 3) {
               throw new Error('studio episode pages were not persisted')
             }
-            const imageResponse = await fetch(base + episode.pages[0].imageUrl)
+            // filesystem 모드는 API 상대 경로, S3 호환 모드는 브라우저용 절대
+            // URL을 준다. 후자의 host는 컨테이너 안에서 해석되지 않으므로
+            // 내부 endpoint로 바꿔 같은 객체를 확인한다.
+            const imageTarget = new URL(episode.pages[0].imageUrl, base)
+            const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL
+            const storageEndpoint = process.env.R2_ENDPOINT
+            if (publicBaseUrl && storageEndpoint) {
+              const publicOrigin = new URL(publicBaseUrl).origin
+              if (imageTarget.origin === publicOrigin) {
+                const internal = new URL(storageEndpoint)
+                imageTarget.protocol = internal.protocol
+                imageTarget.host = internal.host
+              }
+            }
+            const imageResponse = await fetch(imageTarget)
             if (!imageResponse.ok) {
               throw new Error('published studio image is unavailable')
             }
-            console.log('studio-episode=' + created.episodeId)
+            console.log(
+              'studio-episode=' + created.episodeId +
+                ' image=' + imageTarget.origin
+            )
           }
           verifyStudioFlow().catch(error => {
             console.error(error)

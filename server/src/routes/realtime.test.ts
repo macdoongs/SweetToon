@@ -66,6 +66,7 @@ function repository(): ReaderRepository {
       .fn()
       .mockResolvedValue({ series: [], episodes: [] }),
     listRecentEpisodes: jest.fn().mockResolvedValue([]),
+    listShortsPreviews: jest.fn().mockResolvedValue([]),
   };
 }
 

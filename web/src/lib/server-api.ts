@@ -14,6 +14,7 @@ import type {
   RecentEpisodesResponse,
   SitemapDiscoveryResponse,
 } from "./discovery-types";
+import type { ShortsPreviewResponse } from "./shorts-types";
 
 const API_INTERNAL_URL =
   process.env.API_INTERNAL_URL ?? "http://localhost:4000";
@@ -135,4 +136,11 @@ export function getRecentEpisodes(
   return serverGetJson(
     `/api/discovery/recent-episodes?${query.toString()}`,
   );
+}
+
+export function getShortsPreviews(limit = 10): Promise<ShortsPreviewResponse> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  return serverGetJson(`/api/discovery/shorts?${query.toString()}`, {
+    fresh: true,
+  });
 }

@@ -43,6 +43,7 @@ export function SiteHeader() {
           <DiscoverLink>
             작품<span className="site-nav__label-tail"> 둘러보기</span>
           </DiscoverLink>
+          <Link href="/shorts">쇼츠</Link>
           <Link href="/orders">
             주문<span className="site-nav__label-tail"> 현황</span>
           </Link>
@@ -66,6 +67,9 @@ export function SiteHeader() {
               <span aria-hidden="true">☰</span>
             </summary>
             <div className="site-nav__more-panel">
+              <Link href="/shorts" onClick={closeMoreMenu}>
+                웹툰 쇼츠
+              </Link>
               <Link href="/studio" onClick={closeMoreMenu}>
                 작가 스튜디오
               </Link>

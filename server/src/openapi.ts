@@ -133,6 +133,37 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/discovery/shorts": {
+      get: {
+        tags: ["Reader"],
+        summary: "공개·무료 첫 회차의 쇼츠 미리보기를 무작위로 조회합니다.",
+        description:
+          "정식 열람 진도와 presence를 만들지 않으며 작품별 첫 2페이지만 반환합니다.",
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 20,
+              default: 10,
+            },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "무작위 쇼츠 미리보기 묶음",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+        },
+      },
+    },
     "/api/episodes/{id}": {
       get: {
         tags: ["Reader"],

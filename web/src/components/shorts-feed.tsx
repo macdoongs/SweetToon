@@ -8,6 +8,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type PointerEvent,
 } from "react";
 import { getJson } from "@/lib/api";
 import { episodeLabel } from "@/lib/episode-label";
@@ -18,6 +19,8 @@ import type {
 import { FavoriteButton } from "./favorite-button";
 
 const PRELOAD_AHEAD = 2;
+const THUMBNAIL_DURATION_MS = 1800;
+const DRAG_THRESHOLD_PX = 56;
 
 type ShortsEventName =
   | "shorts_preview_complete"
@@ -61,6 +64,17 @@ function ShortsPreviewMedia({
   const viewportRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const [panDistance, setPanDistance] = useState(0);
+  const [previewStarted, setPreviewStarted] = useState(false);
+
+  useEffect(() => {
+    if (!shouldLoad || paused || previewStarted) return;
+    if (!active) return;
+    const timer = window.setTimeout(
+      () => setPreviewStarted(true),
+      THUMBNAIL_DURATION_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [active, paused, previewStarted, shouldLoad]);
 
   const measure = useCallback(() => {
     const viewport = viewportRef.current;
@@ -87,7 +101,7 @@ function ShortsPreviewMedia({
     <div className="shorts-preview" ref={viewportRef}>
       {shouldLoad ? (
         <div
-          className={`shorts-preview__strip${active ? " shorts-preview__strip--active" : ""}`}
+          className={`shorts-preview__strip${active && previewStarted ? " shorts-preview__strip--active" : ""}`}
           onAnimationEnd={() => {
             if (active) onComplete();
           }}
@@ -100,6 +114,7 @@ function ShortsPreviewMedia({
             <img
               alt={`${item.series.title} ${item.episode.number}화 미리보기 ${index + 1}페이지`}
               decoding="async"
+              draggable={false}
               key={page.id}
               loading={active || index === 0 ? "eager" : "lazy"}
               onLoad={measure}
@@ -110,6 +125,23 @@ function ShortsPreviewMedia({
       ) : (
         <div className="shorts-preview__placeholder" aria-hidden="true" />
       )}
+      {shouldLoad ? (
+        <div
+          aria-hidden={previewStarted}
+          className={`shorts-preview__cover${previewStarted ? " shorts-preview__cover--hidden" : ""}`}
+        >
+          {/* API 이미지 프록시 URL을 사용해 리더 미리보기와 브라우저 캐시를 공유한다. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            alt={`${item.series.title} 썸네일`}
+            decoding="async"
+            draggable={false}
+            loading={active ? "eager" : "lazy"}
+            src={item.series.coverUrl ?? item.pages[0]?.imageUrl}
+          />
+          <span>잠시 후 미리보기</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -124,11 +156,24 @@ export function ShortsFeed({
   const feedRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Array<HTMLElement | null>>([]);
   const viewedPreviews = useRef(new Set<string>());
+  const activeIndexRef = useRef(0);
+  const dragRef = useRef<{
+    pointerId: number;
+    pointerType: string;
+    startIndex: number;
+    startScrollTop: number;
+    startY: number;
+  } | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
   const [items, setItems] = useState(initialItems);
   const [loading, setLoading] = useState(false);
   const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
 
   useEffect(() => {
     const root = feedRef.current;
@@ -157,11 +202,14 @@ export function ShortsFeed({
     const end = Math.min(items.length, activeIndex + PRELOAD_AHEAD + 1);
     const images = items
       .slice(activeIndex, end)
-      .flatMap((item) => item.pages)
-      .map((page) => {
+      .flatMap((item) => [
+        ...(item.series.coverUrl ? [item.series.coverUrl] : []),
+        ...item.pages.map((page) => page.imageUrl),
+      ])
+      .map((src) => {
         const image = new window.Image();
         image.decoding = "async";
-        image.src = page.imageUrl;
+        image.src = src;
         return image;
       });
     return () => {
@@ -199,6 +247,56 @@ export function ShortsFeed({
       event.preventDefault();
       moveTo(activeIndex - 1);
     }
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) {
+      return;
+    }
+    if ((event.target as HTMLElement).closest("a, button")) return;
+    const feed = feedRef.current;
+    if (!feed) return;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      startIndex: activeIndexRef.current,
+      startScrollTop: feed.scrollTop,
+      startY: event.clientY,
+    };
+    if (event.pointerType === "mouse") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setDragging(true);
+    }
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    const feed = feedRef.current;
+    if (!drag || !feed || drag.pointerId !== event.pointerId) return;
+    if (drag.pointerType === "mouse") {
+      event.preventDefault();
+      feed.scrollTop = drag.startScrollTop + drag.startY - event.clientY;
+    }
+  };
+
+  const finishPointerGesture = (
+    event: PointerEvent<HTMLDivElement>,
+    cancelled = false,
+  ) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (cancelled) return;
+    const distance = drag.startY - event.clientY;
+    if (Math.abs(distance) < DRAG_THRESHOLD_PX) {
+      if (drag.pointerType === "mouse") moveTo(drag.startIndex);
+      return;
+    }
+    moveTo(drag.startIndex + (distance > 0 ? 1 : -1));
   };
 
   const shuffle = async () => {
@@ -253,12 +351,20 @@ export function ShortsFeed({
       {error ? <p className="shorts-error" role="status">{error}</p> : null}
       <div
         aria-label="웹툰 쇼츠"
-        className="shorts-feed"
+        aria-describedby="shorts-gesture-help"
+        className={`shorts-feed${dragging ? " shorts-feed--dragging" : ""}`}
         onKeyDown={handleKeyDown}
+        onPointerCancel={(event) => finishPointerGesture(event, true)}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishPointerGesture}
         ref={feedRef}
         role="region"
         tabIndex={0}
       >
+        <p className="sr-only" id="shorts-gesture-help">
+          위아래로 스와이프하거나 마우스로 드래그해 작품을 전환할 수 있습니다.
+        </p>
         {items.map((item, index) => {
           const active = index === activeIndex;
           const shouldLoad =

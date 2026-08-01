@@ -64,7 +64,14 @@ test("랜덤 웹툰 쇼츠를 미리 보고 정식 1화로 이동한다 @demo", 
   await expect(cards.nth(2).locator(".shorts-preview__strip img").first()).toBeAttached();
   await expect(cards.nth(3).locator(".shorts-preview__strip img")).toHaveCount(0);
 
+  const cover = cards.first().locator(".shorts-preview__cover");
+  await expect(cover).toBeVisible();
+  await expect(cover.locator("img")).toHaveAttribute("alt", /썸네일$/);
   const strip = cards.first().locator(".shorts-preview__strip");
+  await expect(strip).toHaveCSS("animation-name", "none");
+  await expect(cover).toHaveClass(/shorts-preview__cover--hidden/, {
+    timeout: 3_000,
+  });
   await expect(strip).toHaveCSS("animation-name", "shorts-preview-pan");
   const initialTransform = await strip.evaluate(
     (element) => getComputedStyle(element).transform,
@@ -79,6 +86,19 @@ test("랜덤 웹툰 쇼츠를 미리 보고 정식 1화로 이동한다 @demo", 
   await expect(cards.nth(3).locator(".shorts-preview__strip img").first()).toBeAttached();
   await expect(cards.nth(4).locator(".shorts-preview__strip img")).toHaveCount(0);
 
+  const feed = page.getByRole("region", { name: "웹툰 쇼츠" });
+  const box = await feed.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    box!.x + box!.width / 2,
+    box!.y + box!.height / 2 - 140,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  await expect(cards.nth(2)).toHaveClass(/shorts-card--active/);
+
   await expect
     .poll(() =>
       page.evaluate(() => localStorage.getItem("sweettoon:reading-progress")),
@@ -86,7 +106,7 @@ test("랜덤 웹툰 쇼츠를 미리 보고 정식 1화로 이동한다 @demo", 
     .toBeNull();
   expect(presenceRequests).toEqual([]);
 
-  await cards.nth(1).getByRole("link", { name: "1화부터 읽기" }).click();
+  await cards.nth(2).getByRole("link", { name: "1화부터 읽기" }).click();
   await expect(page).toHaveURL(/\/read\/[^/]+$/);
   await expect(page.locator(".reader-page")).toBeVisible();
   expect(
@@ -112,7 +132,23 @@ test("모바일과 모션 축소 환경에서 쇼츠를 정지 화면으로 탐�
     "animation-name",
     "none",
   );
-  await firstCard.getByRole("button", { name: "다음 작품" }).click();
+  await expect(firstCard.locator(".shorts-preview__cover")).toBeVisible();
+  const feedBox = await feed.boundingBox();
+  expect(feedBox).not.toBeNull();
+  await feed.dispatchEvent("pointerdown", {
+    button: 0,
+    clientY: feedBox!.y + 400,
+    isPrimary: true,
+    pointerId: 7,
+    pointerType: "touch",
+  });
+  await feed.dispatchEvent("pointerup", {
+    button: 0,
+    clientY: feedBox!.y + 280,
+    isPrimary: true,
+    pointerId: 7,
+    pointerType: "touch",
+  });
   await expect(page.locator(".shorts-card").nth(1)).toHaveClass(
     /shorts-card--active/,
   );

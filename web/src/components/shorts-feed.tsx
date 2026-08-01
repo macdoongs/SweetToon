@@ -21,6 +21,9 @@ import { FavoriteButton } from "./favorite-button";
 const PRELOAD_AHEAD = 2;
 const THUMBNAIL_DURATION_MS = 1000;
 const DRAG_THRESHOLD_PX = 56;
+const PAN_PIXELS_PER_SECOND = 115;
+const MIN_PAN_DURATION_MS = 7000;
+const MAX_PAN_DURATION_MS = 10000;
 
 type ShortsEventName =
   | "shorts_preview_complete"
@@ -94,6 +97,13 @@ function ShortsPreviewMedia({
 
   const style = {
     "--shorts-pan-distance": `-${panDistance}px`,
+    "--shorts-pan-duration": `${Math.min(
+      MAX_PAN_DURATION_MS,
+      Math.max(
+        MIN_PAN_DURATION_MS,
+        Math.round((panDistance / PAN_PIXELS_PER_SECOND) * 1000),
+      ),
+    )}ms`,
     animationPlayState: paused ? "paused" : "running",
   } as CSSProperties;
 

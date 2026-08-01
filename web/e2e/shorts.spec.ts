@@ -73,6 +73,13 @@ test("랜덤 웹툰 쇼츠를 미리 보고 정식 1화로 이동한다 @demo", 
     timeout: 2_000,
   });
   await expect(strip).toHaveCSS("animation-name", "shorts-preview-pan");
+  const previewDurationSeconds = Number.parseFloat(
+    await strip.evaluate(
+      (element) => getComputedStyle(element).animationDuration,
+    ),
+  );
+  expect(previewDurationSeconds).toBeGreaterThanOrEqual(7);
+  expect(previewDurationSeconds).toBeLessThanOrEqual(10);
   const initialTransform = await strip.evaluate(
     (element) => getComputedStyle(element).transform,
   );

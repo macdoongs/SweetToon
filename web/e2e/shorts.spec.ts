@@ -70,7 +70,7 @@ test("랜덤 웹툰 쇼츠를 미리 보고 정식 1화로 이동한다 @demo", 
   const strip = cards.first().locator(".shorts-preview__strip");
   await expect(strip).toHaveCSS("animation-name", "none");
   await expect(cover).toHaveClass(/shorts-preview__cover--hidden/, {
-    timeout: 3_000,
+    timeout: 2_000,
   });
   await expect(strip).toHaveCSS("animation-name", "shorts-preview-pan");
   const initialTransform = await strip.evaluate(
@@ -81,8 +81,19 @@ test("랜덤 웹툰 쇼츠를 미리 보고 정식 1화로 이동한다 @demo", 
     .poll(() => strip.evaluate((element) => getComputedStyle(element).transform))
     .not.toBe(initialTransform);
 
-  await cards.first().getByRole("button", { name: "다음 작품" }).click();
+  await strip.evaluate((element) => {
+    element.style.animationDuration = "100ms";
+  });
   await expect(cards.nth(1)).toHaveClass(/shorts-card--active/);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as typeof window & { __shortsEvents?: string[] }
+        ).__shortsEvents?.includes("shorts_preview_complete"),
+      ),
+    )
+    .toBe(true);
   await expect(cards.nth(3).locator(".shorts-preview__strip img").first()).toBeAttached();
   await expect(cards.nth(4).locator(".shorts-preview__strip img")).toHaveCount(0);
 

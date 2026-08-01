@@ -696,7 +696,19 @@ export function EpisodeReaderPage({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.matches("input, textarea, select, button")) return;
+      if (
+        target?.matches("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      // 도구 버튼을 눌러 모드를 바꾸면 그 버튼에 focus가 남는다. 버튼을
+      // 활성화하는 Space·Enter만 넘기고 나머지 리더 단축키는 계속 받는다.
+      if (
+        target?.matches("button") &&
+        (event.key === " " || event.key === "Enter")
+      ) {
+        return;
+      }
       revealChrome();
       if (event.key === "?") setHelpOpen((open) => !open);
       if (event.key.toLowerCase() === "t") {

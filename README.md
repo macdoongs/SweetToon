@@ -44,7 +44,10 @@
    보이는 비공개 보관(검수 뒤 공개 전환), 또는 플랫폼 밖 원고를 실물 책으로
    접수하는 패키징 신청.
 7. 창작자는 새 작품(시즌 1 포함)을 만들고, 발행한 회차의 제목 수정·원고
-   교체·삭제와 시즌 완결 처리까지 스튜디오 한 화면에서 관리합니다.
+   교체·삭제와 시즌 완결 처리까지 스튜디오에서 관리합니다. 스튜디오는 작품
+   목록(`/studio`), 작품별 회차 관리(`/studio/series/<작품>`), 새 회차 발행,
+   비공개 보관함(`/studio/drafts`), 책 패키징(`/studio/packaging`)처럼
+   작업별 하위 화면으로 나뉩니다.
 8. 데모 운영자는 소장본 주문을 접수·제작·배송·완료 순서로, 패키징 신청을
    접수·검토·제작 완료 순서로만 허용된 상태 변경으로 진행합니다.
 
@@ -193,6 +196,7 @@ docker compose -f docker-compose.yml -f docker-compose.clamav.yml up --build
 
 - `/` — 독자 작품 탐색
 - `/series/moonlight-laundry` — 대표 작품과 첫 화
+- `/shorts` — 무료 첫 회차를 두 페이지씩 보여주는 랜덤 웹툰 쇼츠
 - `/orders` — 이 브라우저에서 만든 주문 · `/orders/demo` — 공용 데모 피드
 - `/studio` — 창작자 작품 관리와 ZIP/CBZ 회차 발행
 - `/operations` — 데모 봇 · `/operations/orders` 주문 관리 · `/operations/packaging` 패키징 검토

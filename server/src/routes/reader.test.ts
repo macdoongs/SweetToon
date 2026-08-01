@@ -85,6 +85,7 @@ const episode: EpisodeReader = {
   title: "1화",
   visibility: "public",
   publishedAt,
+  likeCount: 0,
   series: {
     id: "series-1",
     slug: "moonlight-laundry",
@@ -174,6 +175,7 @@ function makeRepository(): jest.Mocked<ReaderRepository> {
           id: episode.id,
           number: episode.number,
           title: episode.title,
+          likeCount: episode.likeCount,
         },
         pages: episode.pages,
       },

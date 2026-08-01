@@ -33,6 +33,11 @@ import { createRealtimeRouter } from "./routes/realtime";
 import type { DemoBotController } from "./realtime/demo-bot-service";
 import { DemoBotUnavailableError } from "./realtime/demo-bot-service";
 import { createDemoBotRouter } from "./routes/demo-bot";
+import { createEpisodeLikeRouter } from "./routes/episode-like";
+import {
+  EpisodeLikeServiceError,
+  type EpisodeLikeUseCases,
+} from "./services/episode-like-service";
 
 const READINESS_TIMEOUT_MS = 2_000;
 
@@ -60,6 +65,7 @@ export type AppOptions = {
   printProvider?: PrintProvider;
   orderService?: OrderUseCases;
   candyService?: CandyUseCases;
+  episodeLikeService?: EpisodeLikeUseCases;
   studioService?: StudioUseCases;
   uploadDir?: string;
   allowedOrigins?: string[];
@@ -77,6 +83,7 @@ export function createApp({
   printProvider = createPrintProvider(),
   orderService,
   candyService,
+  episodeLikeService,
   studioService,
   uploadDir = path.join(process.cwd(), "data", "uploads"),
   allowedOrigins = [],
@@ -196,6 +203,9 @@ export function createApp({
   if (candyService) {
     app.use("/api", createCandyRouter(candyService));
   }
+  if (episodeLikeService) {
+    app.use("/api", createEpisodeLikeRouter(episodeLikeService));
+  }
   if (studioService) {
     app.use(
       "/api",
@@ -230,6 +240,13 @@ export function createApp({
         return;
       }
       if (error instanceof CandyServiceError) {
+        res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
+      if (error instanceof EpisodeLikeServiceError) {
         res.status(error.status).json({
           code: error.code,
           message: error.message,

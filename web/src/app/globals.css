@@ -4039,6 +4039,79 @@ body:has(.reader-page) .site-footer {
   margin-top: 12px;
 }
 
+.episode-like {
+  display: inline-grid;
+  justify-items: center;
+  gap: 7px;
+}
+
+.episode-like__button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid var(--pink-line);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: var(--pink-surface);
+  color: var(--pink-ink);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.episode-like__button > span[aria-hidden="true"] {
+  color: var(--coral);
+  font-size: 1.05rem;
+}
+
+.episode-like__button strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.episode-like__button--active {
+  border-color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 16%, var(--paper));
+}
+
+.episode-like__button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.episode-like__button:focus-visible {
+  outline: 3px solid var(--coral);
+  outline-offset: 3px;
+}
+
+.episode-like__error {
+  max-width: 260px;
+  color: var(--danger-ink);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.episode-like--reader {
+  margin: 22px 0;
+}
+
+.episode-like--reader .episode-like__button {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fffaf2;
+}
+
+.episode-like--reader .episode-like__button--active {
+  border-color: var(--coral);
+  background: rgba(255, 107, 91, 0.2);
+}
+
+.episode-like--reader .episode-like__error {
+  color: #ffd3cc;
+}
+
 .reader-empty {
   min-height: calc(100vh - 64px);
   display: grid;
@@ -5106,6 +5179,22 @@ body:has(.reader-page) .site-footer {
   background: rgba(16, 13, 13, 0.62);
   color: #fffaf2;
   backdrop-filter: blur(12px);
+}
+
+.shorts-card__actions .episode-like__button {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(16, 13, 13, 0.62);
+  color: #fffaf2;
+  backdrop-filter: blur(12px);
+}
+
+.shorts-card__actions .episode-like__button--active {
+  border-color: rgba(255, 146, 132, 0.85);
+  background: rgba(116, 32, 27, 0.72);
+}
+
+.episode-like--shorts .episode-like__error {
+  color: #ffd3cc;
 }
 
 .shorts-card__controls {

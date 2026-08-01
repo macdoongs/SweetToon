@@ -32,6 +32,7 @@ import {
 import { useReaderPresence } from "@/lib/use-reader-presence";
 import { ReaderPaywall } from "./reader-paywall";
 import { ErrorState, PageLoading } from "./reader-states";
+import { EpisodeLikeButton } from "./episode-like-button";
 
 type ReaderMode = "webtoon" | "double";
 type ScaleType = "screen" | "width" | "height" | "original";
@@ -1092,6 +1093,13 @@ export function EpisodeReaderPage({
           <h2>
             {episode.series.title} {episode.number}화를 모두 읽었습니다.
           </h2>
+          {episode.visibility !== "private" ? (
+            <EpisodeLikeButton
+              episodeId={episode.id}
+              initialCount={episode.likeCount}
+              variant="reader"
+            />
+          ) : null}
           <div className="reader-navigation">
             {episode.navigation.previousEpisodeId ? (
               <Link

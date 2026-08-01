@@ -185,6 +185,35 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/episodes/{id}/like": {
+      put: {
+        tags: ["Reader"],
+        summary: "익명 브라우저의 회차 좋아요 상태를 멱등적으로 변경합니다.",
+        description:
+          "브라우저 UUID 원문은 저장하지 않고 서버에서 SHA-256 해시로 변환합니다.",
+        parameters: [{ $ref: "#/components/parameters/Id" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/EpisodeLikeRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "변경된 좋아요 상태와 회차 집계",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/EpisodeLikeResponse" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
     "/api/series/{slug}/presence": {
       post: {
         tags: ["Realtime"],
@@ -1225,6 +1254,23 @@ export const openApiDocument = {
       },
     },
     schemas: {
+      EpisodeLikeRequest: {
+        type: "object",
+        required: ["viewerToken", "liked"],
+        properties: {
+          viewerToken: { type: "string", format: "uuid" },
+          liked: { type: "boolean" },
+        },
+      },
+      EpisodeLikeResponse: {
+        type: "object",
+        required: ["episodeId", "liked", "likeCount"],
+        properties: {
+          episodeId: { type: "string" },
+          liked: { type: "boolean" },
+          likeCount: { type: "integer", minimum: 0 },
+        },
+      },
       Error: {
         type: "object",
         required: ["code", "message"],

@@ -17,6 +17,7 @@ export const ShortsPreviewItemSchema = z.object({
     id: z.string(),
     number: z.number().int().positive(),
     title: z.string(),
+    likeCount: z.number().int().nonnegative(),
   }),
   pages: z
     .array(

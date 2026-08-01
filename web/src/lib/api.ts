@@ -141,6 +141,34 @@ export async function patchJson<TInput, TResponse>(
   return readJson<TResponse>(response);
 }
 
+export async function putJson<TInput, TResponse>(
+  path: string,
+  body: TInput,
+  headers: HeadersInit = {},
+): Promise<TResponse> {
+  const response = await fetchWithTimeout(path, {
+    method: "PUT",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as {
+      code?: string;
+      message?: string;
+    } | null;
+    throw new ApiError(
+      error?.message ?? "상태를 변경하지 못했습니다.",
+      response.status,
+      error?.code,
+    );
+  }
+  return readJson<TResponse>(response);
+}
+
 export async function postFormData<TResponse>(
   path: string,
   formData: FormData,

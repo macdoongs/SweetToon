@@ -4932,6 +4932,15 @@ body:has(.reader-page) .site-footer {
   scroll-behavior: smooth;
   scroll-snap-type: y mandatory;
   scrollbar-width: none;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.shorts-feed--dragging {
+  cursor: grabbing;
+  scroll-behavior: auto;
+  scroll-snap-type: none;
 }
 
 .shorts-feed::-webkit-scrollbar {
@@ -4962,6 +4971,43 @@ body:has(.reader-page) .site-footer {
 
 .shorts-preview__placeholder {
   background: linear-gradient(145deg, #2b2522, #171313 66%);
+}
+
+.shorts-preview__cover {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  background: #171313;
+  opacity: 1;
+  transition: opacity 360ms ease;
+  pointer-events: none;
+}
+
+.shorts-preview__cover--hidden {
+  opacity: 0;
+}
+
+.shorts-preview__cover img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.shorts-preview__cover span {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(16, 13, 13, 0.64);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.68rem;
+  font-weight: 800;
+  backdrop-filter: blur(12px);
 }
 
 .shorts-preview__strip {

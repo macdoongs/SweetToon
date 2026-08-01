@@ -175,6 +175,49 @@ test("양면 보기 전환 후 스크롤하면 뷰어 도구 전체가 숨는다
   await expect(page.locator(".reader-controls")).toHaveCSS("opacity", "0");
 });
 
+test("양면 보기 버튼을 누른 직후에도 키보드로 읽을 수 있다", async ({
+  page,
+}) => {
+  const seriesResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  expect(seriesResponse.ok()).toBeTruthy();
+  const series = await seriesResponse.json();
+  const episodeId = series.seasons[0].episodes[0].id as string;
+
+  await page.goto(`/read/${episodeId}`);
+  await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await page.mouse.move(200, 200);
+
+  // 도구 버튼으로 모드를 바꾸면 focus가 버튼에 남는다. 이 상태에서도
+  // 리더 단축키가 동작해야 한다.
+  await page.getByRole("button", { name: "양면 보기" }).click();
+  await expect(page.locator(".reader-paged")).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.tagName))
+    .toBe("BUTTON");
+
+  const counter = page.locator(".reader-paged__counter");
+  const firstSpread = await counter.innerText();
+
+  await page.keyboard.press("ArrowRight");
+  await expect(counter).not.toHaveText(firstSpread);
+  const secondSpread = await counter.innerText();
+
+  await page.keyboard.press("ArrowLeft");
+  await expect(counter).toHaveText(firstSpread);
+
+  // Space는 focus된 버튼을 다시 누르는 브라우저 기본 동작이므로 버튼에
+  // focus가 남아 있는 동안에는 양면을 넘기지 않는다.
+  await page.keyboard.press(" ");
+  await expect(counter).toHaveText(firstSpread);
+
+  // 화면을 눌러 focus가 버튼을 벗어나면 Space도 다음 양면으로 넘긴다.
+  await page.locator(".reader-paged").click();
+  await page.keyboard.press(" ");
+  await expect(counter).toHaveText(secondSpread);
+});
+
 test("저장된 페이지를 양면 모드에서 복원한 뒤 모드 전환에도 진행도를 보존한다", async ({
   page,
 }) => {

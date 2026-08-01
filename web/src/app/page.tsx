@@ -10,7 +10,8 @@ import {
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "웹툰을 읽고 단행본으로 소장하는 곳",
+  // title.template은 같은 세그먼트의 page에 적용되지 않으므로 홈만 직접 붙인다.
+  title: `웹툰을 읽고 단행본으로 소장하는 곳 | ${SITE_NAME}`,
   description: SITE_DESCRIPTION,
   alternates: { canonical: "/" },
 };

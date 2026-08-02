@@ -25,7 +25,10 @@ export interface ReaderRepository {
   ): Promise<EpisodeReader | null>;
   listSitemapDiscovery(): Promise<SitemapDiscoveryResponse>;
   listRecentEpisodes(limit: number): Promise<DiscoveryEpisode[]>;
-  listShortsPreviews(limit: number): Promise<ShortsPreviewItem[]>;
+  listShortsPreviews(
+    limit: number,
+    excludeSlugs?: string[],
+  ): Promise<ShortsPreviewItem[]>;
 }
 
 const PUBLIC_EPISODES = { visibility: "public" } as const;
@@ -369,9 +372,15 @@ export class PrismaReaderRepository implements ReaderRepository {
     );
   }
 
-  async listShortsPreviews(limit: number): Promise<ShortsPreviewItem[]> {
+  async listShortsPreviews(
+    limit: number,
+    excludeSlugs: string[] = [],
+  ): Promise<ShortsPreviewItem[]> {
     const series = await this.prisma.series.findMany({
       where: {
+        ...(excludeSlugs.length > 0
+          ? { slug: { notIn: excludeSlugs } }
+          : {}),
         seasons: {
           some: {
             episodes: {

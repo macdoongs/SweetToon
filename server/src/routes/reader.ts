@@ -93,7 +93,10 @@ export function createReaderRouter(repository: ReaderRepository): Router {
       return;
     }
     const result = ShortsPreviewResponseSchema.parse({
-      items: await repository.listShortsPreviews(query.data.limit),
+      items: await repository.listShortsPreviews(
+        query.data.limit,
+        query.data.exclude,
+      ),
     });
     res.setHeader("Cache-Control", "private, max-age=60");
     res.json(result);

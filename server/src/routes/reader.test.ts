@@ -310,7 +310,7 @@ describe("reader routes", () => {
       .get("/api/discovery/shorts?limit=6")
       .expect(200);
 
-    expect(repository.listShortsPreviews).toHaveBeenCalledWith(6);
+    expect(repository.listShortsPreviews).toHaveBeenCalledWith(6, []);
     expect(response.body.items[0].pages).toHaveLength(2);
     expect(response.headers["cache-control"]).toContain("private");
 
@@ -318,6 +318,20 @@ describe("reader routes", () => {
       .get("/api/discovery/shorts?limit=21")
       .expect(400);
     expect(invalid.body.code).toBe("INVALID_SHORTS_LIMIT");
+
+    await request(app)
+      .get(
+        "/api/discovery/shorts?limit=6&exclude=moonlight-laundry,night-shift",
+      )
+      .expect(200);
+    expect(repository.listShortsPreviews).toHaveBeenLastCalledWith(6, [
+      "moonlight-laundry",
+      "night-shift",
+    ]);
+
+    await request(app)
+      .get("/api/discovery/shorts?exclude=invalid%20slug")
+      .expect(400);
   });
 
   it("passes an anonymous demo entitlement to the repository", async () => {

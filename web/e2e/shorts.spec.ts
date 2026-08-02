@@ -136,6 +136,52 @@ test("랜덤 웹툰 쇼츠를 미리 보고 정식 1화로 이동한다 @demo", 
   ).toBe(true);
 });
 
+test("섞기와 마지막 추가 드래그가 이미 나온 작품을 제외한다", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/shorts");
+
+  const cards = page.locator(".shorts-card");
+  await expect(cards).toHaveCount(10);
+  const firstBatch = await cards.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-series-slug")),
+  );
+
+  await page.getByRole("button", { name: "다른 작품 섞기" }).click();
+  await expect
+    .poll(() =>
+      cards.evaluateAll((items) =>
+        items.map((item) => item.getAttribute("data-series-slug")),
+      ),
+    )
+    .not.toEqual(firstBatch);
+  const secondBatch = await cards.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-series-slug")),
+  );
+  expect(secondBatch.every((slug) => !firstBatch.includes(slug))).toBe(true);
+
+  await cards.last().scrollIntoViewIfNeeded();
+  await expect(cards.last()).toHaveClass(/shorts-card--active/);
+  const feed = page.getByRole("region", { name: "웹툰 쇼츠" });
+  const box = await feed.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    box!.x + box!.width / 2,
+    box!.y + box!.height / 2 - 140,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+
+  await expect(cards.first()).toHaveClass(/shorts-card--active/);
+  const thirdBatch = await cards.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-series-slug")),
+  );
+  expect(thirdBatch.every((slug) => !secondBatch.includes(slug))).toBe(true);
+});
+
 test("모바일과 모션 축소 환경에서 쇼츠를 정지 화면으로 탐색한다", async ({
   page,
 }) => {
@@ -170,4 +216,30 @@ test("모바일과 모션 축소 환경에서 쇼츠를 정지 화면으로 탐�
   await expect(page.locator(".shorts-card").nth(1)).toHaveClass(
     /shorts-card--active/,
   );
+
+  const cards = page.locator(".shorts-card");
+  const firstBatch = await cards.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-series-slug")),
+  );
+  await cards.last().scrollIntoViewIfNeeded();
+  await expect(cards.last()).toHaveClass(/shorts-card--active/);
+  await feed.dispatchEvent("pointerdown", {
+    button: 0,
+    clientY: feedBox!.y + 400,
+    isPrimary: true,
+    pointerId: 8,
+    pointerType: "touch",
+  });
+  await feed.dispatchEvent("pointerup", {
+    button: 0,
+    clientY: feedBox!.y + 280,
+    isPrimary: true,
+    pointerId: 8,
+    pointerType: "touch",
+  });
+  await expect(cards.first()).toHaveClass(/shorts-card--active/);
+  const nextBatch = await cards.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-series-slug")),
+  );
+  expect(nextBatch.every((slug) => !firstBatch.includes(slug))).toBe(true);
 });

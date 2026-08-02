@@ -12,6 +12,7 @@ import type {
   SitemapDiscoveryResponse,
 } from "../contracts/discovery";
 import type { ShortsPreviewItem } from "../contracts/shorts";
+import { orderShortsForVariety } from "./shorts-variety";
 
 export interface ReaderRepository {
   listSeries(query: SeriesListQuery): Promise<SeriesListResponse>;
@@ -431,7 +432,7 @@ export class PrismaReaderRepository implements ReaderRepository {
         candidates[index],
       ];
     }
-    return candidates.slice(0, limit);
+    return orderShortsForVariety(candidates, limit);
   }
 
   async findSeriesBySlug(slug: string): Promise<SeriesDetail | null> {

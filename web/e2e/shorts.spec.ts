@@ -186,6 +186,33 @@ test("섞기와 마지막 추가 드래그가 이미 나온 작품을 제외한�
   ).toBe(true);
 });
 
+test("한 배치 안에서 같은 작가가 연속되거나 같은 장르가 세 번 이어지지 않는다", async ({
+  page,
+}) => {
+  // 순서가 무작위이므로 여러 번 뽑아 규칙이 항상 지켜지는지 확인한다.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const response = await page.request.get("/api/discovery/shorts?limit=10");
+    expect(response.ok()).toBeTruthy();
+    const payload = (await response.json()) as {
+      items: Array<{ series: { authorName: string; genre: string } }>;
+    };
+    expect(payload.items).toHaveLength(10);
+
+    const authors = payload.items.map((item) => item.series.authorName);
+    expect(
+      authors.some((author, index) => index > 0 && authors[index - 1] === author),
+    ).toBe(false);
+
+    const genres = payload.items.map((item) => item.series.genre);
+    expect(
+      genres.some(
+        (genre, index) =>
+          index > 1 && genres[index - 1] === genre && genres[index - 2] === genre,
+      ),
+    ).toBe(false);
+  }
+});
+
 test("마지막 작품의 미리보기가 끝나면 추가 입력 없이 다음 배치로 이어진다", async ({
   page,
 }) => {

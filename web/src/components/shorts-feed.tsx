@@ -14,6 +14,7 @@ import {
 } from "react";
 import { getJson } from "@/lib/api";
 import { episodeLabel } from "@/lib/episode-label";
+import { rotateBatchForVariety } from "@/lib/shorts-variety";
 import type {
   ShortsPreviewItem,
   ShortsPreviewResponse,
@@ -25,6 +26,8 @@ const BATCH_SIZE = 10;
 const PRELOAD_AHEAD = 2;
 // 남은 카드가 이 수 이하로 줄면 다음 배치를 미리 받아 대기시킨다.
 const PREFETCH_REMAINING = 3;
+// 배치 경계 보정에 참고하는 직전 카드 수. 서버의 장르 연속 허용치와 같다.
+const GENRE_RUN_WINDOW = 2;
 const THUMBNAIL_DURATION_MS = 1000;
 const DRAG_THRESHOLD_PX = 56;
 const PAN_PIXELS_PER_SECOND = 115;
@@ -340,7 +343,12 @@ export function ShortsFeed({
     pendingBatchRef.current = null;
     autoContinueRef.current = false;
     setWaitingForBatch(false);
-    commitItems([...itemsRef.current, ...pending], itemsRef.current.length);
+    // 배치 경계에서 같은 작가·장르가 이어지지 않도록 이음매만 보정한다.
+    const continued = rotateBatchForVariety(
+      pending,
+      itemsRef.current.slice(-GENRE_RUN_WINDOW),
+    );
+    commitItems([...itemsRef.current, ...continued], itemsRef.current.length);
     return true;
   }, [commitItems]);
 

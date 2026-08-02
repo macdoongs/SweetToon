@@ -276,7 +276,7 @@ export function ShortsFeed({
     [],
   );
 
-  const loadUnseen = useCallback(async () => {
+  const loadUnseen = useCallback(async (mode: "append" | "replace") => {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
@@ -284,7 +284,9 @@ export function ShortsFeed({
     try {
       let response = await requestBatch([...seenSeriesSlugs.current], "next");
       if (response.items.length === 0 && seenSeriesSlugs.current.size > 0) {
-        const currentSlugs = items.map((item) => item.series.slug);
+        const currentSlugs = items
+          .slice(-10)
+          .map((item) => item.series.slug);
         seenSeriesSlugs.current = new Set(currentSlugs);
         response = await requestBatch(currentSlugs, "reset");
       }
@@ -295,18 +297,25 @@ export function ShortsFeed({
       response.items.forEach((item) =>
         seenSeriesSlugs.current.add(item.series.slug),
       );
-      cardRefs.current = [];
-      setItems(response.items);
-      viewedPreviews.current.clear();
-      activeIndexRef.current = 0;
-      setActiveIndex(0);
+      const nextIndex = mode === "append" ? items.length : 0;
+      if (mode === "replace") {
+        cardRefs.current = [];
+        viewedPreviews.current.clear();
+        setItems(response.items);
+      } else {
+        setItems((current) => [...current, ...response.items]);
+      }
+      activeIndexRef.current = nextIndex;
+      setActiveIndex(nextIndex);
       setPaused(false);
-      requestAnimationFrame(() =>
-        cardRefs.current[0]?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        }),
-      );
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() =>
+          cardRefs.current[nextIndex]?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          }),
+        );
+      });
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -322,7 +331,7 @@ export function ShortsFeed({
   const advanceTo = useCallback(
     (index: number) => {
       if (index >= items.length) {
-        void loadUnseen();
+        void loadUnseen("append");
         return;
       }
       moveTo(index);
@@ -414,7 +423,7 @@ export function ShortsFeed({
     ) {
       return;
     }
-    void loadUnseen();
+    void loadUnseen("append");
   };
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
@@ -427,7 +436,7 @@ export function ShortsFeed({
     ) {
       return;
     }
-    void loadUnseen();
+    void loadUnseen("append");
   };
 
   if (items.length === 0) {
@@ -437,7 +446,7 @@ export function ShortsFeed({
           <p className="eyebrow">SweetToon shorts</p>
           <h1>미리 볼 수 있는 작품을 준비하고 있어요</h1>
           <p>{error ?? "공개된 무료 회차가 생기면 이곳에서 먼저 보여드릴게요."}</p>
-          <button className="button button--primary" disabled={loading} onClick={loadUnseen}>
+          <button className="button button--primary" disabled={loading} onClick={() => loadUnseen("replace")}>
             {loading ? "불러오는 중…" : "다시 시도"}
           </button>
         </section>
@@ -452,7 +461,7 @@ export function ShortsFeed({
           <p className="eyebrow">SweetToon shorts</p>
           <h1>첫 장면으로 만나는 랜덤 웹툰</h1>
         </div>
-        <button className="button button--ghost" disabled={loading} onClick={loadUnseen}>
+        <button className="button button--ghost" disabled={loading} onClick={() => loadUnseen("replace")}>
           {loading ? "섞는 중…" : "다른 작품 섞기"}
         </button>
       </header>
@@ -489,7 +498,7 @@ export function ShortsFeed({
               data-episode-id={item.episode.id}
               data-index={index}
               data-series-slug={item.series.slug}
-              key={`${item.series.slug}-${item.episode.id}`}
+              key={`${item.series.slug}-${item.episode.id}-${index}`}
               ref={(element) => {
                 cardRefs.current[index] = element;
               }}

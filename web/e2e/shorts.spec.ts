@@ -175,11 +175,15 @@ test("섞기와 마지막 추가 드래그가 이미 나온 작품을 제외한�
   );
   await page.mouse.up();
 
-  await expect(cards.first()).toHaveClass(/shorts-card--active/);
-  const thirdBatch = await cards.evaluateAll((items) =>
+  await expect.poll(() => cards.count()).toBeGreaterThan(secondBatch.length);
+  await expect(cards.nth(10)).toHaveClass(/shorts-card--active/);
+  const continuedBatch = await cards.evaluateAll((items) =>
     items.map((item) => item.getAttribute("data-series-slug")),
   );
-  expect(thirdBatch.every((slug) => !secondBatch.includes(slug))).toBe(true);
+  expect(continuedBatch.slice(0, 10)).toEqual(secondBatch);
+  expect(
+    continuedBatch.slice(10).every((slug) => !secondBatch.includes(slug)),
+  ).toBe(true);
 });
 
 test("모바일과 모션 축소 환경에서 쇼츠를 정지 화면으로 탐색한다", async ({
@@ -237,9 +241,13 @@ test("모바일과 모션 축소 환경에서 쇼츠를 정지 화면으로 탐�
     pointerId: 8,
     pointerType: "touch",
   });
-  await expect(cards.first()).toHaveClass(/shorts-card--active/);
+  await expect.poll(() => cards.count()).toBeGreaterThan(firstBatch.length);
+  await expect(cards.nth(10)).toHaveClass(/shorts-card--active/);
   const nextBatch = await cards.evaluateAll((items) =>
     items.map((item) => item.getAttribute("data-series-slug")),
   );
-  expect(nextBatch.every((slug) => !firstBatch.includes(slug))).toBe(true);
+  expect(nextBatch.slice(0, 10)).toEqual(firstBatch);
+  expect(
+    nextBatch.slice(10).every((slug) => !firstBatch.includes(slug)),
+  ).toBe(true);
 });

@@ -198,7 +198,8 @@ docker compose -f docker-compose.yml -f docker-compose.clamav.yml up --build
 - `/series/moonlight-laundry` — 대표 작품과 첫 화
 - `/shorts` — 무료 첫 회차를 두 페이지씩 보여주는 랜덤 웹툰 쇼츠. 남은 카드가
   세 장 이하가 되면 다음 배치를 미리 받아 두고, 마지막 카드의 미리보기가 끝나면
-  추가 입력 없이 이어서 재생한다
+  추가 입력 없이 이어서 재생한다. 오래 감상해도 마운트되는 카드는 활성 카드
+  주변 20장으로 제한하고, 창 밖 카드는 자리만 남겨 스크롤 위치를 보존한다
 - `/orders` — 이 브라우저에서 만든 주문 · `/orders/demo` — 공용 데모 피드
 - `/studio` — 창작자 작품 관리와 ZIP/CBZ 회차 발행
 - `/operations` — 데모 봇 · `/operations/orders` 주문 관리 · `/operations/packaging` 패키징 검토

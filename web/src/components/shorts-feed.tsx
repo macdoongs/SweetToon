@@ -28,6 +28,10 @@ const PRELOAD_AHEAD = 2;
 const PREFETCH_REMAINING = 3;
 // 배치 경계 보정에 참고하는 직전 카드 수. 서버의 장르 연속 허용치와 같다.
 const GENRE_RUN_WINDOW = 2;
+// 오래 감상해도 마운트된 카드 수가 늘지 않도록 활성 카드 주변만 그린다.
+// 창 밖 카드는 같은 크기의 빈 카드로 남아 스크롤 위치와 인덱스를 보존한다.
+const RENDER_BEHIND = 10;
+const RENDER_AHEAD = 9;
 const THUMBNAIL_DURATION_MS = 1000;
 const DRAG_THRESHOLD_PX = 56;
 const PAN_PIXELS_PER_SECOND = 115;
@@ -586,10 +590,13 @@ export function ShortsFeed({
           const shouldLoad =
             index >= Math.max(0, activeIndex - 1) &&
             index <= activeIndex + PRELOAD_AHEAD;
+          const mounted =
+            index >= activeIndex - RENDER_BEHIND &&
+            index <= activeIndex + RENDER_AHEAD;
           return (
             <article
               aria-label={`${item.series.title} 미리보기`}
-              className={`shorts-card${active ? " shorts-card--active" : ""}`}
+              className={`shorts-card${active ? " shorts-card--active" : ""}${mounted ? "" : " shorts-card--idle"}`}
               data-episode-id={item.episode.id}
               data-index={index}
               data-series-slug={item.series.slug}
@@ -598,97 +605,103 @@ export function ShortsFeed({
                 cardRefs.current[index] = element;
               }}
             >
-              <ShortsPreviewMedia
-                active={active}
-                item={item}
-                onComplete={() => {
-                  trackShortsEvent("shorts_preview_complete", item, index);
-                  advanceTo(index + 1);
-                }}
-                paused={active && paused}
-                shouldLoad={shouldLoad}
-              />
-              <div className="shorts-card__shade" aria-hidden="true" />
-              {active && last && (waitingForBatch || backgroundError) ? (
-                <div className="shorts-card__tail" role="status">
-                  {waitingForBatch ? (
-                    <span>다음 작품을 불러오는 중…</span>
-                  ) : (
-                    <>
-                      <span>{backgroundError}</span>
-                      <button
-                        className="button button--light"
-                        onClick={() => requestNextBatch()}
-                        type="button"
-                      >
-                        다시 시도
-                      </button>
-                    </>
-                  )}
-                </div>
-              ) : null}
-              <div className="shorts-card__meta">
-                <span>{item.series.genre}</span>
-                <h2>{item.series.title}</h2>
-                <p>{item.series.authorName}</p>
-                <small>
-                  {episodeLabel(item.episode.number, item.episode.title)} · 첫 {item.pages.length}페이지 미리보기
-                </small>
-                <div className="shorts-card__actions">
-                  <EpisodeLikeButton
-                    episodeId={item.episode.id}
-                    initialCount={item.episode.likeCount}
-                    variant="shorts"
-                  />
-                  <FavoriteButton
-                    series={{
-                      slug: item.series.slug,
-                      title: item.series.title,
-                      synopsis: item.series.synopsis,
-                      genre: item.series.genre,
-                      coverUrl: item.series.coverUrl,
-                      authorName: item.series.authorName,
+              {/* 창 밖 카드는 자리만 남긴다. article 자체는 유지되므로 */}
+              {/* 인덱스, 스크롤 높이, IntersectionObserver 관찰이 그대로다. */}
+              {mounted ? (
+                <>
+                  <ShortsPreviewMedia
+                    active={active}
+                    item={item}
+                    onComplete={() => {
+                      trackShortsEvent("shorts_preview_complete", item, index);
+                      advanceTo(index + 1);
                     }}
+                    paused={active && paused}
+                    shouldLoad={shouldLoad}
                   />
-                  <Link
-                    className="button button--light"
-                    href={`/read/${encodeURIComponent(item.episode.id)}`}
-                    onClick={() =>
-                      trackShortsEvent("shorts_preview_open", item, index)
-                    }
-                  >
-                    {item.episode.number === 1
-                      ? "1화부터 읽기"
-                      : `${item.episode.number}화 읽기`}
-                  </Link>
-                </div>
-              </div>
-              <div className="shorts-card__controls">
-                <span aria-live="polite">{index + 1} / {items.length}</span>
-                <button
-                  aria-label={paused ? "미리보기 계속 재생" : "미리보기 일시정지"}
-                  onClick={() => setPaused((current) => !current)}
-                  type="button"
-                >
-                  {paused ? "▶" : "Ⅱ"}
-                </button>
-                <button
-                  aria-label="이전 작품"
-                  disabled={index === 0}
-                  onClick={() => moveTo(index - 1)}
-                  type="button"
-                >
-                  ↑
-                </button>
-                <button
-                  aria-label={last ? "다른 작품 불러오기" : "다음 작품"}
-                  disabled={last && waitingForBatch}
-                  onClick={() => advanceTo(index + 1)}
-                  type="button"
-                >
-                  ↓
-                </button>
-              </div>
+                  <div className="shorts-card__shade" aria-hidden="true" />
+                  {active && last && (waitingForBatch || backgroundError) ? (
+                    <div className="shorts-card__tail" role="status">
+                      {waitingForBatch ? (
+                        <span>다음 작품을 불러오는 중…</span>
+                      ) : (
+                        <>
+                          <span>{backgroundError}</span>
+                          <button
+                            className="button button--light"
+                            onClick={() => requestNextBatch()}
+                            type="button"
+                          >
+                            다시 시도
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
+                  <div className="shorts-card__meta">
+                    <span>{item.series.genre}</span>
+                    <h2>{item.series.title}</h2>
+                    <p>{item.series.authorName}</p>
+                    <small>
+                      {episodeLabel(item.episode.number, item.episode.title)} · 첫 {item.pages.length}페이지 미리보기
+                    </small>
+                    <div className="shorts-card__actions">
+                      <EpisodeLikeButton
+                        episodeId={item.episode.id}
+                        initialCount={item.episode.likeCount}
+                        variant="shorts"
+                      />
+                      <FavoriteButton
+                        series={{
+                          slug: item.series.slug,
+                          title: item.series.title,
+                          synopsis: item.series.synopsis,
+                          genre: item.series.genre,
+                          coverUrl: item.series.coverUrl,
+                          authorName: item.series.authorName,
+                        }}
+                      />
+                      <Link
+                        className="button button--light"
+                        href={`/read/${encodeURIComponent(item.episode.id)}`}
+                        onClick={() =>
+                          trackShortsEvent("shorts_preview_open", item, index)
+                        }
+                      >
+                        {item.episode.number === 1
+                          ? "1화부터 읽기"
+                          : `${item.episode.number}화 읽기`}
+                      </Link>
+                    </div>
+                  </div>
+                  <div className="shorts-card__controls">
+                    <span aria-live="polite">{index + 1} / {items.length}</span>
+                    <button
+                      aria-label={paused ? "미리보기 계속 재생" : "미리보기 일시정지"}
+                      onClick={() => setPaused((current) => !current)}
+                      type="button"
+                    >
+                      {paused ? "▶" : "Ⅱ"}
+                    </button>
+                    <button
+                      aria-label="이전 작품"
+                      disabled={index === 0}
+                      onClick={() => moveTo(index - 1)}
+                      type="button"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      aria-label={last ? "다른 작품 불러오기" : "다음 작품"}
+                      disabled={last && waitingForBatch}
+                      onClick={() => advanceTo(index + 1)}
+                      type="button"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </>
+              ) : null}
             </article>
           );
         })}

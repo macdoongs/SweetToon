@@ -271,6 +271,43 @@ test("다음 배치 요청이 실패하면 현재 작품을 유지하고 재시�
   await expect(cards.nth(10)).toHaveClass(/shorts-card--active/);
 });
 
+test("감상이 길어지면 창 밖 카드는 자리만 남기고 내용을 걷어낸다", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/shorts");
+
+  const cards = page.locator(".shorts-card");
+  await expect(cards).toHaveCount(10);
+  await expect(page.locator(".shorts-card--idle")).toHaveCount(0);
+
+  await cards.last().scrollIntoViewIfNeeded();
+  await expect(cards.last()).toHaveClass(/shorts-card--active/);
+  await cards
+    .nth(9)
+    .getByRole("button", { name: "다른 작품 불러오기" })
+    .click();
+  await expect.poll(() => cards.count()).toBe(20);
+  await expect(cards.nth(10)).toHaveClass(/shorts-card--active/);
+
+  await cards.nth(12).scrollIntoViewIfNeeded();
+  await expect(cards.nth(12)).toHaveClass(/shorts-card--active/);
+
+  // 창은 활성 카드 기준 뒤 10장·앞 9장이므로 0·1번만 자리만 남는다.
+  await expect(page.locator(".shorts-card--idle")).toHaveCount(2);
+  await expect(cards.nth(0)).toHaveClass(/shorts-card--idle/);
+  await expect(cards.nth(0).locator(".shorts-preview")).toHaveCount(0);
+  await expect(
+    page.locator(".shorts-card:not(.shorts-card--idle) .shorts-preview"),
+  ).toHaveCount(18);
+
+  // 자리를 남기므로 스크롤 위치와 인덱스가 밀리지 않는다.
+  await expect(cards.nth(12)).toHaveClass(/shorts-card--active/);
+  await expect(cards.nth(12).locator(".shorts-card__controls span")).toHaveText(
+    "13 / 20",
+  );
+});
+
 test("모바일과 모션 축소 환경에서 쇼츠를 정지 화면으로 탐색한다", async ({
   page,
 }) => {

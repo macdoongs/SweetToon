@@ -5197,6 +5197,27 @@ body:has(.reader-page) .site-footer {
   color: #ffd3cc;
 }
 
+.shorts-card__tail {
+  position: absolute;
+  z-index: 4;
+  top: 16px;
+  right: 16px;
+  left: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(16, 13, 13, 0.72);
+  color: #ffd6cc;
+  font-size: 0.78rem;
+  text-align: center;
+  backdrop-filter: blur(12px);
+}
+
 .shorts-card__controls {
   position: absolute;
   z-index: 3;

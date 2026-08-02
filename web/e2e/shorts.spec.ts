@@ -186,6 +186,64 @@ test("섞기와 마지막 추가 드래그가 이미 나온 작품을 제외한�
   ).toBe(true);
 });
 
+test("마지막 작품의 미리보기가 끝나면 추가 입력 없이 다음 배치로 이어진다", async ({
+  page,
+}) => {
+  await page.goto("/shorts");
+
+  const cards = page.locator(".shorts-card");
+  await expect(cards).toHaveCount(10);
+  const firstBatch = await cards.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-series-slug")),
+  );
+
+  await cards.last().scrollIntoViewIfNeeded();
+  await expect(cards.last()).toHaveClass(/shorts-card--active/);
+
+  const strip = cards.last().locator(".shorts-preview__strip");
+  await expect(strip).toHaveCSS("animation-name", "shorts-preview-pan");
+  await strip.evaluate((element) => {
+    element.style.animationDuration = "100ms";
+  });
+
+  await expect.poll(() => cards.count()).toBeGreaterThan(firstBatch.length);
+  await expect(cards.nth(10)).toHaveClass(/shorts-card--active/);
+  const continuedBatch = await cards.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-series-slug")),
+  );
+  expect(continuedBatch.slice(0, 10)).toEqual(firstBatch);
+  expect(
+    continuedBatch.slice(10).every((slug) => !firstBatch.includes(slug)),
+  ).toBe(true);
+});
+
+test("다음 배치 요청이 실패하면 현재 작품을 유지하고 재시도만 제공한다", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/shorts");
+
+  const cards = page.locator(".shorts-card");
+  await expect(cards).toHaveCount(10);
+
+  await page.route("**/api/discovery/shorts**", (route) => route.abort());
+  await cards.last().scrollIntoViewIfNeeded();
+  await expect(cards.last()).toHaveClass(/shorts-card--active/);
+
+  const tail = page.locator(".shorts-card__tail");
+  const retry = tail.getByRole("button", { name: "다시 시도" });
+  await expect(retry).toBeVisible();
+  // 감상 중인 화면은 그대로 두고 상단 배너로 올리지 않는다.
+  await expect(page.locator(".shorts-error")).toHaveCount(0);
+  await expect(cards).toHaveCount(10);
+  await expect(cards.last()).toHaveClass(/shorts-card--active/);
+
+  await page.unroute("**/api/discovery/shorts**");
+  await retry.click();
+  await expect.poll(() => cards.count()).toBeGreaterThan(10);
+  await expect(cards.nth(10)).toHaveClass(/shorts-card--active/);
+});
+
 test("모바일과 모션 축소 환경에서 쇼츠를 정지 화면으로 탐색한다", async ({
   page,
 }) => {

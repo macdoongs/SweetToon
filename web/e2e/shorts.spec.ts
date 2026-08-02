@@ -186,6 +186,91 @@ test("섞기와 마지막 추가 드래그가 이미 나온 작품을 제외한�
   ).toBe(true);
 });
 
+test("한 배치 안에서 같은 작가가 연속되거나 같은 장르가 세 번 이어지지 않는다", async ({
+  page,
+}) => {
+  // 순서가 무작위이므로 여러 번 뽑아 규칙이 항상 지켜지는지 확인한다.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const response = await page.request.get("/api/discovery/shorts?limit=10");
+    expect(response.ok()).toBeTruthy();
+    const payload = (await response.json()) as {
+      items: Array<{ series: { authorName: string; genre: string } }>;
+    };
+    expect(payload.items).toHaveLength(10);
+
+    const authors = payload.items.map((item) => item.series.authorName);
+    expect(
+      authors.some((author, index) => index > 0 && authors[index - 1] === author),
+    ).toBe(false);
+
+    const genres = payload.items.map((item) => item.series.genre);
+    expect(
+      genres.some(
+        (genre, index) =>
+          index > 1 && genres[index - 1] === genre && genres[index - 2] === genre,
+      ),
+    ).toBe(false);
+  }
+});
+
+test("마지막 작품의 미리보기가 끝나면 추가 입력 없이 다음 배치로 이어진다", async ({
+  page,
+}) => {
+  await page.goto("/shorts");
+
+  const cards = page.locator(".shorts-card");
+  await expect(cards).toHaveCount(10);
+  const firstBatch = await cards.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-series-slug")),
+  );
+
+  await cards.last().scrollIntoViewIfNeeded();
+  await expect(cards.last()).toHaveClass(/shorts-card--active/);
+
+  const strip = cards.last().locator(".shorts-preview__strip");
+  await expect(strip).toHaveCSS("animation-name", "shorts-preview-pan");
+  await strip.evaluate((element) => {
+    element.style.animationDuration = "100ms";
+  });
+
+  await expect.poll(() => cards.count()).toBeGreaterThan(firstBatch.length);
+  await expect(cards.nth(10)).toHaveClass(/shorts-card--active/);
+  const continuedBatch = await cards.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("data-series-slug")),
+  );
+  expect(continuedBatch.slice(0, 10)).toEqual(firstBatch);
+  expect(
+    continuedBatch.slice(10).every((slug) => !firstBatch.includes(slug)),
+  ).toBe(true);
+});
+
+test("다음 배치 요청이 실패하면 현재 작품을 유지하고 재시도만 제공한다", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/shorts");
+
+  const cards = page.locator(".shorts-card");
+  await expect(cards).toHaveCount(10);
+
+  await page.route("**/api/discovery/shorts**", (route) => route.abort());
+  await cards.last().scrollIntoViewIfNeeded();
+  await expect(cards.last()).toHaveClass(/shorts-card--active/);
+
+  const tail = page.locator(".shorts-card__tail");
+  const retry = tail.getByRole("button", { name: "다시 시도" });
+  await expect(retry).toBeVisible();
+  // 감상 중인 화면은 그대로 두고 상단 배너로 올리지 않는다.
+  await expect(page.locator(".shorts-error")).toHaveCount(0);
+  await expect(cards).toHaveCount(10);
+  await expect(cards.last()).toHaveClass(/shorts-card--active/);
+
+  await page.unroute("**/api/discovery/shorts**");
+  await retry.click();
+  await expect.poll(() => cards.count()).toBeGreaterThan(10);
+  await expect(cards.nth(10)).toHaveClass(/shorts-card--active/);
+});
+
 test("모바일과 모션 축소 환경에서 쇼츠를 정지 화면으로 탐색한다", async ({
   page,
 }) => {

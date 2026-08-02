@@ -9,6 +9,8 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
+  type TouchEvent,
+  type WheelEvent,
 } from "react";
 import { getJson } from "@/lib/api";
 import { episodeLabel } from "@/lib/episode-label";
@@ -167,7 +169,15 @@ export function ShortsFeed({
   const feedRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Array<HTMLElement | null>>([]);
   const viewedPreviews = useRef(new Set<string>());
+  const seenSeriesSlugs = useRef(
+    new Set(initialItems.map((item) => item.series.slug)),
+  );
+  const loadingRef = useRef(false);
   const activeIndexRef = useRef(0);
+  const touchGestureRef = useRef<{
+    startY: number;
+    startedAtLast: boolean;
+  } | null>(null);
   const dragRef = useRef<{
     pointerId: number;
     pointerType: string;
@@ -250,10 +260,80 @@ export function ShortsFeed({
     [items.length],
   );
 
+  const requestBatch = useCallback(
+    (excludedSlugs: string[], cycle: "next" | "reset") => {
+      const query = new URLSearchParams({
+        limit: "10",
+        shuffle: `${Date.now()}-${cycle}`,
+      });
+      if (excludedSlugs.length > 0) {
+        query.set("exclude", excludedSlugs.join(","));
+      }
+      return getJson<ShortsPreviewResponse>(
+        `/api/discovery/shorts?${query.toString()}`,
+      );
+    },
+    [],
+  );
+
+  const loadUnseen = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setLoading(true);
+    setError(null);
+    try {
+      let response = await requestBatch([...seenSeriesSlugs.current], "next");
+      if (response.items.length === 0 && seenSeriesSlugs.current.size > 0) {
+        const currentSlugs = items.map((item) => item.series.slug);
+        seenSeriesSlugs.current = new Set(currentSlugs);
+        response = await requestBatch(currentSlugs, "reset");
+      }
+      if (response.items.length === 0) {
+        setError("지금 보여드릴 다른 작품이 없어요. 잠시 뒤 다시 시도해 주세요.");
+        return;
+      }
+      response.items.forEach((item) =>
+        seenSeriesSlugs.current.add(item.series.slug),
+      );
+      cardRefs.current = [];
+      setItems(response.items);
+      viewedPreviews.current.clear();
+      activeIndexRef.current = 0;
+      setActiveIndex(0);
+      setPaused(false);
+      requestAnimationFrame(() =>
+        cardRefs.current[0]?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        }),
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "새로운 쇼츠를 불러오지 못했습니다.",
+      );
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+    }
+  }, [items, requestBatch]);
+
+  const advanceTo = useCallback(
+    (index: number) => {
+      if (index >= items.length) {
+        void loadUnseen();
+        return;
+      }
+      moveTo(index);
+    },
+    [items.length, loadUnseen, moveTo],
+  );
+
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowDown" || event.key === "PageDown") {
       event.preventDefault();
-      moveTo(activeIndex + 1);
+      advanceTo(activeIndex + 1);
     } else if (event.key === "ArrowUp" || event.key === "PageUp") {
       event.preventDefault();
       moveTo(activeIndex - 1);
@@ -307,29 +387,47 @@ export function ShortsFeed({
       if (drag.pointerType === "mouse") moveTo(drag.startIndex);
       return;
     }
-    moveTo(drag.startIndex + (distance > 0 ? 1 : -1));
+    if (distance > 0) {
+      advanceTo(drag.startIndex + 1);
+    } else {
+      moveTo(drag.startIndex - 1);
+    }
   };
 
-  const shuffle = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await getJson<ShortsPreviewResponse>(
-        `/api/discovery/shorts?limit=10&shuffle=${Date.now()}`,
-      );
-      setItems(response.items);
-      viewedPreviews.current.clear();
-      setActiveIndex(0);
-      requestAnimationFrame(() => moveTo(0));
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "새로운 쇼츠를 불러오지 못했습니다.",
-      );
-    } finally {
-      setLoading(false);
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    touchGestureRef.current = {
+      startY: touch.clientY,
+      startedAtLast: activeIndexRef.current === items.length - 1,
+    };
+  };
+
+  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    const gesture = touchGestureRef.current;
+    touchGestureRef.current = null;
+    const touch = event.changedTouches[0];
+    if (
+      !gesture?.startedAtLast ||
+      !touch ||
+      gesture.startY - touch.clientY < DRAG_THRESHOLD_PX
+    ) {
+      return;
     }
+    void loadUnseen();
+  };
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const feed = feedRef.current;
+    if (
+      event.deltaY <= 0 ||
+      activeIndexRef.current !== items.length - 1 ||
+      !feed ||
+      feed.scrollHeight - feed.scrollTop - feed.clientHeight > 2
+    ) {
+      return;
+    }
+    void loadUnseen();
   };
 
   if (items.length === 0) {
@@ -339,7 +437,7 @@ export function ShortsFeed({
           <p className="eyebrow">SweetToon shorts</p>
           <h1>미리 볼 수 있는 작품을 준비하고 있어요</h1>
           <p>{error ?? "공개된 무료 회차가 생기면 이곳에서 먼저 보여드릴게요."}</p>
-          <button className="button button--primary" disabled={loading} onClick={shuffle}>
+          <button className="button button--primary" disabled={loading} onClick={loadUnseen}>
             {loading ? "불러오는 중…" : "다시 시도"}
           </button>
         </section>
@@ -354,7 +452,7 @@ export function ShortsFeed({
           <p className="eyebrow">SweetToon shorts</p>
           <h1>첫 장면으로 만나는 랜덤 웹툰</h1>
         </div>
-        <button className="button button--ghost" disabled={loading} onClick={shuffle}>
+        <button className="button button--ghost" disabled={loading} onClick={loadUnseen}>
           {loading ? "섞는 중…" : "다른 작품 섞기"}
         </button>
       </header>
@@ -369,12 +467,15 @@ export function ShortsFeed({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={finishPointerGesture}
+        onTouchEnd={handleTouchEnd}
+        onTouchStart={handleTouchStart}
+        onWheel={handleWheel}
         ref={feedRef}
         role="region"
         tabIndex={0}
       >
         <p className="sr-only" id="shorts-gesture-help">
-          위아래로 스와이프하거나 마우스로 드래그해 작품을 전환할 수 있습니다.
+          위아래로 스와이프하거나 마우스로 드래그해 작품을 전환할 수 있습니다. 마지막 작품에서 한 번 더 내리면 보지 않은 작품을 불러옵니다.
         </p>
         {items.map((item, index) => {
           const active = index === activeIndex;
@@ -387,6 +488,7 @@ export function ShortsFeed({
               className={`shorts-card${active ? " shorts-card--active" : ""}`}
               data-episode-id={item.episode.id}
               data-index={index}
+              data-series-slug={item.series.slug}
               key={`${item.series.slug}-${item.episode.id}`}
               ref={(element) => {
                 cardRefs.current[index] = element;
@@ -457,9 +559,13 @@ export function ShortsFeed({
                   ↑
                 </button>
                 <button
-                  aria-label="다음 작품"
-                  disabled={index === items.length - 1}
-                  onClick={() => moveTo(index + 1)}
+                  aria-label={
+                    index === items.length - 1
+                      ? "다른 작품 불러오기"
+                      : "다음 작품"
+                  }
+                  disabled={loading}
+                  onClick={() => advanceTo(index + 1)}
                   type="button"
                 >
                   ↓

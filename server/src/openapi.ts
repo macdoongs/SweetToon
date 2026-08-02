@@ -150,6 +150,13 @@ export const openApiDocument = {
               default: 10,
             },
           },
+          {
+            name: "exclude",
+            in: "query",
+            description:
+              "이번 세션에서 이미 제시한 작품 slug를 쉼표로 구분해 제외합니다.",
+            schema: { type: "string", maxLength: 4100 },
+          },
         ],
         responses: {
           "200": {

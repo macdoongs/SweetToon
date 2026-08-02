@@ -2,6 +2,26 @@ import { z } from "zod";
 
 export const ShortsPreviewQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(10),
+  exclude: z
+    .string()
+    .max(4_100)
+    .optional()
+    .transform((value) =>
+      value
+        ? [...new Set(value.split(",").filter((slug) => slug.length > 0))]
+        : [],
+    )
+    .pipe(
+      z
+        .array(
+          z
+            .string()
+            .min(1)
+            .max(80)
+            .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+        )
+        .max(50),
+    ),
 });
 
 export const ShortsPreviewItemSchema = z.object({

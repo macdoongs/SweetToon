@@ -212,6 +212,12 @@ test("찜 취향을 바탕으로 가로 추천 레일을 갱신한다", async ({
   await expect(
     personalizedShelf.getByRole("link", { name: /달빛 세탁소/ }),
   ).toHaveCount(0);
+  const recommendedSlugs = await recommendations
+    .locator('.recommendation-card:not([aria-hidden]) > a')
+    .evaluateAll((links) =>
+      links.map((link) => new URL((link as HTMLAnchorElement).href).pathname),
+    );
+  expect(new Set(recommendedSlugs).size).toBe(recommendedSlugs.length);
 
   const rail = personalizedShelf.locator(".recommendation-rail");
   await expect
@@ -374,6 +380,181 @@ test("라이트·다크·시스템 테마를 저장하고 즉시 적용한다", 
   ).toHaveAttribute("href", /volume=2$/);
 
   await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
+test("홈의 대표 데모 경로가 읽기→주문→제작 확인으로 이어진다 @demo", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page.getByRole("link", { name: "3분 데모 경로" }).click();
+  await expect(page).toHaveURL(/#demo-path$/);
+
+  const demoPath = page.locator(".demo-path");
+  await expect(
+    demoPath.getByRole("heading", {
+      name: "읽고, 주문하고, 제작을 지켜보세요",
+    }),
+  ).toBeVisible();
+  await expect(
+    demoPath.getByRole("link", { name: /무료 회차 고르기/ }),
+  ).toHaveAttribute("href", /\/series\/[^/]+#episodes$/);
+  await expect(
+    demoPath.getByRole("link", { name: /제작 상태 확인/ }),
+  ).toHaveAttribute("href", "/orders");
+
+  await demoPath.getByRole("link", { name: /소장본 고르기/ }).click();
+  await expect(page).toHaveURL(/\/series\/[^/?]+#edition$/);
+  await expect(page.locator(".edition-card")).toBeVisible();
+
+  await page.goto("/?filter=ongoing");
+  await expect(page.locator(".demo-path")).toBeVisible();
+});
+
+test("완독한 회차는 이어보기 대신 다음 행동으로 안내한다", async ({
+  page,
+}) => {
+  const seriesResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  expect(seriesResponse.ok()).toBeTruthy();
+  const series = await seriesResponse.json();
+  const episode = series.seasons[0].episodes[0] as {
+    id: string;
+    number: number;
+    title: string;
+  };
+
+  await page.addInitScript(
+    ({ episodeId, episodeNumber, episodeTitle }) => {
+      localStorage.setItem(
+        "sweettoon:reading-progress",
+        JSON.stringify({
+          [episodeId]: {
+            seriesSlug: "moonlight-laundry",
+            episodeId,
+            episodeNumber,
+            episodeTitle,
+            pageOrder: 4,
+            percent: 100,
+            completed: true,
+            updatedAt: "2026-07-26T00:00:00.000Z",
+          },
+        }),
+      );
+    },
+    {
+      episodeId: episode.id,
+      episodeNumber: episode.number,
+      episodeTitle: episode.title,
+    },
+  );
+
+  await page.goto("/");
+  const card = page
+    .locator(".series-card")
+    .filter({ hasText: "달빛 세탁소" })
+    .first();
+  const continueLink = card.locator(".series-card__continue");
+  await expect(continueLink).toContainText(
+    `${episode.number}화 완독 · 다음 화 고르기`,
+  );
+  await expect(continueLink).toHaveAttribute(
+    "href",
+    "/series/moonlight-laundry#episodes",
+  );
+  await continueLink.click();
+  await expect(page).toHaveURL(/\/series\/moonlight-laundry#episodes$/);
+
+  // 작품 상세 대표 CTA도 읽기 기록을 반영한다: 1화 완독 → 다음 화 읽기.
+  const hero = page.locator(".series-hero__actions");
+  await expect(
+    hero.getByRole("link", { name: "다음 화 읽기" }),
+  ).toBeVisible();
+  await expect(
+    hero.getByRole("link", { name: "첫 화부터 읽기" }),
+  ).toBeVisible();
+
+  // 권 필터를 선택하면 주문 카드도 같은 권을 가리킨다.
+  await page
+    .getByRole("navigation", { name: "권별 에피소드 필터" })
+    .getByRole("link", { name: "시즌 1 · 2권" })
+    .click();
+  await expect(
+    page.locator(".edition-card").getByRole("link", {
+      name: /선택한 2권 주문하기/,
+    }),
+  ).toHaveAttribute("href", /volume=2$/);
+});
+
+test("데모 기록 초기화가 개인 기록만 지우고 설정은 보존한다", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("sweettoon:favorites", JSON.stringify(["demo"]));
+    localStorage.setItem(
+      "sweettoon:reading-progress",
+      JSON.stringify({ ep: { seriesSlug: "demo" } }),
+    );
+    localStorage.setItem("sweettoon:candy-wallet-token", "reset-target");
+    localStorage.setItem(
+      "sweettoon:demo-entitlements",
+      JSON.stringify({ "season:1": "token" }),
+    );
+    localStorage.setItem("sweettoon:theme", "dark");
+  });
+
+  await page.goto("/");
+  const reset = page.getByRole("button", { name: "데모 기록 초기화" });
+  await reset.scrollIntoViewIfNeeded();
+  await reset.click();
+  await page.getByRole("button", { name: "정말 초기화" }).click();
+  await expect(
+    page.getByText("찜·진행도·캔디·이용권·주문 기록을 지웠어요."),
+  ).toBeVisible();
+
+  const remaining = await page.evaluate(() => ({
+    favorites: localStorage.getItem("sweettoon:favorites"),
+    progress: localStorage.getItem("sweettoon:reading-progress"),
+    candy: localStorage.getItem("sweettoon:candy-wallet-token"),
+    entitlements: localStorage.getItem("sweettoon:demo-entitlements"),
+    theme: localStorage.getItem("sweettoon:theme"),
+  }));
+  expect(remaining.favorites).toBeNull();
+  expect(remaining.progress).toBeNull();
+  // 헤더가 잔액 조회 중 새 지갑 토큰을 만들 수 있으므로, 기존 지갑과
+  // 분리됐는지(토큰 교체)를 검증한다.
+  expect(remaining.candy).not.toBe("reset-target");
+  expect(remaining.entitlements).toBeNull();
+  expect(remaining.theme).toBe("dark");
+});
+
+test("모바일 뷰포트에서도 핵심 내비게이션이 유지된다", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const nav = page.getByRole("navigation", { name: "주요 메뉴" });
+  await expect(nav.getByRole("link", { name: "작품" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "주문" })).toBeVisible();
+  await expect(nav.locator(".site-nav__candy")).toBeVisible();
+
+  const moreMenu = nav.locator(".site-nav__more");
+  await expect(moreMenu).toBeVisible();
+  await moreMenu.locator("summary").click();
+  await expect(
+    moreMenu.getByRole("link", { name: "작가 스튜디오" }),
+  ).toBeVisible();
+  await moreMenu.getByRole("link", { name: "찜 목록" }).click();
+  await expect(page).toHaveURL(/\/favorites$/);
+  await expect(
+    page.getByRole("heading", { name: "찜 목록" }),
+  ).toBeVisible();
+
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

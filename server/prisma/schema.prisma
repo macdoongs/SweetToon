@@ -2,6 +2,14 @@ generator client {
   provider = "prisma-client-js"
 }
 
+generator dbml {
+  provider            = "prisma-dbml-generator"
+  output              = "../../docs/database"
+  outputName          = "schema.dbml"
+  projectName         = "SweetToon"
+  projectDatabaseType = "PostgreSQL"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -19,21 +27,24 @@ model Author {
 
 // 작품
 model Series {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  authorId  String
-  title     String
-  synopsis  String
-  genre     String
-  weekday   String   @default("mon") // mon | tue | wed | thu | fri | sat | sun
-  freeVolumeCount Int @default(1)
-  previewEpisodeCount Int @default(0)
-  coverUrl  String?
-  status    String   @default("ongoing") // ongoing | completed
-  createdAt DateTime @default(now())
-  author    Author   @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  seasons   Season[]
-  orders    Order[]
+  id                  String   @id @default(cuid())
+  requestKey          String?  @unique
+  requestFingerprint  String?
+  slug                String   @unique
+  authorId            String
+  title               String
+  synopsis            String
+  genre               String
+  weekday             String   @default("mon") // mon | tue | wed | thu | fri | sat | sun
+  freeVolumeCount     Int      @default(1)
+  previewEpisodeCount Int      @default(0)
+  coverUrl            String?
+  status              String   @default("ongoing") // ongoing | completed
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  author              Author   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  seasons             Season[]
+  orders              Order[]
 }
 
 // 시즌 — 단행본 주문의 단위
@@ -52,16 +63,37 @@ model Season {
 
 // 에피소드 — zip(CBZ) 업로드 1건 = 에피소드 1화
 model Episode {
-  id          String   @id @default(cuid())
-  seasonId    String
-  number      Int
-  title       String
-  publishedAt DateTime @default(now())
-  season      Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  pages       Page[]
-  candyEntitlements CandyEpisodeEntitlement[]
+  id                 String                    @id @default(cuid())
+  requestKey         String?                   @unique
+  requestFingerprint String?
+  seasonId           String
+  number             Int
+  title              String
+  visibility         String                    @default("public") // public | private(비공개 보관, 링크로만 접근)
+  // 스튜디오 발행 파일의 저장 위치. 원고 교체 시 이전 파일 정리에 쓰며,
+  // 시드처럼 스튜디오 밖에서 온 에피소드는 null이다.
+  manuscriptDir      String?
+  publishedAt        DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  likeCount          Int                       @default(0)
+  season             Season                    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  pages              Page[]
+  candyEntitlements  CandyEpisodeEntitlement[]
+  likes               EpisodeLike[]
 
   @@unique([seasonId, number])
+}
+
+// 로그인 없는 과제 환경의 회차 좋아요. 브라우저 토큰 원문 대신 SHA-256 해시만 저장한다.
+model EpisodeLike {
+  id         String   @id @default(cuid())
+  episodeId  String
+  viewerHash String
+  createdAt  DateTime @default(now())
+  episode    Episode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([episodeId, viewerHash])
+  @@index([episodeId])
 }
 
 // 페이지 — zip 내 이미지 1장, 파일명 자연 정렬 순서를 order에 고정
@@ -77,35 +109,36 @@ model Page {
 
 // 단행본 주문 — 결제·배송·인증 없음. 기록과 상태 흐름 관리까지 (Lv2)
 model Order {
-  id                    String       @id @default(cuid())
-  requestKey            String?      @unique
-  entitlementToken      String       @unique @default(uuid())
-  providerOrderId       String?      @unique
+  id                    String            @id @default(cuid())
+  requestKey            String?           @unique
+  requestFingerprint    String?
+  entitlementToken      String            @unique @default(uuid())
+  providerOrderId       String?           @unique
   candyWalletToken      String?
-  candyBonus            Int          @default(0)
+  candyBonus            Int               @default(0)
   seriesId              String
   seasonId              String
-  volumeNumber          Int          @default(1)
+  volumeNumber          Int               @default(1)
   ordererName           String
   ordererType           String // reader(소장용) | creator(독립출판)
-  quantity              Int          @default(1)
+  quantity              Int               @default(1)
   coverType             String // softcover | hardcover
   bookSize              String // A5 | B5 등
   pageCount             Int?
-  currency              String?      @default("KRW")
+  currency              String?           @default("KRW")
   unitPrice             Int?
   totalPrice            Int?
   estimatedBusinessDays Int?
-  memo                   String?
-  isDemo                 Boolean      @default(false)
-  status                 String       @default("pending") // pending | processing | shipped | completed | canceled
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
-  series                 Series       @relation(fields: [seriesId], references: [id], onDelete: Cascade)
-  season                 Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  events                 OrderEvent[]
-  candyWallet            CandyWallet? @relation(fields: [candyWalletToken], references: [token], onDelete: SetNull)
-  candyTransaction       CandyTransaction?
+  memo                  String?
+  isDemo                Boolean           @default(false)
+  status                String            @default("pending") // pending | processing | shipped | completed | canceled
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  series                Series            @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  season                Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  events                OrderEvent[]
+  candyWallet           CandyWallet?      @relation(fields: [candyWalletToken], references: [token], onDelete: SetNull)
+  candyTransaction      CandyTransaction?
 
   @@index([createdAt])
   @@index([isDemo, status, updatedAt])
@@ -138,17 +171,17 @@ model CandyWallet {
 
 // 캔디 지급·사용 원장. 주문과 요청 키의 unique 제약으로 중복 처리를 막는다.
 model CandyTransaction {
-  id           String       @id @default(cuid())
+  id           String      @id @default(cuid())
   walletToken  String
   type         String // order_bonus | episode_unlock | mock_charge
   amount       Int
   balanceAfter Int
-  requestKey   String?      @unique
-  orderId      String?      @unique
+  requestKey   String?     @unique
+  orderId      String?     @unique
   episodeId    String?
-  createdAt    DateTime     @default(now())
-  wallet       CandyWallet  @relation(fields: [walletToken], references: [token], onDelete: Cascade)
-  order        Order?       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+  wallet       CandyWallet @relation(fields: [walletToken], references: [token], onDelete: Cascade)
+  order        Order?      @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([walletToken, createdAt])
 }
@@ -164,6 +197,26 @@ model CandyEpisodeEntitlement {
 
   @@unique([walletToken, episodeId])
   @@index([episodeId])
+}
+
+// 책 패키징 서비스 신청 — 작가가 원고 묶음으로 실물 책 패키징을 접수한다.
+// 실제 인쇄 API 호출 없이 접수 기록과 상태만 관리한다.
+model PackagingRequest {
+  id                 String   @id @default(cuid())
+  requestKey         String?  @unique
+  requestFingerprint String?
+  applicantName      String
+  bookTitle          String
+  bookSize           String // A5 | B5
+  coverType          String // softcover | hardcover
+  quantity           Int      @default(1)
+  memo               String?
+  pageCount          Int
+  manuscriptDir      String
+  status             String   @default("received") // received | reviewing | completed | canceled
+  createdAt          DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 // 보안 감사 로그 — 원문 IP나 업로드 파일명 대신 최소 정보와 해시만 보관

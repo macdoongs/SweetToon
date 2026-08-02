@@ -1,4 +1,4 @@
-import { getAllSeries } from "@/lib/server-api";
+import { getRecentEpisodes } from "@/lib/server-api";
 import {
   absoluteUrl,
   SITE_DESCRIPTION,
@@ -15,32 +15,27 @@ function escapeXml(value: string): string {
 }
 
 export async function GET(): Promise<Response> {
-  const { items } = await getAllSeries();
-  const episodes = items
-    .flatMap((series) =>
-      series.latestEpisode
-        ? [{ series, episode: series.latestEpisode }]
-        : [],
-    )
+  const { items } = await getRecentEpisodes(50);
+  const episodes = [...items]
     .sort(
       (left, right) =>
-        Date.parse(right.episode.publishedAt) -
-        Date.parse(left.episode.publishedAt),
+        Date.parse(right.publishedAt) - Date.parse(left.publishedAt),
     );
 
   const itemsXml = episodes
-    .map(({ series, episode }) => {
+    .map((episode) => {
       const episodeUrl = absoluteUrl(`/read/${episode.id}`);
-      const title = `${series.title} ${episode.number}화 — ${episode.title}`;
+      const title =
+        `${episode.series.title} ${episode.number}화 — ${episode.title}`;
 
       return [
         "    <item>",
         `      <title>${escapeXml(title)}</title>`,
         `      <link>${escapeXml(episodeUrl)}</link>`,
         `      <guid isPermaLink="true">${escapeXml(episodeUrl)}</guid>`,
-        `      <description>${escapeXml(series.synopsis)}</description>`,
-        `      <author>${escapeXml(series.author.name)}</author>`,
-        `      <category>${escapeXml(series.genre)}</category>`,
+        `      <description>${escapeXml(episode.series.synopsis)}</description>`,
+        `      <dc:creator>${escapeXml(episode.series.authorName)}</dc:creator>`,
+        `      <category>${escapeXml(episode.series.genre)}</category>`,
         `      <pubDate>${new Date(episode.publishedAt).toUTCString()}</pubDate>`,
         "    </item>",
       ].join("\n");
@@ -48,15 +43,19 @@ export async function GET(): Promise<Response> {
     .join("\n");
 
   const feedUrl = absoluteUrl("/feed.xml");
+  const lastBuildDate = episodes[0]?.publishedAt;
   const xml = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">',
+    '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">',
     "  <channel>",
     `    <title>${escapeXml(`${SITE_NAME} 새 회차`)}</title>`,
     `    <link>${escapeXml(absoluteUrl("/"))}</link>`,
     `    <description>${escapeXml(SITE_DESCRIPTION)}</description>`,
     "    <language>ko-KR</language>",
     `    <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml" />`,
+    ...(lastBuildDate
+      ? [`    <lastBuildDate>${new Date(lastBuildDate).toUTCString()}</lastBuildDate>`]
+      : []),
     itemsXml,
     "  </channel>",
     "</rss>",

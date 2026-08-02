@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ApiError, getJson } from "@/lib/api";
 import type { OrderDetail } from "@/lib/order-types";
 import { formatKoreanDateTime } from "@/lib/date-time";
+import { parseOrderStreamEvent } from "@/lib/order-stream";
 
 const statusLabel: Record<OrderDetail["status"], string> = {
   pending: "주문 접수",
@@ -19,20 +21,61 @@ const won = new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
 });
 
-export function OrderDetailPage({ order }: { order: OrderDetail }) {
+export function OrderDetailPage({
+  order,
+  browserStorageUnavailable = false,
+}: {
+  order: OrderDetail;
+  browserStorageUnavailable?: boolean;
+}) {
   const [liveOrder, setLiveOrder] = useState(order);
   const [connection, setConnection] = useState<
-    "connecting" | "live" | "retrying"
+    "connecting" | "live" | "retrying" | "unavailable"
   >("connecting");
 
   useEffect(() => {
+    const controller = new AbortController();
+    let closed = false;
+    let probeInFlight = false;
     const source = new EventSource(
       `/api/orders/${encodeURIComponent(order.id)}/events`,
     );
     source.addEventListener("open", () => setConnection("live"));
-    source.addEventListener("error", () => setConnection("retrying"));
+    source.addEventListener("error", () => {
+      if (closed || probeInFlight) return;
+      setConnection("retrying");
+      probeInFlight = true;
+      void getJson<OrderDetail>(
+        `/api/orders/${encodeURIComponent(order.id)}`,
+        controller.signal,
+      )
+        .then((latest) => {
+          if (closed) return;
+          setLiveOrder((current) =>
+            Date.parse(latest.updatedAt) >= Date.parse(current.updatedAt)
+              ? latest
+              : current,
+          );
+        })
+        .catch((reason) => {
+          if (closed) return;
+          if (reason instanceof ApiError && reason.status === 404) {
+            source.close();
+            setConnection("unavailable");
+          }
+        })
+        .finally(() => {
+          probeInFlight = false;
+        });
+    });
     source.addEventListener("order", (event) => {
-      const incoming = JSON.parse((event as MessageEvent<string>).data) as OrderDetail;
+      const incoming = parseOrderStreamEvent(
+        (event as MessageEvent<string>).data,
+      );
+      if (!incoming) {
+        setConnection("retrying");
+        return;
+      }
       setLiveOrder((current) =>
         Date.parse(incoming.updatedAt) >= Date.parse(current.updatedAt)
           ? incoming
@@ -40,7 +83,11 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
       );
       setConnection("live");
     });
-    return () => source.close();
+    return () => {
+      closed = true;
+      controller.abort();
+      source.close();
+    };
   }, [order.id]);
 
   return (
@@ -73,7 +120,38 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
             ? `보너스 캔디 ${liveOrder.candyBonus}개도 이 브라우저에 지급했어요.`
             : "수록 회차도 이 브라우저에서 바로 열렸어요."}
         </p>
+        {liveOrder.status !== "canceled" ? (
+          <div className="order-result__actions">
+            <Link
+              className="button button--primary"
+              href={`/series/${encodeURIComponent(liveOrder.series.slug)}#episodes`}
+            >
+              열린 회차 바로 읽기
+            </Link>
+            {liveOrder.candyBonus > 0 ? (
+              <Link className="button" href="/candy">
+                캔디 확인하기
+              </Link>
+            ) : (
+              <Link
+                className="button"
+                href={`/series/${encodeURIComponent(liveOrder.series.slug)}`}
+              >
+                작품 홈으로
+              </Link>
+            )}
+            <Link className="button" href="/orders">
+              주문 목록 보기
+            </Link>
+          </div>
+        ) : null}
       </header>
+      {browserStorageUnavailable ? (
+        <p className="form-error" role="alert">
+          주문은 정상 접수됐지만 이 브라우저에 디지털 이용권을 저장하지
+          못했어요. 브라우저 저장소 설정을 확인해 주세요.
+        </p>
+      ) : null}
 
       <div className="order-detail-grid">
         <section className="order-detail-card">
@@ -89,6 +167,8 @@ export function OrderDetailPage({ order }: { order: OrderDetail }) {
               <i aria-hidden="true" />
               {connection === "live"
                 ? "실시간 연결됨"
+                : connection === "unavailable"
+                  ? "실시간 갱신 중단"
                 : connection === "retrying"
                   ? "재연결 중"
                   : "연결 중"}

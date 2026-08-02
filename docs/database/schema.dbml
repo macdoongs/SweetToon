@@ -1,0 +1,230 @@
+//// ------------------------------------------------------
+//// THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+//// ------------------------------------------------------
+
+Project "SweetToon" {
+  database_type: 'PostgreSQL'
+  Note: ''
+}
+
+Table Author {
+  id String [pk]
+  name String [not null]
+  bio String
+  avatarUrl String
+  createdAt DateTime [default: `now()`, not null]
+  series Series [not null]
+}
+
+Table Series {
+  id String [pk]
+  requestKey String [unique]
+  requestFingerprint String
+  slug String [unique, not null]
+  authorId String [not null]
+  title String [not null]
+  synopsis String [not null]
+  genre String [not null]
+  weekday String [not null, default: 'mon']
+  freeVolumeCount Int [not null, default: 1]
+  previewEpisodeCount Int [not null, default: 0]
+  coverUrl String
+  status String [not null, default: 'ongoing']
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  author Author [not null]
+  seasons Season [not null]
+  orders Order [not null]
+}
+
+Table Season {
+  id String [pk]
+  seriesId String [not null]
+  number Int [not null]
+  title String
+  status String [not null, default: 'ongoing']
+  series Series [not null]
+  episodes Episode [not null]
+  orders Order [not null]
+
+  indexes {
+    (seriesId, number) [unique]
+  }
+}
+
+Table Episode {
+  id String [pk]
+  requestKey String [unique]
+  requestFingerprint String
+  seasonId String [not null]
+  number Int [not null]
+  title String [not null]
+  visibility String [not null, default: 'public']
+  manuscriptDir String
+  publishedAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  likeCount Int [not null, default: 0]
+  season Season [not null]
+  pages Page [not null]
+  candyEntitlements CandyEpisodeEntitlement [not null]
+  likes EpisodeLike [not null]
+
+  indexes {
+    (seasonId, number) [unique]
+  }
+}
+
+Table EpisodeLike {
+  id String [pk]
+  episodeId String [not null]
+  viewerHash String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  episode Episode [not null]
+
+  indexes {
+    (episodeId, viewerHash) [unique]
+  }
+}
+
+Table Page {
+  id String [pk]
+  episodeId String [not null]
+  order Int [not null]
+  imageUrl String [not null]
+  episode Episode [not null]
+
+  indexes {
+    (episodeId, order) [unique]
+  }
+}
+
+Table Order {
+  id String [pk]
+  requestKey String [unique]
+  requestFingerprint String
+  entitlementToken String [unique, not null]
+  providerOrderId String [unique]
+  candyWalletToken String
+  candyBonus Int [not null, default: 0]
+  seriesId String [not null]
+  seasonId String [not null]
+  volumeNumber Int [not null, default: 1]
+  ordererName String [not null]
+  ordererType String [not null]
+  quantity Int [not null, default: 1]
+  coverType String [not null]
+  bookSize String [not null]
+  pageCount Int
+  currency String [default: 'KRW']
+  unitPrice Int
+  totalPrice Int
+  estimatedBusinessDays Int
+  memo String
+  isDemo Boolean [not null, default: false]
+  status String [not null, default: 'pending']
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  series Series [not null]
+  season Season [not null]
+  events OrderEvent [not null]
+  candyWallet CandyWallet
+  candyTransaction CandyTransaction
+}
+
+Table OrderEvent {
+  id String [pk]
+  orderId String [not null]
+  status String [not null]
+  message String
+  createdAt DateTime [default: `now()`, not null]
+  order Order [not null]
+}
+
+Table CandyWallet {
+  token String [pk]
+  balance Int [not null, default: 0]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  orders Order [not null]
+  transactions CandyTransaction [not null]
+  entitlements CandyEpisodeEntitlement [not null]
+}
+
+Table CandyTransaction {
+  id String [pk]
+  walletToken String [not null]
+  type String [not null]
+  amount Int [not null]
+  balanceAfter Int [not null]
+  requestKey String [unique]
+  orderId String [unique]
+  episodeId String
+  createdAt DateTime [default: `now()`, not null]
+  wallet CandyWallet [not null]
+  order Order
+}
+
+Table CandyEpisodeEntitlement {
+  id String [pk]
+  walletToken String [not null]
+  episodeId String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  wallet CandyWallet [not null]
+  episode Episode [not null]
+
+  indexes {
+    (walletToken, episodeId) [unique]
+  }
+}
+
+Table PackagingRequest {
+  id String [pk]
+  requestKey String [unique]
+  requestFingerprint String
+  applicantName String [not null]
+  bookTitle String [not null]
+  bookSize String [not null]
+  coverType String [not null]
+  quantity Int [not null, default: 1]
+  memo String
+  pageCount Int [not null]
+  manuscriptDir String [not null]
+  status String [not null, default: 'received']
+  createdAt DateTime [default: `now()`, not null]
+}
+
+Table SecurityAuditEvent {
+  id String [pk]
+  action String [not null]
+  outcome String [not null]
+  statusCode Int [not null]
+  ipHash String
+  userAgent String
+  createdAt DateTime [default: `now()`, not null]
+}
+
+Ref: Series.authorId > Author.id [delete: Cascade]
+
+Ref: Season.seriesId > Series.id [delete: Cascade]
+
+Ref: Episode.seasonId > Season.id [delete: Cascade]
+
+Ref: EpisodeLike.episodeId > Episode.id [delete: Cascade]
+
+Ref: Page.episodeId > Episode.id [delete: Cascade]
+
+Ref: Order.seriesId > Series.id [delete: Cascade]
+
+Ref: Order.seasonId > Season.id [delete: Cascade]
+
+Ref: Order.candyWalletToken > CandyWallet.token [delete: Set Null]
+
+Ref: OrderEvent.orderId > Order.id [delete: Cascade]
+
+Ref: CandyTransaction.walletToken > CandyWallet.token [delete: Cascade]
+
+Ref: CandyTransaction.orderId - Order.id [delete: Cascade]
+
+Ref: CandyEpisodeEntitlement.walletToken > CandyWallet.token [delete: Cascade]
+
+Ref: CandyEpisodeEntitlement.episodeId > Episode.id [delete: Cascade]

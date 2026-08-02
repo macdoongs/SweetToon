@@ -90,7 +90,9 @@ export const EpisodeReaderSchema = z.object({
   id: z.string(),
   number: z.number().int().positive(),
   title: z.string(),
+  visibility: z.enum(["public", "private"]).default("public"),
   publishedAt: z.string().datetime(),
+  likeCount: z.number().int().nonnegative(),
   series: z.object({
     id: z.string(),
     slug: z.string(),
@@ -100,6 +102,7 @@ export const EpisodeReaderSchema = z.object({
     id: z.string(),
     number: z.number().int().positive(),
     title: z.string().nullable(),
+    status: z.enum(["ongoing", "completed"]),
   }),
   pages: z.array(PageImageSchema),
   access: z.object({
@@ -111,6 +114,7 @@ export const EpisodeReaderSchema = z.object({
   navigation: z.object({
     previousEpisodeId: z.string().nullable(),
     nextEpisodeId: z.string().nullable(),
+    nextEpisodeSeasonNumber: z.number().int().positive().nullable(),
   }),
 });
 

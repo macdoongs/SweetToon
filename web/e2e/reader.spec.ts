@@ -1,9 +1,4 @@
 import { expect, test } from "@playwright/test";
-import {
-  expectSameCardPositions,
-  prepareLoopBoundary,
-  snapshotVisibleCards,
-} from "./circular-rail";
 
 test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", async ({ page }) => {
   await page.goto("/");
@@ -23,6 +18,10 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
     seriesTitle ?? "",
   );
   await expect(page.locator(".episode-list__item")).toHaveCount(105);
+  await expect(page.locator(".episode-list").first()).toHaveCSS(
+    "list-style-type",
+    "none",
+  );
   await page.getByRole("link", { name: "첫 화부터 읽기" }).click();
 
   await expect(page).toHaveURL(/\/read\/[^/]+$/);
@@ -75,6 +74,24 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(page.locator(".reader-finish--double")).toContainText(
     "모두 읽었습니다",
   );
+  await page.getByRole("button", { name: "책갈피" }).click();
+  const bookmarkToast = page.locator(".reader-bookmark-toast");
+  await expect(bookmarkToast).toContainText("책갈피에 저장");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const saved = JSON.parse(
+          localStorage.getItem("sweettoon:reading-progress") ?? "{}",
+        ) as Record<string, { pageOrder?: number; percent?: number }>;
+        return Object.values(saved).some(
+          (progress) =>
+            (progress.pageOrder ?? 0) > 0 &&
+            (progress.percent ?? 0) > 0,
+        );
+      }),
+    )
+    .toBe(true);
+  await expect(bookmarkToast).toBeHidden({ timeout: 5_000 });
   await page.getByRole("button", { name: "세로 스크롤" }).click();
 
   const firstCut = page.locator(".webtoon-strip__cut img").first();
@@ -100,24 +117,6 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(page.locator(".reader-page")).not.toHaveClass(
     /reader-page--chrome-hidden/,
   );
-  await page.getByRole("button", { name: "책갈피" }).click();
-  await expect(page.locator(".reader-bookmark-toast")).toContainText(
-    "책갈피에 저장",
-  );
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const saved = JSON.parse(
-          localStorage.getItem("sweettoon:reading-progress") ?? "{}",
-        ) as Record<string, { pageOrder?: number; percent?: number }>;
-        return Object.values(saved).some(
-          (progress) =>
-            (progress.pageOrder ?? 0) > 0 &&
-            (progress.percent ?? 0) > 0,
-        );
-      }),
-    )
-    .toBe(true);
 
   await page.evaluate(() =>
     window.scrollTo(0, document.documentElement.scrollHeight),
@@ -140,6 +139,83 @@ test("독자가 홈에서 작품을 발견하고 다음 화까지 읽는다", as
   await expect(
     livePopular.getByRole("link", { name: /달빛 세탁소/ }),
   ).toBeVisible();
+});
+
+test("양면 보기 전환 후 스크롤하면 뷰어 도구 전체가 숨는다 @demo", async ({
+  page,
+}) => {
+  const seriesResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  expect(seriesResponse.ok()).toBeTruthy();
+  const series = await seriesResponse.json();
+  const episodeId = series.seasons[0].episodes[0].id as string;
+
+  await page.goto(`/read/${episodeId}`);
+  await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await page.mouse.move(200, 200);
+
+  await page.getByRole("button", { name: "양면 보기" }).click();
+  const paged = page.locator(".reader-paged");
+  await expect(paged).toBeVisible();
+  const counter = page.locator(".reader-paged__counter");
+  const firstCounter = await counter.innerText();
+  await page.getByRole("button", { name: "다음 양면" }).click();
+  await expect(counter).not.toHaveText(firstCounter);
+
+  await page.getByRole("button", { name: "세로 스크롤" }).click();
+  await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await page.locator(".webtoon-strip").hover({ position: { x: 20, y: 200 } });
+  await page.mouse.wheel(0, 900);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await expect(page.locator(".reader-page")).toHaveClass(
+    /reader-page--chrome-hidden/,
+  );
+  await expect(page.locator(".reader-toolbar")).toHaveCSS("opacity", "0");
+  await expect(page.locator(".reader-controls")).toHaveCSS("opacity", "0");
+});
+
+test("양면 보기 버튼을 누른 직후에도 키보드로 읽을 수 있다", async ({
+  page,
+}) => {
+  const seriesResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  expect(seriesResponse.ok()).toBeTruthy();
+  const series = await seriesResponse.json();
+  const episodeId = series.seasons[0].episodes[0].id as string;
+
+  await page.goto(`/read/${episodeId}`);
+  await expect(page.locator(".webtoon-strip")).toBeVisible();
+  await page.mouse.move(200, 200);
+
+  // 도구 버튼으로 모드를 바꾸면 focus가 버튼에 남는다. 이 상태에서도
+  // 리더 단축키가 동작해야 한다.
+  await page.getByRole("button", { name: "양면 보기" }).click();
+  await expect(page.locator(".reader-paged")).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.tagName))
+    .toBe("BUTTON");
+
+  const counter = page.locator(".reader-paged__counter");
+  const firstSpread = await counter.innerText();
+
+  await page.keyboard.press("ArrowRight");
+  await expect(counter).not.toHaveText(firstSpread);
+  const secondSpread = await counter.innerText();
+
+  await page.keyboard.press("ArrowLeft");
+  await expect(counter).toHaveText(firstSpread);
+
+  // Space는 focus된 버튼을 다시 누르는 브라우저 기본 동작이므로 버튼에
+  // focus가 남아 있는 동안에는 양면을 넘기지 않는다.
+  await page.keyboard.press(" ");
+  await expect(counter).toHaveText(firstSpread);
+
+  // 화면을 눌러 focus가 버튼을 벗어나면 Space도 다음 양면으로 넘긴다.
+  await page.locator(".reader-paged").click();
+  await page.keyboard.press(" ");
+  await expect(counter).toHaveText(secondSpread);
 });
 
 test("저장된 페이지를 양면 모드에서 복원한 뒤 모드 전환에도 진행도를 보존한다", async ({
@@ -333,30 +409,24 @@ test("작품을 찜하고 목록에서 확인한 뒤 해제한다", async ({ pag
 
   await page.goto("/favorites");
   await expect(page.getByRole("heading", { name: "찜 목록" })).toBeVisible();
-  const rail = page.locator(".favorites-rail");
-  await expect(rail).toHaveAttribute(
-    "aria-roledescription",
-    "순환형 캐러셀",
-  );
-  await expect(rail).toHaveCSS("scrollbar-width", "none");
-  await expect(rail.locator(".favorite-card")).toHaveCount(10);
+  await expect(page.getByText("찜한 작품 2개를 모아두었어요.")).toBeVisible();
+  const grid = page.locator(".favorites-grid");
+  // 캐러셀 복제 없이 찜한 수만큼만 카드를 렌더링한다.
+  await expect(grid.locator(".favorite-card")).toHaveCount(2);
 
-  const originalCards = rail.locator(".favorite-card:not([aria-hidden])");
-  await expect(originalCards).toHaveCount(2);
-  const beforeBoundary = await prepareLoopBoundary(rail);
-  await rail.dispatchEvent("scrollend");
-  await page.waitForTimeout(100);
-  const afterBoundary = await snapshotVisibleCards(rail);
-  expectSameCardPositions(beforeBoundary, afterBoundary, "favorites rail");
+  await page.getByLabel("제목 검색").fill("달빛");
+  await expect(grid.locator(".favorite-card")).toHaveCount(1);
+  await page.getByLabel("제목 검색").fill("");
 
-  const card = originalCards.filter({ hasText: "달빛 세탁소" });
+  const card = grid
+    .locator(".favorite-card")
+    .filter({ hasText: "달빛 세탁소" });
   await expect(card.getByRole("heading", { name: "달빛 세탁소" })).toBeVisible();
   await expect(card.locator("img")).toBeVisible();
 
   await card.getByRole("button", { name: "찜 해제" }).click();
-  await expect(rail).toHaveAttribute("aria-roledescription", "작품 목록");
-  await expect(rail.locator(".favorite-card")).toHaveCount(1);
-  await rail.getByRole("button", { name: "찜 해제" }).click();
+  await expect(grid.locator(".favorite-card")).toHaveCount(1);
+  await grid.getByRole("button", { name: "찜 해제" }).click();
   await expect(
     page.getByRole("heading", { name: "아직 찜한 작품이 없어요" }),
   ).toBeVisible();
@@ -380,6 +450,109 @@ test("실제 결제 없이 고정 패키지로 캔디를 충전한다", async ({
   await expect(page.getByRole("status")).toContainText(
     "데모 캔디 10개를 충전했습니다",
   );
+});
+
+test("0캔디 페이월에서 충전소를 왕복해 회차를 해금한다", async ({ page }) => {
+  const detailResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  const series = await detailResponse.json();
+  const season = series.seasons.find(
+    (candidate: { number: number }) => candidate.number === 1,
+  );
+  const episode = season.episodes.find(
+    (candidate: { number: number }) => candidate.number === 6,
+  );
+
+  await page.goto(`/read/${episode.id}`);
+  await page.getByRole("link", { name: "캔디 충전하고 돌아오기" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/candy\\?returnTo=%2Fread%2F${episode.id}$`),
+  );
+
+  await page.getByRole("button", { name: "데모로 충전" }).first().click();
+  const returnLink = page.getByRole("link", {
+    name: "읽던 회차로 돌아가기 →",
+  });
+  await expect(returnLink).toBeVisible();
+  await returnLink.click();
+  await expect(page).toHaveURL(new RegExp(`/read/${episode.id}$`));
+  await expect(
+    page.getByRole("button", { name: "캔디 1개로 이 화 보기" }),
+  ).toBeEnabled();
+});
+
+test("다음 화 이동이 시즌 경계를 넘어 이어진다", async ({ page }) => {
+  const detailResponse = await page.request.get(
+    "/api/series/moonlight-laundry",
+  );
+  const series = await detailResponse.json();
+  const seasonOne = series.seasons.find(
+    (candidate: { number: number }) => candidate.number === 1,
+  );
+  const seasonTwo = series.seasons.find(
+    (candidate: { number: number }) => candidate.number === 2,
+  );
+  const lastOfSeasonOne = seasonOne.episodes.at(-1);
+  const firstOfSeasonTwo = seasonTwo.episodes[0];
+
+  const readerResponse = await page.request.get(
+    `/api/episodes/${lastOfSeasonOne.id}`,
+  );
+  const reader = await readerResponse.json();
+  expect(reader.navigation.nextEpisodeId).toBe(firstOfSeasonTwo.id);
+  expect(reader.navigation.nextEpisodeSeasonNumber).toBe(2);
+
+  const nextReaderResponse = await page.request.get(
+    `/api/episodes/${firstOfSeasonTwo.id}`,
+  );
+  const nextReader = await nextReaderResponse.json();
+  expect(nextReader.navigation.previousEpisodeId).toBe(lastOfSeasonOne.id);
+});
+
+test("연재 중 시즌의 잠긴 회차는 주문 대신 캔디를 안내한다", async ({
+  page,
+}) => {
+  const detailResponse = await page.request.get("/api/series/rooftop-garden");
+  const series = await detailResponse.json();
+  const season = series.seasons.find(
+    (candidate: { number: number }) => candidate.number === 1,
+  );
+  const episode = season.episodes.find(
+    (candidate: { number: number }) => candidate.number === 6,
+  );
+
+  // 전제: 이 회차는 잠겨 있고 시즌은 연재 중이다.
+  const readerResponse = await page.request.get(
+    `/api/episodes/${episode.id}`,
+  );
+  const reader = await readerResponse.json();
+  expect(reader.access.state).toBe("locked");
+  expect(reader.season.status).toBe("ongoing");
+
+  await page.goto(`/read/${episode.id}`);
+  const paywall = page.locator(".reader-paywall");
+  await expect(
+    paywall.getByText("완결 후 소장본으로 주문할 수 있어요", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    paywall.getByRole("link", { name: /소장하고/ }),
+  ).toHaveCount(0);
+  await expect(
+    paywall.getByRole("button", { name: "캔디 1개로 이 화 보기" }),
+  ).toBeVisible();
+
+  // 연재 시즌 주문 딥링크는 404가 아니라 주문 불가 안내를 보여준다.
+  await page.goto(
+    `/series/rooftop-garden/order?season=${season.id}&volume=2`,
+  );
+  await expect(
+    page.getByRole("heading", {
+      name: "이 권은 시즌 완결 후 주문할 수 있어요.",
+    }),
+  ).toBeVisible();
 });
 
 test("1권 주문 보너스 캔디로 유료 회차를 한 번만 차감해 해금한다", async ({

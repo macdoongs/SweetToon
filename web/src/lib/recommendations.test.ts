@@ -104,4 +104,34 @@ describe("buildRecommendationShelves", () => {
       "속도감과 뜨거운 승부",
     ]);
   });
+
+  it("개인화와 장르 선반 사이에서 같은 작품을 반복하지 않는다", () => {
+    const catalog = [
+      series("liked", "힐링 판타지"),
+      ...Array.from({ length: 12 }, (_, index) =>
+        series(`fantasy-${index + 1}`, "판타지"),
+      ),
+    ];
+    const favorites: FavoriteSeries[] = [
+      {
+        slug: "liked",
+        title: "좋아한 작품",
+        synopsis: "",
+        genre: "힐링 판타지",
+        coverUrl: null,
+        authorName: "작가",
+        addedAt: "2026-07-31T10:00:00.000Z",
+      },
+    ];
+
+    const shelves = buildRecommendationShelves(catalog, favorites, {});
+    const recommendedSlugs = shelves.flatMap((shelf) =>
+      shelf.items.map((item) => item.slug),
+    );
+
+    expect(shelves).toHaveLength(2);
+    expect(shelves[0].items).toHaveLength(8);
+    expect(shelves[1].eyebrow).toBe("Explore by genre");
+    expect(new Set(recommendedSlugs).size).toBe(recommendedSlugs.length);
+  });
 });

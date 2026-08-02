@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import {
@@ -12,6 +13,7 @@ import {
   FileStudioStorage,
   READER_IMAGE_QUALITY,
   READER_IMAGE_WIDTH,
+  type PublishedCover,
   type PublishedFiles,
   type StudioStorage,
   type UploadSession,
@@ -150,6 +152,27 @@ export class R2StudioStorage implements StudioStorage {
       ]);
       throw error;
     }
+  }
+
+  async publishCover(
+    seriesId: string,
+    webp: Buffer,
+  ): Promise<PublishedCover> {
+    const [segment] = safeSegments([seriesId]);
+    const key = `studio/covers/${segment}-${crypto.randomUUID()}.webp`;
+    await this.options.client.send(
+      new PutObjectCommand({
+        Bucket: this.options.bucket,
+        Key: key,
+        Body: webp,
+        ContentType: "image/webp",
+        CacheControl: "public, max-age=31536000, immutable",
+      }),
+    );
+    return {
+      url: `${this.publicBaseUrl}/${key}`,
+      location: `r2://${this.options.bucket}/${key}`,
+    };
   }
 
   async removePublished(directory: string): Promise<void> {

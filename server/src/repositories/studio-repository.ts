@@ -1,5 +1,19 @@
 import { Prisma, PrismaClient } from "@prisma/client";
-import type { AccessPolicyResponse } from "../contracts/studio";
+import type {
+  AccessPolicyResponse,
+  CreateSeriesRequest,
+  CreateSeriesResponse,
+  DraftEpisode,
+  EpisodeVisibility,
+  PackagingRequest,
+  SeasonStatus,
+  SeriesCoverResponse,
+  SeriesInfoResponse,
+  StudioSeasonResponse,
+  StudioSeriesSummary,
+  UpdateEpisodeRequest,
+  UpdateSeriesInfoRequest,
+} from "../contracts/studio";
 
 export type StudioSeason = {
   id: string;
@@ -13,18 +27,72 @@ export type StudioSeason = {
 };
 
 export type CreateStudioEpisodeInput = {
+  requestKey: string;
+  requestFingerprint: string;
   seasonId: string;
   number: number;
   title: string;
   imageUrls: string[];
+  visibility: EpisodeVisibility;
+  manuscriptDir: string;
+};
+
+export type StudioEpisode = {
+  id: string;
+  number: number;
+  title: string;
+  visibility: EpisodeVisibility;
+  manuscriptDir: string | null;
+  season: {
+    id: string;
+    number: number;
+    series: {
+      slug: string;
+      title: string;
+    };
+  };
+};
+
+export type CreatePackagingRequestInput = {
+  requestKey: string;
+  requestFingerprint: string;
+  applicantName: string;
+  bookTitle: string;
+  bookSize: string;
+  coverType: string;
+  quantity: number;
+  memo: string | null;
+  pageCount: number;
+  manuscriptDir: string;
 };
 
 export type CreatedStudioEpisode = {
   id: string;
 };
 
+export type IdempotentStudioEpisode = {
+  requestFingerprint: string;
+  episode: StudioEpisode;
+  pageCount: number;
+};
+
+export type IdempotentSeries = {
+  requestFingerprint: string;
+  response: CreateSeriesResponse;
+};
+
+export type IdempotentPackagingRequest = {
+  requestFingerprint: string;
+  response: PackagingRequest;
+};
+
 export class StudioRepositoryError extends Error {
-  constructor(readonly code: "EPISODE_NUMBER_EXISTS") {
+  constructor(
+    readonly code:
+      | "EPISODE_NUMBER_EXISTS"
+      | "SERIES_SLUG_EXISTS"
+      | "IDEMPOTENCY_KEY_EXISTS",
+  ) {
     super(code);
     this.name = "StudioRepositoryError";
   }
@@ -32,6 +100,9 @@ export class StudioRepositoryError extends Error {
 
 export interface StudioRepository {
   findSeason(id: string): Promise<StudioSeason | null>;
+  findEpisodeByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentStudioEpisode | null>;
   createEpisode(
     input: CreateStudioEpisodeInput,
   ): Promise<CreatedStudioEpisode>;
@@ -41,6 +112,55 @@ export interface StudioRepository {
     freeVolumeCount: number,
     previewEpisodeCount: number,
   ): Promise<AccessPolicyResponse | null>;
+  setEpisodeVisibility(
+    episodeId: string,
+    visibility: EpisodeVisibility,
+  ): Promise<DraftEpisode | null>;
+  updateEpisode(
+    episodeId: string,
+    input: UpdateEpisodeRequest,
+  ): Promise<DraftEpisode | null>;
+  findEpisode(episodeId: string): Promise<StudioEpisode | null>;
+  countCandyEntitlements(episodeId: string): Promise<number>;
+  updateSeriesCover(
+    seriesId: string,
+    coverUrl: string,
+  ): Promise<SeriesCoverResponse | null>;
+  updateSeriesInfo(
+    seriesId: string,
+    input: UpdateSeriesInfoRequest,
+  ): Promise<SeriesInfoResponse | null>;
+  findSeriesByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentSeries | null>;
+  createSeries(
+    input: CreateSeriesRequest,
+    requestFingerprint: string,
+  ): Promise<CreateSeriesResponse>;
+  updateSeasonStatus(
+    seasonId: string,
+    status: SeasonStatus,
+  ): Promise<StudioSeasonResponse | null>;
+  createSeason(seriesId: string): Promise<StudioSeasonResponse | null>;
+  replaceEpisodePages(
+    episodeId: string,
+    imageUrls: string[],
+    manuscriptDir: string,
+  ): Promise<void>;
+  listStudioSeries(): Promise<StudioSeriesSummary[]>;
+  listDraftEpisodes(): Promise<DraftEpisode[]>;
+  createPackagingRequest(
+    input: CreatePackagingRequestInput,
+  ): Promise<PackagingRequest>;
+  findPackagingRequestByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentPackagingRequest | null>;
+  listPackagingRequests(): Promise<PackagingRequest[]>;
+  findPackagingRequest(id: string): Promise<PackagingRequest | null>;
+  updatePackagingStatus(
+    id: string,
+    status: string,
+  ): Promise<PackagingRequest | null>;
 }
 
 export class PrismaStudioRepository implements StudioRepository {
@@ -71,9 +191,13 @@ export class PrismaStudioRepository implements StudioRepository {
       return await this.prisma.$transaction(async (transaction) => {
         const episode = await transaction.episode.create({
           data: {
+            requestKey: input.requestKey,
+            requestFingerprint: input.requestFingerprint,
             seasonId: input.seasonId,
             number: input.number,
             title: input.title,
+            visibility: input.visibility,
+            manuscriptDir: input.manuscriptDir,
           },
         });
         await transaction.page.createMany({
@@ -90,14 +214,39 @@ export class PrismaStudioRepository implements StudioRepository {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
+        if (uniqueTargetIncludes(error, "requestKey")) {
+          throw new StudioRepositoryError("IDEMPOTENCY_KEY_EXISTS");
+        }
         throw new StudioRepositoryError("EPISODE_NUMBER_EXISTS");
       }
       throw error;
     }
   }
 
+  async findEpisodeByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentStudioEpisode | null> {
+    const episode = await this.prisma.episode.findUnique({
+      where: { requestKey },
+      include: {
+        season: { include: { series: true } },
+        _count: { select: { pages: true } },
+      },
+    });
+    if (!episode?.requestFingerprint) return null;
+    return {
+      requestFingerprint: episode.requestFingerprint,
+      episode: toStudioEpisode(episode),
+      pageCount: episode._count.pages,
+    };
+  }
+
   async deleteEpisode(id: string): Promise<void> {
-    await this.prisma.episode.delete({ where: { id } }).catch(() => undefined);
+    try {
+      await this.prisma.episode.delete({ where: { id } });
+    } catch (error) {
+      if (!isPrismaNotFound(error)) throw error;
+    }
   }
 
   async updateAccessPolicy(
@@ -105,13 +254,13 @@ export class PrismaStudioRepository implements StudioRepository {
     freeVolumeCount: number,
     previewEpisodeCount: number,
   ): Promise<AccessPolicyResponse | null> {
-    const updated = await this.prisma.series
-      .update({
+    const updated = await nullWhenNotFound(
+      this.prisma.series.update({
         where: { id: seriesId },
         data: { freeVolumeCount, previewEpisodeCount },
         select: { id: true, freeVolumeCount: true, previewEpisodeCount: true },
-      })
-      .catch(() => null);
+      }),
+    );
     return updated
       ? {
           seriesId: updated.id,
@@ -119,5 +268,458 @@ export class PrismaStudioRepository implements StudioRepository {
           previewEpisodeCount: updated.previewEpisodeCount,
         }
       : null;
+  }
+
+  async setEpisodeVisibility(
+    episodeId: string,
+    visibility: EpisodeVisibility,
+  ): Promise<DraftEpisode | null> {
+    const updated = await nullWhenNotFound(
+      this.prisma.episode.update({
+        where: { id: episodeId },
+        data: { visibility },
+        include: { season: { include: { series: true } } },
+      }),
+    );
+    return updated ? toDraftEpisode(updated) : null;
+  }
+
+  async updateEpisode(
+    episodeId: string,
+    input: UpdateEpisodeRequest,
+  ): Promise<DraftEpisode | null> {
+    try {
+      const updated = await this.prisma.episode.update({
+        where: { id: episodeId },
+        data: {
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.number !== undefined ? { number: input.number } : {}),
+        },
+        include: { season: { include: { series: true } } },
+      });
+      return toDraftEpisode(updated);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new StudioRepositoryError("EPISODE_NUMBER_EXISTS");
+      }
+      if (isPrismaNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  async countCandyEntitlements(episodeId: string): Promise<number> {
+    return this.prisma.candyEpisodeEntitlement.count({
+      where: { episodeId },
+    });
+  }
+
+  async updateSeriesCover(
+    seriesId: string,
+    coverUrl: string,
+  ): Promise<SeriesCoverResponse | null> {
+    const updated = await nullWhenNotFound(
+      this.prisma.series.update({
+        where: { id: seriesId },
+        data: { coverUrl },
+        select: { id: true, coverUrl: true },
+      }),
+    );
+    return updated && updated.coverUrl
+      ? { seriesId: updated.id, coverUrl: updated.coverUrl }
+      : null;
+  }
+
+  async createSeries(
+    input: CreateSeriesRequest,
+    requestFingerprint: string,
+  ): Promise<CreateSeriesResponse> {
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const author =
+          (await transaction.author.findFirst({
+            where: { name: input.authorName },
+            select: { id: true },
+          })) ??
+          (await transaction.author.create({
+            data: { name: input.authorName },
+            select: { id: true },
+          }));
+        const series = await transaction.series.create({
+          data: {
+            requestKey: input.requestKey,
+            requestFingerprint,
+            slug: input.slug,
+            authorId: author.id,
+            title: input.title,
+            synopsis: input.synopsis,
+            genre: input.genre,
+            weekday: input.weekday,
+            seasons: {
+              create: { number: 1, status: "ongoing" },
+            },
+          },
+          include: { seasons: true },
+        });
+        return {
+          seriesId: series.id,
+          slug: series.slug,
+          title: series.title,
+          seasonId: series.seasons[0].id,
+        };
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        if (uniqueTargetIncludes(error, "requestKey")) {
+          throw new StudioRepositoryError("IDEMPOTENCY_KEY_EXISTS");
+        }
+        throw new StudioRepositoryError("SERIES_SLUG_EXISTS");
+      }
+      throw error;
+    }
+  }
+
+  async findSeriesByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentSeries | null> {
+    const series = await this.prisma.series.findUnique({
+      where: { requestKey },
+      include: { seasons: { where: { number: 1 }, take: 1 } },
+    });
+    if (!series?.requestFingerprint || !series.seasons[0]) return null;
+    return {
+      requestFingerprint: series.requestFingerprint,
+      response: {
+        seriesId: series.id,
+        slug: series.slug,
+        title: series.title,
+        seasonId: series.seasons[0].id,
+      },
+    };
+  }
+
+  async updateSeasonStatus(
+    seasonId: string,
+    status: SeasonStatus,
+  ): Promise<StudioSeasonResponse | null> {
+    const updated = await nullWhenNotFound(
+      this.prisma.season.update({
+        where: { id: seasonId },
+        data: { status },
+        select: { id: true, seriesId: true, number: true, status: true },
+      }),
+    );
+    return updated ? toStudioSeasonResponse(updated) : null;
+  }
+
+  async createSeason(
+    seriesId: string,
+  ): Promise<StudioSeasonResponse | null> {
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const latest = await transaction.season.findFirst({
+          where: { seriesId },
+          orderBy: { number: "desc" },
+          select: { number: true },
+        });
+        const created = await transaction.season.create({
+          data: {
+            seriesId,
+            number: (latest?.number ?? 0) + 1,
+            status: "ongoing",
+          },
+          select: { id: true, seriesId: true, number: true, status: true },
+        });
+        return toStudioSeasonResponse(created);
+      });
+    } catch (error) {
+      if (
+        isPrismaNotFound(error) ||
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2003")
+      ) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async updateSeriesInfo(
+    seriesId: string,
+    input: UpdateSeriesInfoRequest,
+  ): Promise<SeriesInfoResponse | null> {
+    const updated = await nullWhenNotFound(
+      this.prisma.series.update({
+        where: { id: seriesId },
+        data: {
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.synopsis !== undefined
+            ? { synopsis: input.synopsis }
+            : {}),
+        },
+        select: { id: true, slug: true, title: true, synopsis: true },
+      }),
+    );
+    return updated
+      ? {
+          seriesId: updated.id,
+          slug: updated.slug,
+          title: updated.title,
+          synopsis: updated.synopsis,
+        }
+      : null;
+  }
+
+  async findEpisode(episodeId: string): Promise<StudioEpisode | null> {
+    const episode = await this.prisma.episode.findUnique({
+      where: { id: episodeId },
+      include: { season: { include: { series: true } } },
+    });
+    if (!episode) return null;
+    return {
+      id: episode.id,
+      number: episode.number,
+      title: episode.title,
+      visibility: episode.visibility === "private" ? "private" : "public",
+      manuscriptDir: episode.manuscriptDir,
+      season: {
+        id: episode.season.id,
+        number: episode.season.number,
+        series: {
+          slug: episode.season.series.slug,
+          title: episode.season.series.title,
+        },
+      },
+    };
+  }
+
+  async replaceEpisodePages(
+    episodeId: string,
+    imageUrls: string[],
+    manuscriptDir: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.page.deleteMany({ where: { episodeId } });
+      await transaction.page.createMany({
+        data: imageUrls.map((imageUrl, index) => ({
+          episodeId,
+          order: index + 1,
+          imageUrl,
+        })),
+      });
+      await transaction.episode.update({
+        where: { id: episodeId },
+        data: { manuscriptDir },
+      });
+    });
+  }
+
+  async listStudioSeries(): Promise<StudioSeriesSummary[]> {
+    const series = await this.prisma.series.findMany({
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: {
+        seasons: {
+          orderBy: { number: "asc" },
+          include: {
+            _count: {
+              select: { episodes: { where: { visibility: "public" } } },
+            },
+          },
+        },
+      },
+    });
+    return series.map((item) => ({
+      id: item.id,
+      slug: item.slug,
+      title: item.title,
+      coverUrl: item.coverUrl,
+      seasons: item.seasons.map((season) => ({
+        id: season.id,
+        number: season.number,
+        title: season.title,
+        status: season.status === "completed" ? "completed" : "ongoing",
+        episodeCount: season._count.episodes,
+      })),
+    }));
+  }
+
+  async listDraftEpisodes(): Promise<DraftEpisode[]> {
+    const episodes = await this.prisma.episode.findMany({
+      where: { visibility: "private" },
+      orderBy: { publishedAt: "desc" },
+      include: { season: { include: { series: true } } },
+    });
+    return episodes.map(toDraftEpisode);
+  }
+
+  async createPackagingRequest(
+    input: CreatePackagingRequestInput,
+  ): Promise<PackagingRequest> {
+    try {
+      const created = await this.prisma.packagingRequest.create({
+        data: input,
+      });
+      return toPackagingRequest(created);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002" &&
+        uniqueTargetIncludes(error, "requestKey")
+      ) {
+        throw new StudioRepositoryError("IDEMPOTENCY_KEY_EXISTS");
+      }
+      throw error;
+    }
+  }
+
+  async findPackagingRequestByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentPackagingRequest | null> {
+    const request = await this.prisma.packagingRequest.findUnique({
+      where: { requestKey },
+    });
+    if (!request?.requestFingerprint) return null;
+    return {
+      requestFingerprint: request.requestFingerprint,
+      response: toPackagingRequest(request),
+    };
+  }
+
+  async listPackagingRequests(): Promise<PackagingRequest[]> {
+    const requests = await this.prisma.packagingRequest.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    return requests.map(toPackagingRequest);
+  }
+
+  async findPackagingRequest(
+    id: string,
+  ): Promise<PackagingRequest | null> {
+    const request = await this.prisma.packagingRequest.findUnique({
+      where: { id },
+    });
+    return request ? toPackagingRequest(request) : null;
+  }
+
+  async updatePackagingStatus(
+    id: string,
+    status: string,
+  ): Promise<PackagingRequest | null> {
+    const updated = await nullWhenNotFound(
+      this.prisma.packagingRequest.update({ where: { id }, data: { status } }),
+    );
+    return updated ? toPackagingRequest(updated) : null;
+  }
+}
+
+function toStudioSeasonResponse(season: {
+  id: string;
+  seriesId: string;
+  number: number;
+  status: string;
+}): StudioSeasonResponse {
+  return {
+    seasonId: season.id,
+    seriesId: season.seriesId,
+    number: season.number,
+    status: season.status === "completed" ? "completed" : "ongoing",
+  };
+}
+
+function toDraftEpisode(
+  episode: Prisma.EpisodeGetPayload<{
+    include: { season: { include: { series: true } } };
+  }>,
+): DraftEpisode {
+  return {
+    id: episode.id,
+    number: episode.number,
+    title: episode.title,
+    publishedAt: episode.publishedAt.toISOString(),
+    season: {
+      id: episode.season.id,
+      number: episode.season.number,
+    },
+    series: {
+      slug: episode.season.series.slug,
+      title: episode.season.series.title,
+    },
+  };
+}
+
+function toStudioEpisode(
+  episode: Prisma.EpisodeGetPayload<{
+    include: { season: { include: { series: true } } };
+  }>,
+): StudioEpisode {
+  return {
+    id: episode.id,
+    number: episode.number,
+    title: episode.title,
+    visibility: episode.visibility === "private" ? "private" : "public",
+    manuscriptDir: episode.manuscriptDir,
+    season: {
+      id: episode.season.id,
+      number: episode.season.number,
+      series: {
+        slug: episode.season.series.slug,
+        title: episode.season.series.title,
+      },
+    },
+  };
+}
+
+function toPackagingRequest(
+  request: Prisma.PackagingRequestGetPayload<Record<string, never>>,
+): PackagingRequest {
+  return {
+    id: request.id,
+    applicantName: request.applicantName,
+    bookTitle: request.bookTitle,
+    bookSize: request.bookSize === "B5" ? "B5" : "A5",
+    coverType:
+      request.coverType === "hardcover" ? "hardcover" : "softcover",
+    quantity: request.quantity,
+    memo: request.memo,
+    pageCount: request.pageCount,
+    status:
+      request.status === "reviewing" ||
+      request.status === "completed" ||
+      request.status === "canceled"
+        ? request.status
+        : "received",
+    createdAt: request.createdAt.toISOString(),
+  };
+}
+
+function uniqueTargetIncludes(
+  error: Prisma.PrismaClientKnownRequestError,
+  field: string,
+): boolean {
+  const target = error.meta?.target;
+  return Array.isArray(target)
+    ? target.some((value) => value === field)
+    : typeof target === "string" && target.includes(field);
+}
+
+function isPrismaNotFound(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2025"
+  );
+}
+
+async function nullWhenNotFound<T>(operation: Promise<T>): Promise<T | null> {
+  try {
+    return await operation;
+  } catch (error) {
+    if (isPrismaNotFound(error)) return null;
+    throw error;
   }
 }

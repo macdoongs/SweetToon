@@ -33,6 +33,11 @@ import { createRealtimeRouter } from "./routes/realtime";
 import type { DemoBotController } from "./realtime/demo-bot-service";
 import { DemoBotUnavailableError } from "./realtime/demo-bot-service";
 import { createDemoBotRouter } from "./routes/demo-bot";
+import { createEpisodeLikeRouter } from "./routes/episode-like";
+import {
+  EpisodeLikeServiceError,
+  type EpisodeLikeUseCases,
+} from "./services/episode-like-service";
 
 const READINESS_TIMEOUT_MS = 2_000;
 
@@ -60,6 +65,7 @@ export type AppOptions = {
   printProvider?: PrintProvider;
   orderService?: OrderUseCases;
   candyService?: CandyUseCases;
+  episodeLikeService?: EpisodeLikeUseCases;
   studioService?: StudioUseCases;
   uploadDir?: string;
   allowedOrigins?: string[];
@@ -77,6 +83,7 @@ export function createApp({
   printProvider = createPrintProvider(),
   orderService,
   candyService,
+  episodeLikeService,
   studioService,
   uploadDir = path.join(process.cwd(), "data", "uploads"),
   allowedOrigins = [],
@@ -196,16 +203,27 @@ export function createApp({
   if (candyService) {
     app.use("/api", createCandyRouter(candyService));
   }
+  if (episodeLikeService) {
+    app.use("/api", createEpisodeLikeRouter(episodeLikeService));
+  }
   if (studioService) {
     app.use(
       "/api",
       createStudioRouter(studioService, {
         mutationGuard: studioMutationGuard,
+        operationsGuard,
         rateLimitStore: uploadRateLimitStore,
         auditLogger,
       }),
     );
   }
+
+  app.use("/api", (_req, res) => {
+    res.status(404).json({
+      code: "API_NOT_FOUND",
+      message: "요청한 API를 찾을 수 없습니다.",
+    });
+  });
 
   app.use(
     (
@@ -228,6 +246,13 @@ export function createApp({
         });
         return;
       }
+      if (error instanceof EpisodeLikeServiceError) {
+        res.status(error.status).json({
+          code: error.code,
+          message: error.message,
+        });
+        return;
+      }
       if (error instanceof DemoBotUnavailableError) {
         res.status(error.status).json({
           code: error.code,
@@ -242,13 +267,31 @@ export function createApp({
         });
         return;
       }
-      if (error instanceof multer.MulterError) {
+      if (
+        error instanceof SyntaxError &&
+        "type" in error &&
+        error.type === "entity.parse.failed"
+      ) {
         res.status(400).json({
-          code: "ARCHIVE_UPLOAD_REJECTED",
+          code: "INVALID_JSON",
+          message: "JSON 요청 본문이 올바르지 않습니다.",
+        });
+        return;
+      }
+      if (error instanceof multer.MulterError) {
+        const isCover = error.field === "cover";
+        res.status(400).json({
+          code: isCover
+            ? "COVER_UPLOAD_REJECTED"
+            : "ARCHIVE_UPLOAD_REJECTED",
           message:
             error.code === "LIMIT_FILE_SIZE"
-              ? "ZIP 파일은 25MB 이하로 올려 주세요."
-              : "ZIP 파일 하나만 올려 주세요.",
+              ? isCover
+                ? "표지 이미지는 5MB 이하로 올려 주세요."
+                : "ZIP 파일은 25MB 이하로 올려 주세요."
+              : isCover
+                ? "표지 이미지 하나만 올려 주세요."
+                : "ZIP 파일 하나만 올려 주세요.",
         });
         return;
       }

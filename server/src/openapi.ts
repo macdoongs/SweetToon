@@ -88,6 +88,89 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/discovery/sitemap": {
+      get: {
+        tags: ["Reader"],
+        summary: "검색 엔진용 공개 작품·회차 갱신 정보를 조회합니다.",
+        responses: {
+          "200": {
+            description: "공개 작품과 공개 회차의 sitemap 투영 데이터",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/discovery/recent-episodes": {
+      get: {
+        tags: ["Reader"],
+        summary: "RSS용 최근 공개 회차를 전체 작품에서 조회합니다.",
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 50,
+              default: 50,
+            },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "발행일 최신순 공개 회차",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+        },
+      },
+    },
+    "/api/discovery/shorts": {
+      get: {
+        tags: ["Reader"],
+        summary: "공개·무료 첫 회차의 쇼츠 미리보기를 무작위로 조회합니다.",
+        description:
+          "정식 열람 진도와 presence를 만들지 않으며 작품별 첫 2페이지만 반환합니다.",
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 20,
+              default: 10,
+            },
+          },
+          {
+            name: "exclude",
+            in: "query",
+            description:
+              "이번 세션에서 이미 제시한 작품 slug를 쉼표로 구분해 제외합니다.",
+            schema: { type: "string", maxLength: 4100 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "무작위 쇼츠 미리보기 묶음",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+        },
+      },
+    },
     "/api/episodes/{id}": {
       get: {
         tags: ["Reader"],
@@ -105,6 +188,35 @@ export const openApiDocument = {
               },
             },
           },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/episodes/{id}/like": {
+      put: {
+        tags: ["Reader"],
+        summary: "익명 브라우저의 회차 좋아요 상태를 멱등적으로 변경합니다.",
+        description:
+          "브라우저 UUID 원문은 저장하지 않고 서버에서 SHA-256 해시로 변환합니다.",
+        parameters: [{ $ref: "#/components/parameters/Id" }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/EpisodeLikeRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "변경된 좋아요 상태와 회차 집계",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/EpisodeLikeResponse" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
           "404": { $ref: "#/components/responses/NotFound" },
         },
       },
@@ -334,7 +446,7 @@ export const openApiDocument = {
     "/api/episodes/{id}/candy-unlock": {
       post: {
         tags: ["Candy"],
-        summary: "캔디 1개로 유료 회차를 영구 해금합니다.",
+        summary: "캔디 1개로 유료 회차를 해당 지갑 토큰에 해금합니다.",
         parameters: [{ $ref: "#/components/parameters/Id" }],
         requestBody: {
           required: true,
@@ -429,6 +541,24 @@ export const openApiDocument = {
               maximum: 50,
               default: 20,
             },
+          },
+          {
+            name: "status",
+            in: "query",
+            description: "active=제작 진행, done=완료·취소",
+            schema: { type: "string", enum: ["active", "done"] },
+          },
+          {
+            name: "source",
+            in: "query",
+            description: "reader=독자 주문, bot=봇 데모 주문",
+            schema: { type: "string", enum: ["reader", "bot"] },
+          },
+          {
+            name: "series",
+            in: "query",
+            description: "작품 제목 부분 일치 검색",
+            schema: { type: "string", maxLength: 80 },
           },
         ],
         responses: {
@@ -608,6 +738,7 @@ export const openApiDocument = {
               schema: {
                 type: "object",
                 required: [
+                  "requestKey",
                   "sessionId",
                   "seasonId",
                   "number",
@@ -615,10 +746,132 @@ export const openApiDocument = {
                   "pageIds",
                 ],
                 properties: {
+                  requestKey: { type: "string", format: "uuid" },
                   sessionId: { type: "string", format: "uuid" },
                   seasonId: { type: "string" },
                   number: { type: "integer", minimum: 1 },
                   title: { type: "string" },
+                  pageIds: {
+                    type: "array",
+                    items: { type: "string", format: "uuid" },
+                  },
+                  visibility: {
+                    type: "string",
+                    enum: ["public", "private"],
+                    default: "public",
+                    description:
+                      "private은 목록·피드에 노출되지 않는 비공개 보관",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "발행된 에피소드" },
+          "409": {
+            description: "중복 회차, 완결 시즌 또는 요청 키 재사용",
+          },
+        },
+      },
+    },
+    "/api/studio/episodes/{episodeId}/visibility": {
+      patch: {
+        tags: ["Studio"],
+        summary: "비공개 보관 에피소드를 공개하거나 다시 비공개로 돌립니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["visibility"],
+                properties: {
+                  visibility: {
+                    type: "string",
+                    enum: ["public", "private"],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "변경된 에피소드 요약" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/studio/series/{seriesId}/cover": {
+      post: {
+        tags: ["Studio"],
+        summary: "작품 표지 이미지를 올려 WebP로 교체합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "seriesId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                required: ["cover"],
+                properties: {
+                  cover: {
+                    type: "string",
+                    format: "binary",
+                    description: "5MB 이하 PNG/JPG/WebP",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "새 표지 URL" },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/studio/episodes/{episodeId}/pages": {
+      patch: {
+        tags: ["Studio"],
+        summary:
+          "새 업로드 세션의 원고로 기존 에피소드의 페이지 전체를 교체합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["sessionId", "pageIds"],
+                properties: {
+                  sessionId: { type: "string", format: "uuid" },
                   pageIds: {
                     type: "array",
                     items: { type: "string", format: "uuid" },
@@ -629,8 +882,315 @@ export const openApiDocument = {
           },
         },
         responses: {
-          "201": { description: "발행된 에피소드" },
-          "409": { description: "중복 회차 또는 완결 시즌" },
+          "200": { description: "교체된 에피소드 요약" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/studio/seasons/{seasonId}/status": {
+      patch: {
+        tags: ["Studio"],
+        summary:
+          "시즌을 완결 처리하거나 연재로 되돌립니다. 완결 시즌만 소장본 주문이 가능합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "seasonId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["status"],
+                properties: {
+                  status: {
+                    type: "string",
+                    enum: ["ongoing", "completed"],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "변경된 시즌" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/studio/series/{seriesId}/seasons": {
+      post: {
+        tags: ["Studio"],
+        summary: "작품에 다음 번호의 연재 시즌을 추가합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "seriesId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "201": { description: "만들어진 시즌" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/api/studio/packaging-requests/{requestId}/status": {
+      patch: {
+        tags: ["Studio"],
+        summary:
+          "운영자가 패키징 신청을 접수→검토→제작 완료(또는 취소) 순서로 진행합니다.",
+        security: [{ operationsApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "requestId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["status"],
+                properties: {
+                  status: {
+                    type: "string",
+                    enum: ["reviewing", "completed", "canceled"],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "변경된 패키징 신청" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { description: "허용되지 않는 진행 순서" },
+        },
+      },
+    },
+    "/api/studio/drafts": {
+      get: {
+        tags: ["Studio"],
+        summary: "비공개 보관 중인 에피소드 목록을 조회합니다.",
+        responses: {
+          "200": { description: "비공개 에피소드 목록" },
+        },
+      },
+    },
+    "/api/studio/packaging-requests": {
+      get: {
+        tags: ["Studio"],
+        summary: "책 패키징 서비스 신청 내역을 조회합니다.",
+        responses: {
+          "200": { description: "최근 패키징 신청 목록" },
+        },
+      },
+      post: {
+        tags: ["Studio"],
+        summary: "업로드한 원고 묶음으로 책 패키징 서비스를 신청합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: [
+                  "requestKey",
+                  "sessionId",
+                  "pageIds",
+                  "applicantName",
+                  "bookTitle",
+                  "bookSize",
+                  "coverType",
+                  "quantity",
+                ],
+                properties: {
+                  requestKey: { type: "string", format: "uuid" },
+                  sessionId: { type: "string", format: "uuid" },
+                  pageIds: {
+                    type: "array",
+                    items: { type: "string", format: "uuid" },
+                  },
+                  applicantName: { type: "string" },
+                  bookTitle: { type: "string" },
+                  bookSize: { type: "string", enum: ["A5", "B5"] },
+                  coverType: {
+                    type: "string",
+                    enum: ["softcover", "hardcover"],
+                  },
+                  quantity: { type: "integer", minimum: 1, maximum: 500 },
+                  memo: { type: "string", nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "접수된 패키징 신청" },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { description: "같은 요청 키를 다른 내용에 재사용" },
+        },
+      },
+    },
+    "/api/studio/series": {
+      get: {
+        tags: ["Studio"],
+        summary:
+          "스튜디오 관리용 전체 작품 목록을 최신 생성 순으로 조회합니다.",
+        responses: {
+          "200": { description: "작품·시즌 요약 목록" },
+        },
+      },
+      post: {
+        tags: ["Studio"],
+        summary: "새 작품과 첫 연재 시즌을 만듭니다.",
+        security: [{ studioApiKey: [] }, {}],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: [
+                  "requestKey",
+                  "slug",
+                  "title",
+                  "synopsis",
+                  "genre",
+                  "weekday",
+                  "authorName",
+                ],
+                properties: {
+                  requestKey: { type: "string", format: "uuid" },
+                  slug: {
+                    type: "string",
+                    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  },
+                  title: { type: "string", maxLength: 80 },
+                  synopsis: { type: "string", maxLength: 1000 },
+                  genre: { type: "string", maxLength: 40 },
+                  weekday: {
+                    type: "string",
+                    enum: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+                  },
+                  authorName: { type: "string", maxLength: 40 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "만들어진 작품과 시즌 1" },
+          "409": { description: "slug 중복 또는 요청 키 재사용" },
+        },
+      },
+    },
+    "/api/studio/episodes/{episodeId}": {
+      patch: {
+        tags: ["Studio"],
+        summary: "에피소드 제목이나 회차 번호를 부분 수정합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                minProperties: 1,
+                properties: {
+                  title: { type: "string", minLength: 1, maxLength: 80 },
+                  number: { type: "integer", minimum: 1, maximum: 10000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "수정된 에피소드 요약" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { description: "이미 있는 회차 번호" },
+        },
+      },
+      delete: {
+        tags: ["Studio"],
+        summary: "에피소드와 발행 원고 파일을 삭제합니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "episodeId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "204": { description: "삭제 완료" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": {
+            description: "캔디로 열람한 독자가 있어 삭제 불가",
+          },
+        },
+      },
+    },
+    "/api/studio/series/{seriesId}": {
+      patch: {
+        tags: ["Studio"],
+        summary:
+          "작품의 표시 정보(제목, 줄거리)를 부분 수정합니다. slug는 바뀌지 않습니다.",
+        security: [{ studioApiKey: [] }, {}],
+        parameters: [
+          {
+            name: "seriesId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                minProperties: 1,
+                properties: {
+                  title: { type: "string", minLength: 1, maxLength: 80 },
+                  synopsis: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 1000,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "수정된 작품 정보" },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },
@@ -701,6 +1261,23 @@ export const openApiDocument = {
       },
     },
     schemas: {
+      EpisodeLikeRequest: {
+        type: "object",
+        required: ["viewerToken", "liked"],
+        properties: {
+          viewerToken: { type: "string", format: "uuid" },
+          liked: { type: "boolean" },
+        },
+      },
+      EpisodeLikeResponse: {
+        type: "object",
+        required: ["episodeId", "liked", "likeCount"],
+        properties: {
+          episodeId: { type: "string" },
+          liked: { type: "boolean" },
+          likeCount: { type: "integer", minimum: 0 },
+        },
+      },
       Error: {
         type: "object",
         required: ["code", "message"],

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DemoResetButton } from "./demo-reset-button";
 import { DiscoverLink } from "./discover-link";
 
 const repositoryUrl = "https://github.com/macdoongs/SweetToon";
@@ -15,7 +16,7 @@ export function SiteFooter() {
           <p>
             좋아한 웹툰의 마지막 장면 다음을,
             <br />
-            한 권의 소장본으로 이어갑니다.
+            5화씩 한 권의 소장본으로 이어갑니다.
           </p>
           <span className="site-footer__badge">Portfolio demo</span>
         </div>
@@ -24,6 +25,7 @@ export function SiteFooter() {
           <div>
             <strong>서비스</strong>
             <DiscoverLink>작품 둘러보기</DiscoverLink>
+            <Link href="/shorts">웹툰 쇼츠</Link>
             <Link href="/orders">주문 현황</Link>
             <Link href="/studio">작가 스튜디오</Link>
           </div>
@@ -50,7 +52,8 @@ export function SiteFooter() {
         <p>
           SweetToon은 포트폴리오를 위해 만든 가상 서비스입니다. 표시된 작품,
           작가와 주문 정보는 모두 데모 데이터이며 개인정보 입력을 권장하지
-          않습니다.
+          않습니다. 이 브라우저에 남은 찜·읽기 진행도·캔디·이용권 기록은
+          언제든 지울 수 있어요. <DemoResetButton />
         </p>
         <small>© 2026 SweetToon. Built for the SweetBook assignment.</small>
       </div>

@@ -2,8 +2,14 @@ import { z } from "zod";
 
 export const OrderIdParamSchema = z.string().cuid();
 export const SeasonIdSchema = z.string().cuid();
-export const BookSizeSchema = z.enum(["A5", "B5"]);
-export const CoverTypeSchema = z.enum(["softcover", "hardcover"]);
+export const BookSizeSchema = z.enum(
+  ["A5", "B5"],
+  "판형은 A5와 B5 중에서 선택해 주세요.",
+);
+export const CoverTypeSchema = z.enum(
+  ["softcover", "hardcover"],
+  "표지는 소프트커버와 하드커버 중에서 선택해 주세요.",
+);
 export const OrderStatusSchema = z.enum([
   "pending",
   "processing",
@@ -17,7 +23,11 @@ export const PrintQuoteRequestSchema = z.object({
   volumeNumber: z.number().int().positive(),
   bookSize: BookSizeSchema,
   coverType: CoverTypeSchema,
-  quantity: z.number().int().min(1).max(50),
+  quantity: z
+    .number("수량은 숫자로 입력해 주세요.")
+    .int("수량은 정수로 입력해 주세요.")
+    .min(1, "수량은 1권 이상 입력해 주세요.")
+    .max(50, "수량은 한 번에 50권까지 주문할 수 있어요."),
 });
 
 export const PrintQuoteResponseSchema = z.object({
@@ -47,8 +57,17 @@ export const PrintQuoteResponseSchema = z.object({
 export const CreateOrderRequestSchema = PrintQuoteRequestSchema.extend({
   requestKey: z.string().uuid(),
   candyWalletToken: z.string().uuid(),
-  ordererName: z.string().trim().min(2).max(30),
-  memo: z.string().trim().max(200).nullable().optional(),
+  ordererName: z
+    .string("주문자 닉네임을 입력해 주세요.")
+    .trim()
+    .min(2, "주문자 닉네임은 2자 이상 입력해 주세요.")
+    .max(30, "주문자 닉네임은 30자 이하로 입력해 주세요."),
+  memo: z
+    .string()
+    .trim()
+    .max(200, "메모는 200자 이하로 적어 주세요.")
+    .nullable()
+    .optional(),
 });
 
 export const OrderTransitionRequestSchema = z.object({
@@ -58,6 +77,11 @@ export const OrderTransitionRequestSchema = z.object({
 export const OrderListQuerySchema = z.object({
   cursor: OrderIdParamSchema.optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
+  // active=제작 진행(pending/processing/shipped), done=완료·취소
+  status: z.enum(["active", "done"]).optional(),
+  // reader=실제 데모 사용자 주문, bot=봇 데모 주문
+  source: z.enum(["reader", "bot"]).optional(),
+  series: z.string().trim().min(1).max(80).optional(),
 });
 
 export const OrderEventSchema = z.object({

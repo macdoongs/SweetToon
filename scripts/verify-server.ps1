@@ -20,8 +20,18 @@ function Invoke-Checked {
     }
 }
 
+function Normalize-LineEndings {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Value
+    )
+
+    return $Value.Replace("`r`n", "`n").Replace("`r", "`n")
+}
+
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $serverRoot = Join-Path $repositoryRoot "server"
+$dbmlPath = Join-Path $repositoryRoot "docs/database/schema.dbml"
 $previousDatabaseUrl = [Environment]::GetEnvironmentVariable(
     "DATABASE_URL",
     "Process"
@@ -44,7 +54,25 @@ try {
     }
 
     Invoke-Checked { npx prisma validate } "Prisma schema validation"
+    if (-not (Test-Path -LiteralPath $dbmlPath)) {
+        throw "Tracked DBML documentation is missing: $dbmlPath"
+    }
+    $dbmlBytesBefore = [System.IO.File]::ReadAllBytes($dbmlPath)
+    $dbmlContentBefore = Normalize-LineEndings(
+        [System.IO.File]::ReadAllText($dbmlPath)
+    )
+    Invoke-Checked { npm run db:docs } "Prisma DBML generation"
+    $dbmlContentAfter = Normalize-LineEndings(
+        [System.IO.File]::ReadAllText($dbmlPath)
+    )
+    if ($dbmlContentBefore -cne $dbmlContentAfter) {
+        throw "Prisma DBML documentation drifted. Commit the regenerated docs/database/schema.dbml file."
+    }
     Invoke-Checked { npm run build } "server TypeScript build"
+    # Both db:docs and build run prisma generate, whose DBML generator follows
+    # the host newline convention. Preserve the tracked bytes after the final
+    # generation when only line endings changed so verification stays clean.
+    [System.IO.File]::WriteAllBytes($dbmlPath, $dbmlBytesBefore)
     Invoke-Checked { npm test } "server tests"
 }
 finally {

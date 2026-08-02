@@ -428,31 +428,61 @@ try {
               throw new Error('natural page order failed: ' + names)
             }
 
+            const publishInput = {
+              requestKey: crypto.randomUUID(),
+              sessionId: preview.sessionId,
+              seasonId: selected.season.id,
+              number: episodeNumber,
+              title: 'Smoke Episode',
+              pageIds: preview.pages.map(page => page.id)
+            }
             const created = await json('/api/studio/episodes', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json'
               },
-              body: JSON.stringify({
-                sessionId: preview.sessionId,
-                seasonId: selected.season.id,
-                number: episodeNumber,
-                title: 'Smoke Episode',
-                pageIds: preview.pages.map(page => page.id)
-              })
+              body: JSON.stringify(publishInput)
             })
+            const replayed = await json('/api/studio/episodes', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+              },
+              body: JSON.stringify(publishInput)
+            })
+            if (replayed.episodeId !== created.episodeId) {
+              throw new Error('studio episode idempotency replay failed')
+            }
             const episode = await json(
               '/api/episodes/' + encodeURIComponent(created.episodeId)
             )
             if (episode.pages.length !== 3) {
               throw new Error('studio episode pages were not persisted')
             }
-            const imageResponse = await fetch(base + episode.pages[0].imageUrl)
+            // filesystem 모드는 API 상대 경로, S3 호환 모드는 브라우저용 절대
+            // URL을 준다. 후자의 host는 컨테이너 안에서 해석되지 않으므로
+            // 내부 endpoint로 바꿔 같은 객체를 확인한다.
+            const imageTarget = new URL(episode.pages[0].imageUrl, base)
+            const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL
+            const storageEndpoint = process.env.R2_ENDPOINT
+            if (publicBaseUrl && storageEndpoint) {
+              const publicOrigin = new URL(publicBaseUrl).origin
+              if (imageTarget.origin === publicOrigin) {
+                const internal = new URL(storageEndpoint)
+                imageTarget.protocol = internal.protocol
+                imageTarget.host = internal.host
+              }
+            }
+            const imageResponse = await fetch(imageTarget)
             if (!imageResponse.ok) {
               throw new Error('published studio image is unavailable')
             }
-            console.log('studio-episode=' + created.episodeId)
+            console.log(
+              'studio-episode=' + created.episodeId +
+                ' image=' + imageTarget.origin
+            )
           }
           verifyStudioFlow().catch(error => {
             console.error(error)
@@ -477,6 +507,53 @@ try {
             })
         "
     } "web SSR check"
+
+    Invoke-Checked {
+        docker compose exec -T web node -e "
+          Promise.all([
+            fetch('http://server:4000/api/discovery/recent-episodes?limit=2'),
+            fetch('http://localhost:3000/feed.xml'),
+            fetch('http://localhost:3000/sitemap.xml'),
+            fetch('http://localhost:3000')
+          ])
+            .then(async ([discoveryResponse, feedResponse, sitemapResponse, homeResponse]) => {
+              if (
+                !discoveryResponse.ok ||
+                !feedResponse.ok ||
+                !sitemapResponse.ok ||
+                !homeResponse.ok
+              ) {
+                throw new Error('discovery response unavailable')
+              }
+              const discovery = await discoveryResponse.json()
+              const feed = await feedResponse.text()
+              const sitemap = await sitemapResponse.text()
+              const home = await homeResponse.text()
+              const feedItemCount = (feed.match(/<item>/g) ?? []).length
+              const sitemapUrlCount = (sitemap.match(/<url>/g) ?? []).length
+              if (
+                discovery.items.length !== 2 ||
+                feedItemCount !== 50 ||
+                !feed.includes('<dc:creator>') ||
+                feed.includes('<author>') ||
+                sitemapUrlCount < 100 ||
+                !sitemap.includes('<lastmod>') ||
+                /googletagmanager|sweettoon-google-analytics/.test(home)
+              ) {
+                throw new Error('discovery contract verification failed')
+              }
+              console.log(
+                'rss-items=' + feedItemCount +
+                  ' sitemap-urls=' + sitemapUrlCount +
+                  ' analytics=disabled'
+              )
+            })
+            .catch(error => {
+              console.error(error)
+              process.exit(1)
+            })
+        "
+    } "RSS, sitemap, and optional analytics check"
 }
 catch {
     if ($composeTouched) {

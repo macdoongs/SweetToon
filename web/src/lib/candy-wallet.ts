@@ -2,6 +2,7 @@
 
 const TOKEN_KEY = "sweettoon:candy-wallet-token";
 export const CANDY_UPDATED_EVENT = "sweettoon:candy-updated";
+let volatileToken: string | null = null;
 
 export type CandyWallet = {
   balance: number;
@@ -24,13 +25,28 @@ export type CandyChargeResponse = CandyWallet & {
 };
 
 export function getCandyWalletToken(): string {
-  const existing = localStorage.getItem(TOKEN_KEY);
-  if (existing) return existing;
-  const token = crypto.randomUUID();
-  localStorage.setItem(TOKEN_KEY, token);
-  return token;
+  try {
+    const existing = localStorage.getItem(TOKEN_KEY);
+    if (existing) return existing;
+    const token = volatileToken ?? crypto.randomUUID();
+    localStorage.setItem(TOKEN_KEY, token);
+    volatileToken = token;
+    return token;
+  } catch {
+    volatileToken ??= crypto.randomUUID();
+    return volatileToken;
+  }
 }
 
 export function notifyCandyUpdated() {
   window.dispatchEvent(new Event(CANDY_UPDATED_EVENT));
+}
+
+export function forgetCandyWalletToken() {
+  volatileToken = null;
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // 저장소 접근이 막혀 있으면 메모리 토큰만 비운다.
+  }
 }

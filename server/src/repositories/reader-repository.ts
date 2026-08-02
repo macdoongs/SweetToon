@@ -7,6 +7,12 @@ import type {
   SeriesSummary,
 } from "../contracts/reader";
 import { WeekdaySchema } from "../contracts/reader";
+import type {
+  DiscoveryEpisode,
+  SitemapDiscoveryResponse,
+} from "../contracts/discovery";
+import type { ShortsPreviewItem } from "../contracts/shorts";
+import { orderShortsForVariety } from "./shorts-variety";
 
 export interface ReaderRepository {
   listSeries(query: SeriesListQuery): Promise<SeriesListResponse>;
@@ -18,21 +24,63 @@ export interface ReaderRepository {
     id: string,
     accessToken?: string,
   ): Promise<EpisodeReader | null>;
+  listSitemapDiscovery(): Promise<SitemapDiscoveryResponse>;
+  listRecentEpisodes(limit: number): Promise<DiscoveryEpisode[]>;
+  listShortsPreviews(
+    limit: number,
+    excludeSlugs?: string[],
+  ): Promise<ShortsPreviewItem[]>;
 }
+
+const PUBLIC_EPISODES = { visibility: "public" } as const;
 
 const seriesSummaryInclude = {
   author: true,
   seasons: {
     select: {
       status: true,
-      _count: { select: { episodes: true } },
+      _count: {
+        select: { episodes: { where: PUBLIC_EPISODES } },
+      },
       episodes: {
+        where: PUBLIC_EPISODES,
         orderBy: { publishedAt: "desc" as const },
         take: 1,
       },
     },
   },
 } satisfies Prisma.SeriesInclude;
+
+const shortsSeriesSelect = {
+  slug: true,
+  title: true,
+  synopsis: true,
+  genre: true,
+  coverUrl: true,
+  freeVolumeCount: true,
+  previewEpisodeCount: true,
+  author: { select: { name: true } },
+  seasons: {
+    orderBy: { number: "asc" as const },
+    select: {
+      episodes: {
+        where: PUBLIC_EPISODES,
+        orderBy: [{ number: "asc" as const }, { id: "asc" as const }],
+        select: {
+          id: true,
+          number: true,
+          title: true,
+          likeCount: true,
+          pages: {
+            orderBy: { order: "asc" as const },
+            take: 2,
+            select: { id: true, order: true, imageUrl: true },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.SeriesSelect;
 
 const WEEKDAY_ORDER = new Map(
   WeekdaySchema.options.map((weekday, index) => [weekday, index]),
@@ -85,6 +133,38 @@ function toSeriesSummary(item: SeriesSummaryRecord): SeriesSummary {
               : "locked",
         }
       : null,
+  };
+}
+
+function toDiscoveryEpisode(
+  episode: {
+    id: string;
+    number: number;
+    title: string;
+    publishedAt: Date;
+    updatedAt: Date;
+  },
+  series: {
+    slug: string;
+    title: string;
+    synopsis: string;
+    genre: string;
+    author: { name: string };
+  },
+): DiscoveryEpisode {
+  return {
+    id: episode.id,
+    number: episode.number,
+    title: episode.title,
+    publishedAt: episode.publishedAt.toISOString(),
+    updatedAt: episode.updatedAt.toISOString(),
+    series: {
+      slug: series.slug,
+      title: series.title,
+      synopsis: series.synopsis,
+      genre: series.genre,
+      authorName: series.author.name,
+    },
   };
 }
 
@@ -226,6 +306,135 @@ export class PrismaReaderRepository implements ReaderRepository {
     );
   }
 
+  async listSitemapDiscovery(): Promise<SitemapDiscoveryResponse> {
+    const series = await this.prisma.series.findMany({
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      include: {
+        author: { select: { name: true } },
+        seasons: {
+          select: {
+            episodes: {
+              where: PUBLIC_EPISODES,
+              orderBy: [{ publishedAt: "asc" }, { id: "asc" }],
+              select: {
+                id: true,
+                number: true,
+                title: true,
+                publishedAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      series: series.map((item) => {
+        const latestEpisodeUpdate = item.seasons
+          .flatMap((season) => season.episodes)
+          .reduce(
+            (latest, episode) =>
+              episode.updatedAt > latest ? episode.updatedAt : latest,
+            item.updatedAt,
+          );
+        return {
+          slug: item.slug,
+          status: item.status === "completed" ? "completed" : "ongoing",
+          coverUrl: item.coverUrl,
+          updatedAt: latestEpisodeUpdate.toISOString(),
+        };
+      }),
+      episodes: series.flatMap((item) =>
+        item.seasons.flatMap((season) =>
+          season.episodes.map((episode) =>
+            toDiscoveryEpisode(episode, item),
+          ),
+        ),
+      ),
+    };
+  }
+
+  async listRecentEpisodes(limit: number): Promise<DiscoveryEpisode[]> {
+    const episodes = await this.prisma.episode.findMany({
+      where: PUBLIC_EPISODES,
+      orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+      take: limit,
+      include: {
+        season: {
+          include: {
+            series: { include: { author: { select: { name: true } } } },
+          },
+        },
+      },
+    });
+    return episodes.map((episode) =>
+      toDiscoveryEpisode(episode, episode.season.series),
+    );
+  }
+
+  async listShortsPreviews(
+    limit: number,
+    excludeSlugs: string[] = [],
+  ): Promise<ShortsPreviewItem[]> {
+    const series = await this.prisma.series.findMany({
+      where: {
+        ...(excludeSlugs.length > 0
+          ? { slug: { notIn: excludeSlugs } }
+          : {}),
+        seasons: {
+          some: {
+            episodes: {
+              some: { ...PUBLIC_EPISODES, pages: { some: {} } },
+            },
+          },
+        },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: shortsSeriesSelect,
+    });
+
+    const candidates = series.flatMap((item) => {
+      const freeEpisodeLimit =
+        item.freeVolumeCount * 5 + item.previewEpisodeCount;
+      const episode = item.seasons
+        .flatMap((season) => season.episodes)
+        .find(
+          (candidate) =>
+            candidate.number <= freeEpisodeLimit && candidate.pages.length > 0,
+        );
+      if (!episode) return [];
+      return [
+        {
+          series: {
+            slug: item.slug,
+            title: item.title,
+            synopsis: item.synopsis,
+            genre: item.genre,
+            coverUrl: item.coverUrl,
+            authorName: item.author.name,
+          },
+          episode: {
+            id: episode.id,
+            number: episode.number,
+            title: episode.title,
+            likeCount: episode.likeCount,
+          },
+          pages: episode.pages,
+        },
+      ];
+    });
+
+    for (let index = candidates.length - 1; index > 0; index -= 1) {
+      const target = Math.floor(Math.random() * (index + 1));
+      [candidates[index], candidates[target]] = [
+        candidates[target],
+        candidates[index],
+      ];
+    }
+    return orderShortsForVariety(candidates, limit);
+  }
+
   async findSeriesBySlug(slug: string): Promise<SeriesDetail | null> {
     const series = await this.prisma.series.findUnique({
       where: { slug },
@@ -235,6 +444,7 @@ export class PrismaReaderRepository implements ReaderRepository {
           orderBy: { number: "asc" },
           include: {
             episodes: {
+              where: PUBLIC_EPISODES,
               orderBy: { number: "asc" },
             },
           },
@@ -294,6 +504,7 @@ export class PrismaReaderRepository implements ReaderRepository {
           include: {
             series: true,
             episodes: {
+              where: PUBLIC_EPISODES,
               orderBy: { number: "asc" },
               select: { id: true, number: true },
             },
@@ -306,9 +517,27 @@ export class PrismaReaderRepository implements ReaderRepository {
       return null;
     }
 
-    const episodeIndex = episode.season.episodes.findIndex(
+    // 이전·다음 이동은 시즌 경계를 넘어 작품 전체의
+    // (시즌 번호, 회차 번호) 순서로 계산한다.
+    const seriesEpisodes = await this.prisma.episode.findMany({
+      where: {
+        ...PUBLIC_EPISODES,
+        season: { seriesId: episode.season.seriesId },
+      },
+      orderBy: [{ season: { number: "asc" } }, { number: "asc" }],
+      select: {
+        id: true,
+        number: true,
+        season: { select: { number: true } },
+      },
+    });
+    const episodeIndex = seriesEpisodes.findIndex(
       (candidate) => candidate.id === episode.id,
     );
+    const nextEpisode =
+      episodeIndex >= 0 && episodeIndex < seriesEpisodes.length - 1
+        ? seriesEpisodes[episodeIndex + 1]
+        : null;
     const volumeNumber = Math.ceil(episode.number / 5);
     const isFree =
       episode.number <=
@@ -349,7 +578,9 @@ export class PrismaReaderRepository implements ReaderRepository {
       id: episode.id,
       number: episode.number,
       title: episode.title,
+      visibility: episode.visibility === "private" ? "private" : "public",
       publishedAt: episode.publishedAt.toISOString(),
+      likeCount: episode.likeCount,
       series: {
         id: episode.season.series.id,
         slug: episode.season.series.slug,
@@ -359,6 +590,8 @@ export class PrismaReaderRepository implements ReaderRepository {
         id: episode.season.id,
         number: episode.season.number,
         title: episode.season.title,
+        status:
+          episode.season.status === "completed" ? "completed" : "ongoing",
       },
       pages: pages.map((page) => ({
         id: page.id,
@@ -373,14 +606,10 @@ export class PrismaReaderRepository implements ReaderRepository {
       },
       navigation: {
         previousEpisodeId:
-          episodeIndex > 0
-            ? episode.season.episodes[episodeIndex - 1].id
-            : null,
-        nextEpisodeId:
-          episodeIndex >= 0 &&
-          episodeIndex < episode.season.episodes.length - 1
-            ? episode.season.episodes[episodeIndex + 1].id
-            : null,
+          episodeIndex > 0 ? seriesEpisodes[episodeIndex - 1].id : null,
+        nextEpisodeId: nextEpisode?.id ?? null,
+        // 다음 화가 다른 시즌이면 리더가 시즌 시작 CTA를 보여줄 수 있다.
+        nextEpisodeSeasonNumber: nextEpisode?.season.number ?? null,
       },
     };
   }

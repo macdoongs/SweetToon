@@ -68,9 +68,16 @@ export type EpisodeReader = {
   id: string;
   number: number;
   title: string;
+  visibility?: "public" | "private";
   publishedAt: string;
+  likeCount: number;
   series: { id: string; slug: string; title: string };
-  season: { id: string; number: number; title: string | null };
+  season: {
+    id: string;
+    number: number;
+    title: string | null;
+    status: PublicationStatus;
+  };
   pages: Array<{
     id: string;
     order: number;
@@ -85,5 +92,6 @@ export type EpisodeReader = {
   navigation: {
     previousEpisodeId: string | null;
     nextEpisodeId: string | null;
+    nextEpisodeSeasonNumber: number | null;
   };
 };

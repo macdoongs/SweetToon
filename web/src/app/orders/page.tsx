@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
-import { OrderListPage } from "@/components/order-list-page";
-import { getOrders } from "@/lib/server-api";
+import { MyOrdersPage } from "@/components/my-orders-page";
 
 export const metadata: Metadata = {
-  title: "데모 주문 현황",
-  description: "SweetToon 데모 주문의 제작 상태를 확인합니다.",
+  title: "주문 현황",
+  description: "이 브라우저에서 만든 SweetToon 소장본 주문을 확인합니다.",
   robots: { index: false, follow: false },
 };
 
-export default async function Page() {
-  const { items } = await getOrders();
-  return <OrderListPage orders={items} />;
+export default function Page() {
+  return <MyOrdersPage />;
 }

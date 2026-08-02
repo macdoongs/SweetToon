@@ -12,12 +12,36 @@ export type UploadPreview = {
   pages: StagedPage[];
 };
 
+export type EpisodeVisibility = "public" | "private";
+
+export type UploadPurpose = "publish" | "draft" | "packaging";
+
+export type StudioSeriesSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  coverUrl: string | null;
+  seasons: Array<{
+    id: string;
+    number: number;
+    title: string | null;
+    status: "ongoing" | "completed";
+    episodeCount: number;
+  }>;
+};
+
+export type StudioSeriesListResponse = {
+  items: StudioSeriesSummary[];
+};
+
 export type CreateEpisodeRequest = {
+  requestKey: string;
   sessionId: string;
   seasonId: string;
   number: number;
   title: string;
   pageIds: string[];
+  visibility: EpisodeVisibility;
 };
 
 export type CreatedEpisode = {
@@ -25,6 +49,85 @@ export type CreatedEpisode = {
   seriesSlug: string;
   pageCount: number;
   readerUrl: string;
+  visibility: EpisodeVisibility;
+};
+
+export type DraftEpisode = {
+  id: string;
+  number: number;
+  title: string;
+  publishedAt: string;
+  season: { id: string; number: number };
+  series: { slug: string; title: string };
+};
+
+export type PackagingBookSize = "A5" | "B5";
+export type PackagingCoverType = "softcover" | "hardcover";
+export type PackagingStatus =
+  | "received"
+  | "reviewing"
+  | "completed"
+  | "canceled";
+
+export type CreatePackagingRequest = {
+  requestKey: string;
+  sessionId: string;
+  pageIds: string[];
+  applicantName: string;
+  bookTitle: string;
+  bookSize: PackagingBookSize;
+  coverType: PackagingCoverType;
+  quantity: number;
+  memo: string | null;
+};
+
+export type PackagingRequest = {
+  id: string;
+  applicantName: string;
+  bookTitle: string;
+  bookSize: PackagingBookSize;
+  coverType: PackagingCoverType;
+  quantity: number;
+  memo: string | null;
+  pageCount: number;
+  status: PackagingStatus;
+  createdAt: string;
+};
+
+export type UpdateSeriesInfoRequest = {
+  title?: string;
+  synopsis?: string;
+};
+
+export type SeriesInfoResponse = {
+  seriesId: string;
+  slug: string;
+  title: string;
+  synopsis: string;
+};
+
+export type CreateSeriesRequest = {
+  requestKey: string;
+  slug: string;
+  title: string;
+  synopsis: string;
+  genre: string;
+  weekday: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+  authorName: string;
+};
+
+export type CreateSeriesResponse = {
+  seriesId: string;
+  slug: string;
+  title: string;
+  seasonId: string;
+};
+
+export type StudioSeasonResponse = {
+  seasonId: string;
+  seriesId: string;
+  number: number;
+  status: "ongoing" | "completed";
 };
 
 export type AccessPolicy = {

@@ -10,43 +10,18 @@ import {
   type FavoriteSeries,
 } from "@/lib/favorites";
 import { DiscoverLink } from "./discover-link";
-import {
-  buildCircularRailCopies,
-  prioritizeThumbnailItems,
-  useCircularRail,
-} from "./use-circular-rail";
 
-function getFavoriteCardWidth(viewportWidth: number) {
-  return viewportWidth <= 700
-    ? Math.min(viewportWidth * 0.86, 420)
-    : Math.min(Math.max(viewportWidth * 0.4, 380), 520);
-}
-
-function FavoriteCard({
-  duplicate,
-  eager,
-  series,
-}: {
-  duplicate: boolean;
-  eager: boolean;
-  series: FavoriteSeries;
-}) {
+function FavoriteCard({ series }: { series: FavoriteSeries }) {
   return (
-    <li
-      aria-hidden={duplicate || undefined}
-      className="favorite-card"
-      data-preloaded={eager || undefined}
-    >
+    <li className="favorite-card">
       <Link
         className="favorite-card__cover"
         href={`/series/${encodeURIComponent(series.slug)}`}
-        tabIndex={duplicate ? -1 : undefined}
       >
         {series.coverUrl ? (
           <Image
             alt={`${series.title} 표지`}
             height={480}
-            loading={eager ? "eager" : undefined}
             sizes="(max-width: 700px) 42vw, 220px"
             src={series.coverUrl}
             width={340}
@@ -57,10 +32,7 @@ function FavoriteCard({
       </Link>
       <div className="favorite-card__content">
         <span>{series.genre}</span>
-        <Link
-          href={`/series/${encodeURIComponent(series.slug)}`}
-          tabIndex={duplicate ? -1 : undefined}
-        >
+        <Link href={`/series/${encodeURIComponent(series.slug)}`}>
           <h2>{series.title}</h2>
         </Link>
         <p>{series.synopsis}</p>
@@ -68,7 +40,6 @@ function FavoriteCard({
         <button
           className="favorite-card__remove"
           onClick={() => removeFavorite(series.slug)}
-          tabIndex={duplicate ? -1 : undefined}
           type="button"
         >
           찜 해제
@@ -80,16 +51,7 @@ function FavoriteCard({
 
 export function FavoritesPage() {
   const [favorites, setFavorites] = useState<FavoriteSeries[] | null>(null);
-  const favoriteItems = prioritizeThumbnailItems(
-    favorites ?? [],
-    (series) => Boolean(series.coverUrl),
-  );
-  const { loopEnabled, railRef, scroll } =
-    useCircularRail<HTMLUListElement>({
-      cardWidth: getFavoriteCardWidth,
-      itemCount: favoriteItems.length,
-    });
-  const railCopies = buildCircularRailCopies(favoriteItems);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     const refresh = () => setFavorites(getFavorites());
@@ -98,29 +60,29 @@ export function FavoritesPage() {
     return () => window.removeEventListener(FAVORITES_UPDATED_EVENT, refresh);
   }, []);
 
+  const visibleFavorites = (favorites ?? []).filter((series) =>
+    series.title.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+
   return (
     <main className="favorites-page">
       <header className="page-title">
         <p className="eyebrow">My favorites</p>
         <h1>찜 목록</h1>
-        <p>이 브라우저에서 찜한 작품을 모아두었어요.</p>
-        {loopEnabled ? (
-          <div className="circular-rail-controls favorites-page__controls">
-            <button
-              aria-label="찜 목록 이전 작품 보기"
-              onClick={() => scroll(-1)}
-              type="button"
-            >
-              ←
-            </button>
-            <button
-              aria-label="찜 목록 다음 작품 보기"
-              onClick={() => scroll(1)}
-              type="button"
-            >
-              →
-            </button>
-          </div>
+        <p>
+          이 브라우저에서 찜한 작품
+          {favorites ? ` ${favorites.length}개를` : "을"} 모아두었어요.
+        </p>
+        {favorites && favorites.length > 0 ? (
+          <label className="field favorites-page__search">
+            <span>제목 검색</span>
+            <input
+              maxLength={80}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="찜한 작품 제목"
+              value={query}
+            />
+          </label>
         ) : null}
       </header>
       {favorites === null ? (
@@ -134,24 +96,16 @@ export function FavoritesPage() {
             작품 둘러보기
           </DiscoverLink>
         </section>
+      ) : visibleFavorites.length === 0 ? (
+        <section className="favorites-empty">
+          <h2>“{query.trim()}”에 해당하는 찜 작품이 없어요.</h2>
+          <p>다른 제목으로 검색해 보세요.</p>
+        </section>
       ) : (
-        <ul
-          aria-roledescription={
-            loopEnabled ? "순환형 캐러셀" : "작품 목록"
-          }
-          className="circular-content-rail favorites-rail horizontal-scroll-surface"
-          ref={railRef}
-        >
-          {railCopies.map(
-            ({ copyIndex, duplicate, eager, item: series }) => (
-              <FavoriteCard
-                duplicate={duplicate}
-                eager={eager}
-                key={`${copyIndex}-${series.slug}`}
-                series={series}
-              />
-            ),
-          )}
+        <ul aria-label="찜한 작품 목록" className="favorites-grid">
+          {visibleFavorites.map((series) => (
+            <FavoriteCard key={series.slug} series={series} />
+          ))}
         </ul>
       )}
       <p className="favorites-page__notice">

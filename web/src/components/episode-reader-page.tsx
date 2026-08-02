@@ -10,7 +10,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { ApiError, getJson, postJson } from "@/lib/api";
+import {
+  ApiError,
+  getJson,
+  isUncertainRequestError,
+  postJson,
+} from "@/lib/api";
 import { getDemoEntitlement } from "@/lib/demo-entitlements";
 import {
   getCandyWalletToken,
@@ -21,23 +26,82 @@ import {
 import { episodeLabel } from "@/lib/episode-label";
 import type { EpisodeReader } from "@/lib/reader-types";
 import {
-  getReaderSessionId,
-  type PresenceResponse,
-} from "@/lib/realtime";
-import {
   getEpisodeProgress,
   saveReadingProgress,
 } from "@/lib/reading-progress";
+import { useReaderPresence } from "@/lib/use-reader-presence";
+import { ReaderPaywall } from "./reader-paywall";
 import { ErrorState, PageLoading } from "./reader-states";
+import { EpisodeLikeButton } from "./episode-like-button";
 
 type ReaderMode = "webtoon" | "double";
 type ScaleType = "screen" | "width" | "height" | "original";
 type Background = "black" | "gray" | "white";
 type ReadingDirection = "ltr" | "rtl";
+type ModeSource = "auto" | "user";
 type Page = EpisodeReader["pages"][number];
 
 const SETTINGS_KEY = "sweettoon:reader-settings";
 const READER_CHROME_HIDE_DELAY_MS = 2400;
+const MOBILE_VIEWPORT_QUERY = "(max-width: 900px)";
+const LANDSCAPE_QUERY = "(orientation: landscape)";
+
+function RecoverablePageImage({
+  page,
+  title,
+  sizes,
+  preload = false,
+  thumbnail = false,
+}: {
+  page: Page;
+  title: string;
+  sizes: string;
+  preload?: boolean;
+  thumbnail?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  if (failed) {
+    return thumbnail ? (
+      <span className="reader-image-error reader-image-error--thumbnail">
+        미리보기 실패
+      </span>
+    ) : (
+      <div className="reader-image-error" role="alert">
+        <strong>{page.order}쪽 이미지를 불러오지 못했어요.</strong>
+        <button
+          className="button button--ghost"
+          onClick={() => {
+            setAttempt((current) => current + 1);
+            setFailed(false);
+          }}
+          type="button"
+        >
+          이미지 다시 불러오기
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <Image
+      alt={
+        thumbnail
+          ? `${page.order}쪽 미리보기`
+          : `${title} ${page.order}번째 페이지`
+      }
+      height={thumbnail ? 180 : 1200}
+      key={`${page.id}-${attempt}`}
+      onError={() => setFailed(true)}
+      preload={preload}
+      sizes={sizes}
+      src={page.imageUrl}
+      unoptimized={isExternalImage(page.imageUrl)}
+      width={thumbnail ? 120 : 800}
+    />
+  );
+}
 
 function isExternalImage(url: string) {
   return /^https?:\/\//i.test(url);
@@ -48,6 +112,7 @@ function loadSettings(): {
   scale: ScaleType;
   background: Background;
   direction: ReadingDirection;
+  modeSource: ModeSource;
 } {
   try {
     const value = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}");
@@ -64,6 +129,7 @@ function loadSettings(): {
           ? value.background
           : "black",
       direction: value.direction === "rtl" ? "rtl" : "ltr",
+      modeSource: value.modeSource === "user" ? "user" : "auto",
     };
   } catch {
     return {
@@ -71,6 +137,7 @@ function loadSettings(): {
       scale: "screen",
       background: "black",
       direction: "ltr",
+      modeSource: "auto",
     };
   }
 }
@@ -78,6 +145,7 @@ function loadSettings(): {
 function buildSpreads(
   pages: Page[],
   dimensions: Record<string, { width: number; height: number }>,
+  singlePageOnly: boolean,
 ): Page[][] {
   const spreads: Page[][] = [];
   let index = 0;
@@ -86,7 +154,7 @@ function buildSpreads(
     const size = dimensions[page.id];
     const landscape = size ? size.width > size.height : false;
     const isEdge = index === 0 || index === pages.length - 1;
-    if (isEdge || landscape) {
+    if (singlePageOnly || isEdge || landscape) {
       spreads.push([page]);
       index += 1;
       continue;
@@ -114,6 +182,7 @@ export function EpisodeReaderPage({
   episodeId: string;
   initialData?: EpisodeReader | null;
 }) {
+  const candyUnlockRequestKey = useRef<string | null>(null);
   const [episode, setEpisode] = useState<EpisodeReader | null>(initialData);
   const [error, setError] = useState<{ message: string; status?: number } | null>(
     null,
@@ -124,6 +193,9 @@ export function EpisodeReaderPage({
   const [scale, setScale] = useState<ScaleType>("screen");
   const [background, setBackground] = useState<Background>("black");
   const [direction, setDirection] = useState<ReadingDirection>("ltr");
+  const [modeSource, setModeSource] = useState<ModeSource>("auto");
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isLandscape, setIsLandscape] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [thumbnailsOpen, setThumbnailsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -137,7 +209,6 @@ export function EpisodeReaderPage({
   const [candyBalance, setCandyBalance] = useState<number | null>(null);
   const [candyBusy, setCandyBusy] = useState(false);
   const [candyMessage, setCandyMessage] = useState<string | null>(null);
-  const [viewerCount, setViewerCount] = useState<number | null>(null);
   const chromeHideTimer = useRef<number | null>(null);
   const lastScrollY = useRef(0);
   const lastSavedPercent = useRef(-10);
@@ -160,34 +231,7 @@ export function EpisodeReaderPage({
     setRequestKey((current) => current + 1);
   }, []);
 
-  useEffect(() => {
-    const seriesSlug = episode?.series.slug;
-    if (!seriesSlug) return;
-    let active = true;
-    const heartbeat = async () => {
-      if (document.visibilityState !== "visible") return;
-      try {
-        const response = await postJson<
-          { sessionId: string },
-          PresenceResponse
-        >(`/api/series/${encodeURIComponent(seriesSlug)}/presence`, {
-          sessionId: getReaderSessionId(),
-        });
-        if (active) setViewerCount(response.viewerCount);
-      } catch {
-        if (active) setViewerCount(null);
-      }
-    };
-    void heartbeat();
-    const interval = window.setInterval(() => void heartbeat(), 20_000);
-    const onVisibilityChange = () => void heartbeat();
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [episode?.series.slug]);
+  const viewerCount = useReaderPresence(episode?.series.slug);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -210,6 +254,7 @@ export function EpisodeReaderPage({
       setScale(saved.scale);
       setBackground(saved.background);
       setDirection(saved.direction);
+      setModeSource(saved.modeSource);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -217,9 +262,43 @@ export function EpisodeReaderPage({
   useEffect(() => {
     localStorage.setItem(
       SETTINGS_KEY,
-      JSON.stringify({ mode, scale, background, direction }),
+      JSON.stringify({ mode, scale, background, direction, modeSource }),
     );
-  }, [background, direction, mode, scale]);
+  }, [background, direction, mode, modeSource, scale]);
+
+  useEffect(() => {
+    const mobileQuery = window.matchMedia(MOBILE_VIEWPORT_QUERY);
+    const landscapeQuery = window.matchMedia(LANDSCAPE_QUERY);
+    const sync = () => {
+      setIsMobileViewport(mobileQuery.matches);
+      setIsLandscape(landscapeQuery.matches);
+    };
+    sync();
+    mobileQuery.addEventListener("change", sync);
+    landscapeQuery.addEventListener("change", sync);
+    return () => {
+      mobileQuery.removeEventListener("change", sync);
+      landscapeQuery.removeEventListener("change", sync);
+    };
+  }, []);
+
+  // 모바일 기본값: 사용자가 직접 모드를 고르기 전에는 세로=스크롤,
+  // 가로=양면 보기를 화면 방향에 맞춰 따라간다.
+  useEffect(() => {
+    if (!isMobileViewport || modeSource !== "auto") return;
+    const nextMode: ReaderMode = isLandscape ? "double" : "webtoon";
+    setMode((current) => {
+      if (current === nextMode) return current;
+      restoredProgressKey.current = null;
+      if (nextMode === "webtoon") {
+        suppressWebtoonProgressSave.current = true;
+      } else {
+        window.scrollTo({ top: 0 });
+      }
+      return nextMode;
+    });
+    if (nextMode === "double") setSpreadIndex(0);
+  }, [isLandscape, isMobileViewport, modeSource]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -279,13 +358,15 @@ export function EpisodeReaderPage({
     setCandyBusy(true);
     setCandyMessage(null);
     try {
+      candyUnlockRequestKey.current ??= crypto.randomUUID();
       const result = await postJson<
         { walletToken: string; requestKey: string },
         CandyUnlockResponse
       >(`/api/episodes/${encodeURIComponent(episode.id)}/candy-unlock`, {
         walletToken: getCandyWalletToken(),
-        requestKey: crypto.randomUUID(),
+        requestKey: candyUnlockRequestKey.current,
       });
+      candyUnlockRequestKey.current = null;
       setCandyBalance(result.balance);
       setCandyMessage(
         result.spent
@@ -295,6 +376,9 @@ export function EpisodeReaderPage({
       notifyCandyUpdated();
       setRequestKey((current) => current + 1);
     } catch (reason) {
+      if (!isUncertainRequestError(reason)) {
+        candyUnlockRequestKey.current = null;
+      }
       setCandyMessage(
         reason instanceof ApiError
           ? reason.message
@@ -413,9 +497,11 @@ export function EpisodeReaderPage({
     }
   }, [episode, mode]);
 
+  const singlePageSpreads = isMobileViewport && !isLandscape;
   const spreads = useMemo(
-    () => buildSpreads(episode?.pages ?? [], dimensions),
-    [dimensions, episode?.pages],
+    () =>
+      buildSpreads(episode?.pages ?? [], dimensions, singlePageSpreads),
+    [dimensions, episode?.pages, singlePageSpreads],
   );
   const readerProgress =
     mode === "double" && spreads.length > 0
@@ -458,38 +544,45 @@ export function EpisodeReaderPage({
       lastScrollY.current = window.scrollY;
       revealChrome();
     };
+    // 터치 스크롤 제스처가 헤더를 되살리지 않도록 마우스 이동만 취급한다.
+    const onMousePointerMove = (event: PointerEvent) => {
+      if (event.pointerType && event.pointerType !== "mouse") return;
+      onPointerActivity();
+    };
     const onFocus = () => revealChrome();
     const onScroll = () => {
       const nextScrollY = window.scrollY;
-      if (
-        mode === "webtoon" &&
-        !chromePinned &&
-        nextScrollY > Math.max(48, lastScrollY.current + 8)
-      ) {
-        if (chromeHideTimer.current) {
-          window.clearTimeout(chromeHideTimer.current);
+      if (nextScrollY <= 24) {
+        revealChrome();
+      } else if (mode === "webtoon" && !chromePinned) {
+        // 스크롤 감상 중에는 방향과 무관하게 이미지만 남기고 숨긴다.
+        if (Math.abs(nextScrollY - lastScrollY.current) > 8) {
+          if (chromeHideTimer.current) {
+            window.clearTimeout(chromeHideTimer.current);
+          }
+          setChromeVisible(false);
         }
-        setChromeVisible(false);
-      } else if (
-        nextScrollY <= 24 ||
-        nextScrollY < lastScrollY.current - 8
-      ) {
+      } else if (nextScrollY < lastScrollY.current - 8) {
         revealChrome();
       }
       lastScrollY.current = nextScrollY;
     };
-    window.addEventListener("pointermove", onPointerActivity, {
+    window.addEventListener("pointermove", onMousePointerMove, {
       passive: true,
     });
-    window.addEventListener("mousemove", onPointerActivity, { passive: true });
-    window.addEventListener("pointerdown", onPointerActivity, {
-      passive: true,
-    });
+    if (mode === "webtoon") {
+      // 스크롤 모드에서는 탭(클릭)으로만 다시 활성화한다.
+      window.addEventListener("click", onPointerActivity);
+    } else {
+      window.addEventListener("pointerdown", onPointerActivity, {
+        passive: true,
+      });
+    }
     window.addEventListener("focusin", onFocus);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      window.removeEventListener("pointermove", onPointerActivity);
-      window.removeEventListener("mousemove", onPointerActivity);
+      window.removeEventListener("pointermove", onMousePointerMove);
+      window.removeEventListener("click", onPointerActivity);
       window.removeEventListener("pointerdown", onPointerActivity);
       window.removeEventListener("focusin", onFocus);
       window.removeEventListener("scroll", onScroll);
@@ -604,7 +697,19 @@ export function EpisodeReaderPage({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.matches("input, textarea, select, button")) return;
+      if (
+        target?.matches("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      // 도구 버튼을 눌러 모드를 바꾸면 그 버튼에 focus가 남는다. 버튼을
+      // 활성화하는 Space·Enter만 넘기고 나머지 리더 단축키는 계속 받는다.
+      if (
+        target?.matches("button") &&
+        (event.key === " " || event.key === "Enter")
+      ) {
+        return;
+      }
       revealChrome();
       if (event.key === "?") setHelpOpen((open) => !open);
       if (event.key.toLowerCase() === "t") {
@@ -679,6 +784,9 @@ export function EpisodeReaderPage({
           <span>
             {episode.series.title} · 시즌 {episode.season.number} ·{" "}
             {episode.access.volumeNumber}권
+            {episode.visibility === "private" ? (
+              <em className="reader-toolbar__private">비공개</em>
+            ) : null}
           </span>
           <h1>{episodeLabel(episode.number, episode.title)}</h1>
           {viewerCount !== null ? (
@@ -699,6 +807,7 @@ export function EpisodeReaderPage({
           <button
             aria-pressed={mode === "webtoon"}
             onClick={() => {
+              setModeSource("user");
               if (mode === "webtoon") return;
               restoredProgressKey.current = null;
               suppressWebtoonProgressSave.current = true;
@@ -711,6 +820,7 @@ export function EpisodeReaderPage({
           <button
             aria-pressed={mode === "double"}
             onClick={() => {
+              setModeSource("user");
               if (mode === "double") return;
               restoredProgressKey.current = null;
               setMode("double");
@@ -737,8 +847,27 @@ export function EpisodeReaderPage({
         </p>
       ) : null}
 
+      {settingsOpen || helpOpen || thumbnailsOpen ? (
+        <button
+          aria-label="열린 도구 닫기"
+          className="reader-popover-backdrop"
+          onClick={() => {
+            setSettingsOpen(false);
+            setHelpOpen(false);
+            setThumbnailsOpen(false);
+          }}
+          type="button"
+        />
+      ) : null}
+
       {settingsOpen ? (
         <section className="reader-popover reader-settings" aria-label="화면 설정">
+          <header className="reader-popover__header">
+            <strong>화면 설정</strong>
+            <button onClick={() => setSettingsOpen(false)} type="button">
+              닫기
+            </button>
+          </header>
           <fieldset>
             <legend>페이지 맞춤</legend>
             {(
@@ -803,9 +932,15 @@ export function EpisodeReaderPage({
       ) : null}
 
       {helpOpen ? (
-        <section className="reader-popover reader-help" aria-label="키보드 도움말">
-          <h2>키보드로 읽기</h2>
+        <section className="reader-popover reader-help" aria-label="읽기 도움말">
+          <header className="reader-popover__header">
+            <strong>읽는 방법</strong>
+            <button onClick={() => setHelpOpen(false)} type="button">
+              닫기
+            </button>
+          </header>
           <dl>
+            <div><dt>터치</dt><dd>양면 보기에서 화면 좌우 가장자리를 눌러 페이지 이동</dd></div>
             <div><dt>← / →</dt><dd>읽기 방향에 맞춰 양면 이동</dd></div>
             <div><dt>Space</dt><dd>다음 양면</dd></div>
             <div><dt>T</dt><dd>페이지 탐색기 열기</dd></div>
@@ -816,54 +951,14 @@ export function EpisodeReaderPage({
       ) : null}
 
       {episode.access.state === "locked" ? (
-        <section className="reader-paywall">
-          <span aria-hidden="true">🔒</span>
-          <p className="eyebrow">무료 미리보기 종료</p>
-          <h2>
-            {episode.access.freeVolumeCount > 0
-              ? episode.access.previewEpisodeCount > 0
-                ? `${episode.access.freeVolumeCount}권과 다음 ${episode.access.previewEpisodeCount}화`
-                : `첫 ${episode.access.freeVolumeCount}권(${episode.access.freeVolumeCount * 5}화)`
-              : `첫 ${episode.access.previewEpisodeCount}화`}
-            까지 무료로 읽을 수 있어요.
-          </h2>
-          <p>
-            이 회차는 시즌 {episode.season.number} ·{" "}
-            {episode.access.volumeNumber}권에 수록됩니다. 캔디 1개로 이
-            회차를 영구 열람하거나, 소장본을 주문해 수록된 다섯 화를
-            함께 열 수 있습니다.
-          </p>
-          <div className="reader-paywall__candy">
-            <div>
-              <strong>🍬 캔디 {candyBalance ?? "—"}개</strong>
-              <span>1개 = 100원 · 유료 회차 1편</span>
-            </div>
-            <button
-              className="button button--primary"
-              disabled={candyBusy || candyBalance === 0}
-              onClick={unlockWithCandy}
-              type="button"
-            >
-              {candyBusy ? "회차 여는 중…" : "캔디 1개로 이 화 보기"}
-            </button>
-          </div>
-          {candyMessage ? (
-            <p className="reader-paywall__message" role="status">
-              {candyMessage}
-            </p>
-          ) : null}
-          <Link className="button button--primary" href={orderHref}>
-            {episode.access.volumeNumber === 1
-              ? "1권 소장하고 캔디 5개 받기"
-              : `${episode.access.volumeNumber}권 소장하고 다섯 화 열기`}
-          </Link>
-          <Link
-            className="reader-finish__back"
-            href={`/series/${encodeURIComponent(episode.series.slug)}#episodes`}
-          >
-            무료 회차 목록으로
-          </Link>
-        </section>
+        <ReaderPaywall
+          candyBalance={candyBalance}
+          candyBusy={candyBusy}
+          candyMessage={candyMessage}
+          episode={episode}
+          onUnlockWithCandy={() => void unlockWithCandy()}
+          orderHref={orderHref}
+        />
       ) : episode.pages.length === 0 ? (
         <div className="reader-empty">
           <h2>아직 등록된 원고가 없어요.</h2>
@@ -881,14 +976,11 @@ export function EpisodeReaderPage({
         >
           {episode.pages.map((page) => (
             <div className="webtoon-strip__cut" id={`page-${page.order}`} key={page.id}>
-              <Image
-                alt={`${episode.title} ${page.order}번째 컷`}
-                height={1200}
+              <RecoverablePageImage
+                page={page}
                 preload={page.order <= 2}
                 sizes="min(100vw, 800px)"
-                src={page.imageUrl}
-                unoptimized={isExternalImage(page.imageUrl)}
-                width={800}
+                title={episode.title}
               />
             </div>
           ))}
@@ -912,17 +1004,21 @@ export function EpisodeReaderPage({
           >
             ←
           </button>
-          <div className="horizontal-scroll-surface reader-paged__spread">
+          <div
+            className={
+              "horizontal-scroll-surface reader-paged__spread" +
+              ((spreads[spreadIndex]?.length ?? 0) <= 1
+                ? " reader-paged__spread--single"
+                : "")
+            }
+          >
             {(spreads[spreadIndex] ?? []).map((page) => (
-              <Image
-                alt={`${episode.title} ${page.order}번째 페이지`}
-                height={1200}
+              <RecoverablePageImage
                 key={page.id}
+                page={page}
                 preload
-                sizes="(max-width: 700px) calc(100vw - 56px), min(46vw, 800px)"
-                src={page.imageUrl}
-                unoptimized={isExternalImage(page.imageUrl)}
-                width={800}
+                sizes="(max-width: 900px) 100vw, min(46vw, 800px)"
+                title={episode.title}
               />
             ))}
           </div>
@@ -971,13 +1067,11 @@ export function EpisodeReaderPage({
                   setThumbnailsOpen(false);
                 }}
               >
-                <Image
-                  alt={`${page.order}쪽 미리보기`}
-                  height={180}
+                <RecoverablePageImage
+                  page={page}
                   sizes="120px"
-                  src={page.imageUrl}
-                  unoptimized={isExternalImage(page.imageUrl)}
-                  width={120}
+                  thumbnail
+                  title={episode.title}
                 />
                 <span>{page.order}</span>
               </button>
@@ -999,11 +1093,19 @@ export function EpisodeReaderPage({
           <h2>
             {episode.series.title} {episode.number}화를 모두 읽었습니다.
           </h2>
+          {episode.visibility !== "private" ? (
+            <EpisodeLikeButton
+              episodeId={episode.id}
+              initialCount={episode.likeCount}
+              variant="reader"
+            />
+          ) : null}
           <div className="reader-navigation">
             {episode.navigation.previousEpisodeId ? (
               <Link
                 className="button button--dark-ghost"
                 href={`/read/${encodeURIComponent(episode.navigation.previousEpisodeId)}`}
+                scroll={false}
               >
                 ← 이전 화
               </Link>
@@ -1014,8 +1116,13 @@ export function EpisodeReaderPage({
               <Link
                 className="button button--light"
                 href={`/read/${encodeURIComponent(episode.navigation.nextEpisodeId)}`}
+                scroll={false}
               >
-                다음 화 이어보기 →
+                {episode.navigation.nextEpisodeSeasonNumber !== null &&
+                episode.navigation.nextEpisodeSeasonNumber !==
+                  episode.season.number
+                  ? `시즌 ${episode.navigation.nextEpisodeSeasonNumber} · 1화 시작하기 →`
+                  : "다음 화 이어보기 →"}
               </Link>
             ) : (
               <Link

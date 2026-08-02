@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { getJson } from "@/lib/api";
+import { startBackoffPolling } from "@/lib/polling";
 import type { SeriesListResponse, SeriesSummary } from "@/lib/reader-types";
 import {
   catalogHref,
@@ -71,6 +72,49 @@ function getSeriesProgressFromStore(
       (left, right) =>
         Date.parse(right.updatedAt) - Date.parse(left.updatedAt),
     )[0];
+}
+
+function SeriesContinueLink({
+  progress,
+  series,
+}: {
+  progress: ReadingProgress | undefined;
+  series: SeriesSummary;
+}) {
+  if (!progress) return null;
+  if (!progress.completed) {
+    return (
+      <Link
+        className="series-card__continue"
+        href={`/read/${encodeURIComponent(progress.episodeId)}`}
+      >
+        <span>이어보기 · {progress.episodeNumber}화</span>
+        <progress max={100} value={progress.percent} />
+      </Link>
+    );
+  }
+  if (progress.episodeNumber < series.episodeCount) {
+    return (
+      <Link
+        className="series-card__continue"
+        href={`/series/${encodeURIComponent(series.slug)}#episodes`}
+      >
+        <span>
+          {progress.episodeNumber}화 완독 · 다음 화 고르기
+        </span>
+        <progress max={100} value={100} />
+      </Link>
+    );
+  }
+  return (
+    <Link
+      className="series-card__continue"
+      href={`/series/${encodeURIComponent(series.slug)}`}
+    >
+      <span>마지막 화까지 완독 · 작품 홈 보기</span>
+      <progress max={100} value={100} />
+    </Link>
+  );
 }
 
 function formatLatestDate(value: string) {
@@ -283,10 +327,12 @@ function LivePopularRail({
 
 export function HomePage({
   activeFilters,
+  demoSeries = null,
   initialData = null,
   recommendationSeries = [],
 }: {
   activeFilters: CatalogFilters;
+  demoSeries?: { slug: string; title: string } | null;
   initialData?: SeriesListResponse | null;
   recommendationSeries?: RecommendationSeries[];
 }) {
@@ -320,21 +366,24 @@ export function HomePage({
 
   useEffect(() => {
     let active = true;
-    const refresh = async () => {
-      try {
-        const response = await getJson<LivePopularResponse>(
-          "/api/realtime/popular",
-        );
-        if (active) setLivePopular(response);
-      } catch {
-        if (active) setLivePopular(null);
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 15_000);
+    const stop = startBackoffPolling(
+      async () => {
+        try {
+          const response = await getJson<LivePopularResponse>(
+            "/api/realtime/popular",
+          );
+          if (active) setLivePopular(response);
+          return true;
+        } catch {
+          if (active) setLivePopular(null);
+          return false;
+        }
+      },
+      { intervalMs: 15_000, maxIntervalMs: 120_000 },
+    );
     return () => {
       active = false;
-      window.clearInterval(interval);
+      stop();
     };
   }, []);
 
@@ -415,13 +464,18 @@ export function HomePage({
             <span>책장에 오래.</span>
           </h1>
           <p className="hero__description">
-            SweetToon은 웹툰을 읽고, 완결된 시즌을 나만의 단행본으로
+            SweetToon은 웹툰을 읽고, 완결된 시즌을 5화씩 나만의 단행본으로
             소장하는 독자를 위한 공간입니다.
           </p>
           <div className="hero__actions">
             <DiscoverLink className="button button--primary">
               오늘의 작품 보기
             </DiscoverLink>
+            {demoSeries ? (
+              <a className="button button--ghost" href="#demo-path">
+                3분 데모 경로
+              </a>
+            ) : null}
             <span className="hero__note">
               로그인 없이 바로 읽을 수 있어요
             </span>
@@ -453,6 +507,64 @@ export function HomePage({
         )}
       </header>
 
+      {demoSeries ? (
+        <section aria-label="대표 데모 경로" className="demo-path" id="demo-path">
+          <div className="demo-path__inner">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">3분 데모 경로</p>
+                <h2>읽고, 주문하고, 제작을 지켜보세요</h2>
+              </div>
+              <p>
+                《{demoSeries.title}》 하나로 SweetToon의 핵심 흐름을
+                끝까지 체험할 수 있어요.
+              </p>
+            </div>
+            <ol className="demo-path__steps">
+              <li>
+                <Link
+                  href={`/series/${encodeURIComponent(demoSeries.slug)}#episodes`}
+                >
+                  <span aria-hidden="true" className="demo-path__number">
+                    1
+                  </span>
+                  <strong>무료 회차 고르기</strong>
+                  <span>
+                    회차 목록에서 첫 1권(5화)을 무료로 열 수 있어요. 읽던
+                    위치도 기억해 드려요.
+                  </span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href={`/series/${encodeURIComponent(demoSeries.slug)}#edition`}
+                >
+                  <span aria-hidden="true" className="demo-path__number">
+                    2
+                  </span>
+                  <strong>소장본 고르기</strong>
+                  <span>
+                    완결 시즌의 5화 묶음 권을 골라 판형·표지와 함께 Mock
+                    주문으로 이어져요.
+                  </span>
+                </Link>
+              </li>
+              <li>
+                <Link href="/orders">
+                  <span aria-hidden="true" className="demo-path__number">
+                    3
+                  </span>
+                  <strong>제작 상태 확인</strong>
+                  <span>
+                    접수부터 배송까지 제작 타임라인이 실시간으로 이어져요.
+                  </span>
+                </Link>
+              </li>
+            </ol>
+          </div>
+        </section>
+      ) : null}
+
       {livePopular?.items.length ? (
         <LivePopularRail items={livePopular.items} />
       ) : null}
@@ -467,7 +579,7 @@ export function HomePage({
               <h2>당신의 다음 웹툰</h2>
             </div>
             <p>
-              완결작은 한 권으로 소장할 수 있고,
+              완결 시즌은 5화씩 소장본으로 담을 수 있고,
               <br className="desktop-only" /> 연재작은 새 화를 이어서 볼 수
               있어요.
             </p>
@@ -585,42 +697,33 @@ export function HomePage({
                       </Link>
                     </h3>
                     <p className="series-card__author">{series.author.name}</p>
-                    {getSeriesProgressFromStore(
-                      readingProgress,
-                      series.slug,
-                    ) ? (
-                      <Link
-                        className="series-card__continue"
-                        href={`/read/${encodeURIComponent(getSeriesProgressFromStore(readingProgress, series.slug)?.episodeId ?? "")}`}
-                      >
-                        <span>
-                          이어보기 ·{" "}
-                          {
-                            getSeriesProgressFromStore(
-                              readingProgress,
-                              series.slug,
-                            )?.episodeNumber
-                          }
-                          화
-                        </span>
-                        <progress
-                          max={100}
-                          value={
-                            getSeriesProgressFromStore(
-                              readingProgress,
-                              series.slug,
-                            )?.percent ?? 0
-                          }
-                        />
-                      </Link>
-                    ) : null}
+                    <SeriesContinueLink
+                      progress={getSeriesProgressFromStore(
+                        readingProgress,
+                        series.slug,
+                      )}
+                      series={series}
+                    />
                     {series.latestEpisode ? (
                       <Link
                         className="series-card__latest"
-                        href={`/read/${encodeURIComponent(series.latestEpisode.id)}`}
-                        aria-label={`${series.title} 최신 ${series.latestEpisode.number}화 ${series.latestEpisode.title} 읽기`}
+                        href={
+                          series.latestEpisode.access === "locked"
+                            ? `/series/${encodeURIComponent(series.slug)}#episodes`
+                            : `/read/${encodeURIComponent(series.latestEpisode.id)}`
+                        }
+                        aria-label={
+                          series.latestEpisode.access === "locked"
+                            ? `${series.title} 최신 ${series.latestEpisode.number}화 ${series.latestEpisode.title} — 캔디가 필요해요. 회차 목록 보기`
+                            : `${series.title} 최신 ${series.latestEpisode.number}화 ${series.latestEpisode.title} 읽기`
+                        }
                       >
-                        <span>최신 {series.latestEpisode.number}화</span>
+                        <span>
+                          최신 {series.latestEpisode.number}화
+                          {series.latestEpisode.access === "locked" ? (
+                            <em className="series-card__lock">🍬 캔디 필요</em>
+                          ) : null}
+                        </span>
                         <strong>{series.latestEpisode.title}</strong>
                         <time dateTime={series.latestEpisode.publishedAt}>
                           {formatLatestDate(series.latestEpisode.publishedAt)}

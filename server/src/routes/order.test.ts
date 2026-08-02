@@ -62,6 +62,11 @@ function makeReaderRepository(): ReaderRepository {
     seriesExists: jest.fn().mockResolvedValue(false),
     findSeriesBySlug: jest.fn().mockResolvedValue(null),
     findEpisodeById: jest.fn().mockResolvedValue(null),
+    listSitemapDiscovery: jest
+      .fn()
+      .mockResolvedValue({ series: [], episodes: [] }),
+    listRecentEpisodes: jest.fn().mockResolvedValue([]),
+    listShortsPreviews: jest.fn().mockResolvedValue([]),
   };
 }
 
@@ -149,6 +154,24 @@ describe("order routes", () => {
     expect(response.body.code).toBe("INVALID_PRINT_SPECIFICATION");
   });
 
+  it("surfaces a field-level Korean message for an out-of-range quantity", async () => {
+    const response = await request(makeApp())
+      .post("/api/print-quotes")
+      .send({
+        seasonId: "cmseason00000000000000001",
+        volumeNumber: 1,
+        bookSize: "A5",
+        coverType: "hardcover",
+        quantity: 999,
+      })
+      .expect(400);
+
+    expect(response.body.code).toBe("INVALID_PRINT_SPECIFICATION");
+    expect(response.body.message).toBe(
+      "수량은 한 번에 50권까지 주문할 수 있어요.",
+    );
+  });
+
   it("creates and lists persistent orders through the use case boundary", async () => {
     const service = makeService();
     const app = makeApp(service);
@@ -178,6 +201,26 @@ describe("order routes", () => {
     expect(listed.body.items[0]).not.toHaveProperty("entitlementToken");
     expect(listed.body.items[0]).not.toHaveProperty("events");
     expect(service.list).toHaveBeenCalledWith({ limit: 20 });
+  });
+
+  it("passes status, source, and series filters to the order use case", async () => {
+    const service = makeService();
+    await request(makeApp(service))
+      .get("/api/orders?status=active&source=bot&series=%EB%8B%AC%EB%B9%9B")
+      .expect(200);
+
+    expect(service.list).toHaveBeenCalledWith({
+      limit: 20,
+      status: "active",
+      source: "bot",
+      series: "달빛",
+    });
+  });
+
+  it("rejects an unknown status filter", async () => {
+    await request(makeApp(makeService()))
+      .get("/api/orders?status=archived")
+      .expect(400);
   });
 
   it("passes a bounded cursor page to the order use case", async () => {

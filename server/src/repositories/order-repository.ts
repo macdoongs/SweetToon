@@ -27,9 +27,15 @@ export type OrderableSeason = {
 };
 
 export type CreatePendingOrderInput = CreateOrderRequest & {
+  requestFingerprint: string;
   season: OrderableSeason;
   quote: PrintQuote;
   isDemo?: boolean;
+};
+
+export type IdempotentOrderReceipt = {
+  requestFingerprint: string | null;
+  receipt: OrderReceipt;
 };
 
 export type ActiveDemoOrder = {
@@ -56,7 +62,9 @@ export interface OrderRepository {
     id: string,
     volumeNumber: number,
   ): Promise<OrderableSeason | null>;
-  findByRequestKey(requestKey: string): Promise<OrderReceipt | null>;
+  findByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentOrderReceipt | null>;
   createPendingOrder(input: CreatePendingOrderInput): Promise<OrderReceipt>;
   attachProviderOrder(
     orderId: string,
@@ -209,12 +217,19 @@ export class PrismaOrderRepository implements OrderRepository {
     };
   }
 
-  async findByRequestKey(requestKey: string): Promise<OrderReceipt | null> {
+  async findByRequestKey(
+    requestKey: string,
+  ): Promise<IdempotentOrderReceipt | null> {
     const order = await this.prisma.order.findUnique({
       where: { requestKey },
       include: orderInclude,
     });
-    return order ? toOrderReceipt(order) : null;
+    return order
+      ? {
+          requestFingerprint: order.requestFingerprint,
+          receipt: toOrderReceipt(order),
+        }
+      : null;
   }
 
   async createPendingOrder(
@@ -229,6 +244,7 @@ export class PrismaOrderRepository implements OrderRepository {
       const created = await transaction.order.create({
         data: {
           requestKey: input.requestKey,
+          requestFingerprint: input.requestFingerprint,
           candyWalletToken: input.candyWalletToken,
           seriesId: input.season.series.id,
           seasonId: input.season.id,
@@ -359,6 +375,23 @@ export class PrismaOrderRepository implements OrderRepository {
 
   async listOrders(query: OrderListQuery): Promise<OrderListResponse> {
     const orders = await this.prisma.order.findMany({
+      where: {
+        ...(query.status === "active"
+          ? { status: { in: ["pending", "processing", "shipped"] } }
+          : query.status === "done"
+            ? { status: { in: ["completed", "canceled"] } }
+            : {}),
+        ...(query.source ? { isDemo: query.source === "bot" } : {}),
+        ...(query.series
+          ? {
+              season: {
+                series: {
+                  title: { contains: query.series, mode: "insensitive" },
+                },
+              },
+            }
+          : {}),
+      },
       ...(query.cursor
         ? { cursor: { id: query.cursor }, skip: 1 }
         : {}),

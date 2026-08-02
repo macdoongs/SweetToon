@@ -101,11 +101,13 @@ services:
       args:
         API_INTERNAL_URL: http://server:4000
         SITE_URL: ${SITE_URL:-http://localhost:3000}
+        GOOGLE_ANALYTICS_ID: ${GOOGLE_ANALYTICS_ID:-}
     environment:
       HOSTNAME: 0.0.0.0
       PORT: 3000
       API_INTERNAL_URL: http://server:4000
       SITE_URL: ${SITE_URL:-http://localhost:3000}
+      GOOGLE_ANALYTICS_ID: ${GOOGLE_ANALYTICS_ID:-}
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:

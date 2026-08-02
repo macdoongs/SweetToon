@@ -83,7 +83,9 @@ const episode: EpisodeReader = {
   id: "episode-1",
   number: 1,
   title: "1화",
+  visibility: "public",
   publishedAt,
+  likeCount: 0,
   series: {
     id: "series-1",
     slug: "moonlight-laundry",
@@ -93,6 +95,7 @@ const episode: EpisodeReader = {
     id: "season-1",
     number: 1,
     title: "얼룩의 계절",
+    status: "completed",
   },
   pages: [
     { id: "page-1", order: 1, imageUrl: "/api/images/page-1.svg" },
@@ -107,6 +110,7 @@ const episode: EpisodeReader = {
   navigation: {
     previousEpisodeId: null,
     nextEpisodeId: "episode-2",
+    nextEpisodeSeasonNumber: 1,
   },
 };
 
@@ -130,6 +134,52 @@ function makeRepository(): jest.Mocked<ReaderRepository> {
     findEpisodeById: jest
       .fn()
       .mockImplementation(async (id) => (id === episode.id ? episode : null)),
+    listSitemapDiscovery: jest.fn().mockResolvedValue({
+      series: [
+        {
+          slug: seriesDetail.slug,
+          status: "ongoing",
+          coverUrl: seriesDetail.coverUrl,
+          updatedAt: "2026-07-27T10:00:00.000Z",
+        },
+      ],
+      episodes: [
+        {
+          id: episode.id,
+          number: episode.number,
+          title: episode.title,
+          publishedAt,
+          updatedAt: "2026-07-27T10:00:00.000Z",
+          series: {
+            slug: seriesDetail.slug,
+            title: seriesDetail.title,
+            synopsis: seriesDetail.synopsis,
+            genre: seriesDetail.genre,
+            authorName: seriesDetail.author.name,
+          },
+        },
+      ],
+    }),
+    listRecentEpisodes: jest.fn().mockResolvedValue([]),
+    listShortsPreviews: jest.fn().mockResolvedValue([
+      {
+        series: {
+          slug: seriesDetail.slug,
+          title: seriesDetail.title,
+          synopsis: seriesDetail.synopsis,
+          genre: seriesDetail.genre,
+          coverUrl: seriesDetail.coverUrl,
+          authorName: seriesDetail.author.name,
+        },
+        episode: {
+          id: episode.id,
+          number: episode.number,
+          title: episode.title,
+          likeCount: episode.likeCount,
+        },
+        pages: episode.pages,
+      },
+    ]),
   };
 }
 
@@ -218,6 +268,70 @@ describe("reader routes", () => {
       response.body.pages.map((page: { order: number }) => page.order),
     ).toEqual([1, 2]);
     expect(response.body.navigation.nextEpisodeId).toBe("episode-2");
+    expect(response.body.navigation.nextEpisodeSeasonNumber).toBe(1);
+  });
+
+  it("returns public sitemap discovery data", async () => {
+    const response = await request(makeApp())
+      .get("/api/discovery/sitemap")
+      .expect(200);
+
+    expect(response.body.series[0].slug).toBe("moonlight-laundry");
+    expect(response.body.episodes[0].updatedAt).toBe(
+      "2026-07-27T10:00:00.000Z",
+    );
+  });
+
+  it("limits the global recent episode feed", async () => {
+    const repository = makeRepository();
+    const app = createApp({
+      readerRepository: repository,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+    });
+
+    await request(app)
+      .get("/api/discovery/recent-episodes?limit=30")
+      .expect(200);
+
+    expect(repository.listRecentEpisodes).toHaveBeenCalledWith(30);
+    await request(app)
+      .get("/api/discovery/recent-episodes?limit=51")
+      .expect(400);
+  });
+
+  it("returns only the requested number of shorts preview bundles", async () => {
+    const repository = makeRepository();
+    const app = createApp({
+      readerRepository: repository,
+      uploadDir: path.join(os.tmpdir(), "sweettoon-reader-tests"),
+    });
+
+    const response = await request(app)
+      .get("/api/discovery/shorts?limit=6")
+      .expect(200);
+
+    expect(repository.listShortsPreviews).toHaveBeenCalledWith(6, []);
+    expect(response.body.items[0].pages).toHaveLength(2);
+    expect(response.headers["cache-control"]).toContain("private");
+
+    const invalid = await request(app)
+      .get("/api/discovery/shorts?limit=21")
+      .expect(400);
+    expect(invalid.body.code).toBe("INVALID_SHORTS_LIMIT");
+
+    await request(app)
+      .get(
+        "/api/discovery/shorts?limit=6&exclude=moonlight-laundry,night-shift",
+      )
+      .expect(200);
+    expect(repository.listShortsPreviews).toHaveBeenLastCalledWith(6, [
+      "moonlight-laundry",
+      "night-shift",
+    ]);
+
+    await request(app)
+      .get("/api/discovery/shorts?exclude=invalid%20slug")
+      .expect(400);
   });
 
   it("passes an anonymous demo entitlement to the repository", async () => {

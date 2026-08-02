@@ -9,6 +9,12 @@ import {
   type CatalogFilters,
 } from "./series-filter";
 import type { OrderDetail, OrderListResponse } from "./order-types";
+import type { StudioSeriesListResponse } from "./studio-types";
+import type {
+  RecentEpisodesResponse,
+  SitemapDiscoveryResponse,
+} from "./discovery-types";
+import type { ShortsPreviewResponse } from "./shorts-types";
 
 const API_INTERNAL_URL =
   process.env.API_INTERNAL_URL ?? "http://localhost:4000";
@@ -27,12 +33,21 @@ async function serverGetJson<T>(
   path: string,
   options: { fresh?: boolean } = {},
 ): Promise<T> {
-  const response = await fetch(`${API_INTERNAL_URL}${path}`, {
-    headers: { Accept: "application/json" },
-    ...(options.fresh
-      ? { cache: "no-store" as const }
-      : { next: { revalidate: 300 } }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_INTERNAL_URL}${path}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+      ...(options.fresh
+        ? { cache: "no-store" as const }
+        : { next: { revalidate: 300 } }),
+    });
+  } catch {
+    throw new ServerApiError(
+      "서버 연결이 지연되고 있습니다. 잠시 뒤 다시 시도해 주세요.",
+      503,
+    );
+  }
 
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as {
@@ -47,6 +62,10 @@ async function serverGetJson<T>(
   return (await response.json()) as T;
 }
 
+export function getStudioSeriesList(): Promise<StudioSeriesListResponse> {
+  return serverGetJson("/api/studio/series", { fresh: true });
+}
+
 export function getSeriesList(
   filters: CatalogFilters = { filter: "all" },
   page = 1,
@@ -56,17 +75,22 @@ export function getSeriesList(
 
 export async function getAllSeries(): Promise<SeriesListResponse> {
   const pageSize = 100;
+  // 추천 선반 용도이므로 전량이 아니어도 된다. 서버가 잘못된 nextPage를
+  // 돌려줘도 홈 렌더가 무한 루프에 빠지지 않도록 페이지 수를 제한한다.
+  const maxPages = 20;
   let page = 1;
   let result = await serverGetJson<SeriesListResponse>(
     seriesFilterQuery({ filter: "all" }, page, pageSize),
   );
   const items = [...result.items];
-  while (result.nextPage) {
+  let fetchedPages = 1;
+  while (result.nextPage && result.nextPage > page && fetchedPages < maxPages) {
     page = result.nextPage;
     result = await serverGetJson<SeriesListResponse>(
       seriesFilterQuery({ filter: "all" }, page, pageSize),
     );
     items.push(...result.items);
+    fetchedPages += 1;
   }
   return { ...result, items, page: 1, nextPage: null };
 }
@@ -97,6 +121,26 @@ export function getOrders(
 
 export function getOrder(orderId: string): Promise<OrderDetail> {
   return serverGetJson(`/api/orders/${encodeURIComponent(orderId)}`, {
+    fresh: true,
+  });
+}
+
+export function getSitemapDiscovery(): Promise<SitemapDiscoveryResponse> {
+  return serverGetJson("/api/discovery/sitemap");
+}
+
+export function getRecentEpisodes(
+  limit = 50,
+): Promise<RecentEpisodesResponse> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  return serverGetJson(
+    `/api/discovery/recent-episodes?${query.toString()}`,
+  );
+}
+
+export function getShortsPreviews(limit = 10): Promise<ShortsPreviewResponse> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  return serverGetJson(`/api/discovery/shorts?${query.toString()}`, {
     fresh: true,
   });
 }

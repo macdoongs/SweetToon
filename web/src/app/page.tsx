@@ -10,7 +10,8 @@ import {
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "웹툰을 읽고 단행본으로 소장하는 곳",
+  // title.template은 같은 세그먼트의 page에 적용되지 않으므로 홈만 직접 붙인다.
+  title: `웹툰을 읽고 단행본으로 소장하는 곳 | ${SITE_NAME}`,
   description: SITE_DESCRIPTION,
   alternates: { canonical: "/" },
 };
@@ -34,6 +35,12 @@ export default async function Home({
     getSeriesList(filters),
     getAllSeries(),
   ]);
+  const demoSeries =
+    recommendations.items.find(
+      (item) => item.slug === "moonlight-laundry",
+    ) ??
+    recommendations.items.find((item) => item.completedSeasonCount > 0) ??
+    null;
 
   return (
     <>
@@ -50,6 +57,11 @@ export default async function Home({
       />
       <HomePage
         activeFilters={filters}
+        demoSeries={
+          demoSeries
+            ? { slug: demoSeries.slug, title: demoSeries.title }
+            : null
+        }
         initialData={data}
         recommendationSeries={recommendations.items.map(
           ({ id, slug, title, genre, coverUrl, status, author }) => ({
